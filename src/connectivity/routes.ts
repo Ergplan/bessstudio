@@ -1,0 +1,3 @@
+import type {Vec} from '../domain/model';
+// Tangent-continuous illustrative corners; radius is an assumed routing allowance.
+export function roundRoute(points:Vec[],radius:number):Vec[]{if(points.length<3)return points;const out:Vec[]=[points[0]];for(let i=1;i<points.length-1;i++){const prev=points[i-1],p=points[i],next=points[i+1],a=p.map((v,k)=>prev[k]-v) as Vec,b=p.map((v,k)=>next[k]-v) as Vec,la=Math.hypot(...a),lb=Math.hypot(...b);if(la<1e-7||lb<1e-7)continue;const r=Math.min(radius,la*.45,lb*.45),start=p.map((v,k)=>v+a[k]/la*r) as Vec,end=p.map((v,k)=>v+b[k]/lb*r) as Vec;out.push(start);for(let j=1;j<=5;j++){const t=j/5;out.push(p.map((v,k)=>(1-t)**2*start[k]+2*(1-t)*t*v+t*t*end[k]) as Vec);}}out.push(points.at(-1)!);return out;}
