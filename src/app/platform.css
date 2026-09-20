@@ -93,6 +93,8 @@ table.data td b{color:var(--navy);font-weight:600}
 .field>span{display:block;font-size:11.5px;font-weight:600;color:var(--slate);margin-bottom:5px}
 .field input,.field select,.field textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:13px}
 .field input:focus,.field select:focus,.field textarea:focus{outline:2px solid #BBD9EE;outline-offset:-1px;border-color:var(--blue)}
+.field input[type=color]{height:38px;padding:3px;cursor:pointer}
+.field input[type=checkbox]{width:auto}
 .field .hint{font-size:11px;color:var(--slate-light);margin-top:4px}
 .field .err{font-size:11px;color:var(--rose);margin-top:4px;font-weight:500}
 .field.inline{display:grid;grid-template-columns:1fr 128px;align-items:center;gap:10px}
