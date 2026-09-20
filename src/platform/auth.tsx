@@ -42,11 +42,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<Role | null>(null);
   const [error, setError] = useState('');
 
-  const loadOrgs = useCallback(async (account: SessionUser) => {
+  const loadOrgs = useCallback(async (account: SessionUser, demo = false) => {
     const repo = repository();
     let orgs = await repo.listOrganizations(account.uid);
     if (!orgs.length) {
-      const created = await createOrganization(account, `${account.displayName || 'My'} workspace`);
+      const created = demo
+        ? await createOrganization(account, defaultBranding.displayName, true)
+        : await createOrganization(account, `${account.displayName || 'My'} workspace`);
       orgs = [created];
     }
     setOrganizations(orgs);
@@ -60,7 +62,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const fb = firebase();
     if (!fb) {
       const raw = globalThis.localStorage?.getItem(LOCAL_USER);
-      if (raw) { const account = JSON.parse(raw) as SessionUser; setUser(account); loadOrgs(account).finally(() => setReady(true)); }
+      if (raw) { const account = JSON.parse(raw) as SessionUser; setUser(account); loadOrgs(account, true).finally(() => setReady(true)); }
       else setReady(true);
       return;
     }
@@ -73,11 +75,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     });
   }, [loadOrgs]);
 
-  const createOrganization = async (account: SessionUser, name: string): Promise<Organization> => {
+  /** `demo` keeps the reference branding intact so the demonstration workspace looks like a real tenant. */
+  const createOrganization = async (account: SessionUser, name: string, demo = false): Promise<Organization> => {
     const repo = repository();
     const organization: Organization = {
-      id: `${slug(name)}-${Math.random().toString(36).slice(2, 6)}`, name,
-      branding: { ...defaultBranding, displayName: name, legalName: name },
+      id: demo ? 'demo-workspace' : `${slug(name)}-${Math.random().toString(36).slice(2, 6)}`, name,
+      branding: demo ? { ...defaultBranding } : { ...defaultBranding, displayName: name, legalName: name },
       currency: defaultPriceBook.currency, plan: 'trial', createdAt: nowIso(), createdBy: account.uid,
     };
     await repo.saveOrganization(organization);
@@ -115,7 +118,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       const account: SessionUser = { uid: 'demo-user', email: 'demo@joulewise.com', displayName: 'Demo Engineer', photoURL: null };
       globalThis.localStorage?.setItem(LOCAL_USER, JSON.stringify(account));
       setUser(account);
-      await loadOrgs(account);
+      await loadOrgs(account, true);
       setReady(true);
     },
     async signOutUser() {

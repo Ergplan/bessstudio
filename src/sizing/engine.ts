@@ -94,7 +94,11 @@ export function sizeSystem(input: SizingInput): SizingResult {
   // Availability is a time metric: it limits how often the system can run, not how much energy a
   // healthy system delivers in one discharge. It is applied to throughput and revenue, not here.
   const deliverablePerMWh = (r: number) => r * input.dod * oneWayDischarge;
-  const units = Math.max(1, ceil(requiredUsableMWh / (unitDcMWh * deliverablePerMWh(designRetention))));
+  // Two independent constraints set the day-one fleet: enough usable energy in the design year, and
+  // enough installed energy that rated power stays inside the cell's discharge rate.
+  const unitsForEnergy = ceil(requiredUsableMWh / (unitDcMWh * deliverablePerMWh(designRetention)));
+  const unitsForPower = ceil(ratedPowerMW / (cell.dischargeC * unitDcMWh));
+  const units = Math.max(1, unitsForEnergy, unitsForPower);
 
   // Year-by-year roll-forward with per-vintage cohorts, so augmented capacity ages from its own install year.
   const cohorts: Cohort[] = [{ year: 0, dcMWh: units * unitDcMWh, units }];
@@ -134,6 +138,8 @@ export function sizeSystem(input: SizingInput): SizingResult {
 
   if (systemCRate > cell.dischargeC + 1e-9) warnings.push({ code: 'c-rate', level: 'error', text: `System discharge rate ${systemCRate.toFixed(2)} C exceeds the ${cell.dischargeC} C cell rating. Add enclosures or reduce rated power.` });
   else if (systemCRate > cell.dischargeC * 0.9) warnings.push({ code: 'c-rate-margin', level: 'warning', text: `System operates at ${(systemCRate / cell.dischargeC * 100).toFixed(0)}% of the cell discharge rating. Thermal review recommended.` });
+  if (unitsForPower > unitsForEnergy) warnings.push({ code: 'power-limited', level: 'info', text: `Fleet size is set by the ${cell.dischargeC} C discharge rating, not by the energy requirement: ${unitsForPower} enclosures are needed for ${ratedPowerMW.toFixed(2)} MW against ${unitsForEnergy} for the energy alone.` });
+  if (pcsCount * pcs.ratedKW > ratedPowerMW * 1000 * 1.25) warnings.push({ code: 'pcs-granularity', level: 'info', text: `Installed conversion capacity ${(pcsCount * pcs.ratedKW / 1000).toFixed(2)} MW exceeds the ${ratedPowerMW.toFixed(2)} MW requirement because of unit granularity. A smaller PCS may reduce cost.` });
   if (enclosure.dcMaxV > pcs.dcMaxV) warnings.push({ code: 'dc-window-high', level: 'error', text: `String maximum ${enclosure.dcMaxV} V exceeds the ${pcs.model} maximum DC input of ${pcs.dcMaxV} V.` });
   if (enclosure.dcMinV < pcs.dcMinV) warnings.push({ code: 'dc-window-low', level: 'warning', text: `String minimum ${enclosure.dcMinV} V falls below the ${pcs.model} MPP minimum of ${pcs.dcMinV} V; usable energy at low state of charge is curtailed.` });
   if (input.ambientC > cell.dischargeTempC[1]) warnings.push({ code: 'ambient-high', level: 'error', text: `Design ambient ${input.ambientC} °C exceeds the cell discharge limit of ${cell.dischargeTempC[1]} °C.` });

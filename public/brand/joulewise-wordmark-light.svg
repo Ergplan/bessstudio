@@ -3,6 +3,6 @@
   <circle cx="34" cy="48" r="28" fill="#C8A415"/>
   <path d="M17 49 h8 l6 -15 l7 28 l6 -13 h11" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
   <text x="74" y="70" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="62" font-weight="600" letter-spacing="-1">
-    <tspan fill="#C8A415">joule</tspan><tspan fill="#4A3A07">Wise</tspan>
+    <tspan fill="#C8A415">joule</tspan><tspan fill="#F2E6C0">Wise</tspan>
   </text>
 </svg>

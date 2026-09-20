@@ -42,15 +42,15 @@ export const defaultPriceBook: PriceBook = {
 
 export const convert = (amountUsd: number, to: Currency) => amountUsd * currencies[to].perUsd;
 
+/** The minus sign leads the symbol, so a negative cash flow reads as −$1.2 M rather than $-1.2 M. */
 export function formatMoney(amount: number, currency: Currency, compact = false) {
-  const c = currencies[currency];
+  const c = currencies[currency], sign = amount < 0 ? '\u2212' : '', abs = Math.abs(amount);
   if (compact) {
-    const abs = Math.abs(amount);
-    if (currency === 'INR' && abs >= 1e7) return `${c.symbol}${(amount / 1e7).toFixed(2)} cr`;
-    if (currency === 'INR' && abs >= 1e5) return `${c.symbol}${(amount / 1e5).toFixed(2)} L`;
-    if (abs >= 1e9) return `${c.symbol}${(amount / 1e9).toFixed(2)} bn`;
-    if (abs >= 1e6) return `${c.symbol}${(amount / 1e6).toFixed(2)} M`;
-    if (abs >= 1e3) return `${c.symbol}${(amount / 1e3).toFixed(1)} k`;
+    if (currency === 'INR' && abs >= 1e7) return `${sign}${c.symbol}${(abs / 1e7).toFixed(2)} cr`;
+    if (currency === 'INR' && abs >= 1e5) return `${sign}${c.symbol}${(abs / 1e5).toFixed(2)} L`;
+    if (abs >= 1e9) return `${sign}${c.symbol}${(abs / 1e9).toFixed(2)} bn`;
+    if (abs >= 1e6) return `${sign}${c.symbol}${(abs / 1e6).toFixed(2)} M`;
+    if (abs >= 1e3) return `${sign}${c.symbol}${(abs / 1e3).toFixed(1)} k`;
   }
-  return `${c.symbol}${amount.toLocaleString('en', { minimumFractionDigits: c.decimals, maximumFractionDigits: c.decimals })}`;
+  return `${sign}${c.symbol}${abs.toLocaleString('en', { minimumFractionDigits: c.decimals, maximumFractionDigits: c.decimals })}`;
 }

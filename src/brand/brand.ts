@@ -11,6 +11,7 @@ export const brand = Object.freeze({
   credit: 'Developed and managed by jouleWise Technologies',
   creditLong: 'Developed and managed by jouleWise Technologies (www.joulewise.com)',
   wordmark: '/brand/joulewise-wordmark.svg',
+  wordmarkLight: '/brand/joulewise-wordmark-light.svg',
   mark: '/brand/joulewise-mark.svg',
   // Sampled from the jouleWise wordmark.
   gold: '#C8A415',
