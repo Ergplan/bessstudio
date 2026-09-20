@@ -1,24 +1,49 @@
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Printer, Copy, Send, Download } from 'lucide-react';
-import { Card, Badge, Empty, Tabs, KV, NumberInput, SelectInput, Field, quoteTone, date } from '../components/ui';
+import { ArrowLeft, Printer, Copy, Send, Download, FileCode2, RotateCcw } from 'lucide-react';
+import { Card, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, Field, quoteTone, date } from '../components/ui';
 import { Proposal } from '../components/Proposal';
+import { Offer } from '../components/Offer';
+import { defaultOfferContent, offerOf, type OfferContent } from '../../quoting/offer';
+import { offerHtml, download as downloadFile } from '../../quoting/export';
+import { sizeSystem, type SizingInput } from '../../sizing/engine';
+import { evaluateFinance } from '../../sizing/finance';
 import { useWorkspace } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
 import { can, quoteStatuses, type Quote, type QuoteStatus } from '../../platform/types';
 import { quoteTotals, reviseQuote } from '../../quoting/quote';
 import { currencies, formatMoney, type Currency } from '../../catalog/pricing';
 
-type Tab = 'commercial' | 'scope' | 'proposal';
+type Tab = 'commercial' | 'scope' | 'content' | 'offer' | 'proposal';
 
 export function QuoteDetail() {
   const { quoteId = '' } = useParams();
   const navigate = useNavigate();
-  const { quotes, saveQuote } = useWorkspace();
+  const { quotes, projects, priceBook, saveQuote } = useWorkspace();
   const { org, role } = useSession();
   const [tab, setTab] = useState<Tab>('commercial');
+  const offerRef = useRef<HTMLDivElement>(null);
   const quote = quotes.find(q => q.id === quoteId);
   const writable = can(role, 'quote.write');
+  const project = projects.find(p => p.id === quote?.projectId);
+
+  // The document is built from the sizing the quotation was raised against, so a sent offer never
+  // moves when the project is edited afterwards.
+  const built = useMemo(() => {
+    if (!quote || !org) return null;
+    const snapshot = (quote.sizingSnapshot as { input?: SizingInput } | null)?.input ?? project?.sizing;
+    if (!snapshot) return null;
+    try {
+      const sizing = sizeSystem(snapshot);
+      const finance = evaluateFinance(sizing, { ...priceBook, currency: quote.currency });
+      const fallback = defaultOfferContent({
+        org, sizing, customerName: quote.customerName, projectName: quote.projectName,
+        number: quote.number, deliveryWeeks: quote.deliveryWeeks, warrantyYears: quote.warrantyYears,
+      });
+      fallback.coverImage = project?.studioImage ?? null;
+      return { sizing, finance, content: offerOf(quote, fallback), fallback };
+    } catch { return null; }
+  }, [quote, org, project, priceBook]);
 
   if (!quote || !org) return <Card><Empty title="Quotation not found" message="It may have been deleted." action={<Link className="btn" to="/quotes">Back to quotations</Link>} /></Card>;
 
@@ -34,6 +59,17 @@ export function QuoteDetail() {
   const setStatus = (status: QuoteStatus) => patch({ status, sentAt: status === 'sent' ? new Date().toISOString() : quote.sentAt },
     `Quotation ${quote.number} moved to ${status}.`);
   const revise = async () => { const next = reviseQuote(quote); await saveQuote(next, `Revision ${next.version} of ${quote.number} created.`, 'created'); navigate(`/quotes/${next.id}`); };
+
+  const setOffer = (patch: Partial<OfferContent>) =>
+    patch && quote && void saveQuote({ ...quote, offer: { ...(quote.offer ?? {}), ...patch } });
+
+  const exportOfferHtml = () => {
+    if (!offerRef.current || !quote) return;
+    const node = offerRef.current.querySelector('.offer');
+    if (!node) return;
+    downloadFile(offerHtml(node as HTMLElement, `${quote.number} r${quote.version} — ${quote.customerName}`),
+      `${quote.number}-r${quote.version}-offer.html`);
+  };
 
   const exportJson = () => {
     const blob = new Blob([JSON.stringify({ organization: org.name, quote }, null, 2)], { type: 'application/json' });
@@ -54,7 +90,10 @@ export function QuoteDetail() {
         </>}
         {writable && <button className="btn" onClick={() => void revise()}><Copy size={14} /> New revision</button>}
         <button className="btn" onClick={exportJson}><Download size={14} /> JSON</button>
-        <button className="btn primary" onClick={() => window.print()}><Printer size={14} /> Print / PDF</button>
+        <button className="btn" onClick={exportOfferHtml} disabled={!built}><FileCode2 size={14} /> Offer HTML</button>
+        <button className="btn primary" onClick={() => { setTab('offer'); setTimeout(() => window.print(), 120); }}>
+          <Printer size={14} /> Print offer / PDF
+        </button>
       </div>
 
       <div className="grid cols-4 no-print">
@@ -65,7 +104,11 @@ export function QuoteDetail() {
       </div>
 
       <div className="no-print">
-        <Tabs<Tab> active={tab} onChange={setTab} tabs={[{ id: 'commercial', label: 'Pricing' }, { id: 'scope', label: 'Scope & terms' }, { id: 'proposal', label: 'Proposal document' }]} />
+        <Tabs<Tab> active={tab} onChange={setTab} tabs={[
+          { id: 'commercial', label: 'Pricing' }, { id: 'scope', label: 'Scope & terms' },
+          { id: 'content', label: 'Offer content' }, { id: 'offer', label: 'Offer document' },
+          { id: 'proposal', label: 'One-page summary' },
+        ]} />
       </div>
 
       {tab === 'commercial' && (
@@ -132,6 +175,73 @@ export function QuoteDetail() {
           </Card>
         </div>
       )}
+
+      {tab === 'content' && (built ? (
+        <div className="grid cols-3 no-print">
+          <Card title="Offer header" subtitle="Shown on the cover and in every page header">
+            <TextInput label="Reference" value={built.content.reference} onChange={reference => setOffer({ reference })} />
+            <TextInput label="Title" value={built.content.title} onChange={title => setOffer({ title })} hint="For example 350 MW / 700 MWh" />
+            <TextInput label="Subtitle" value={built.content.subtitle} onChange={subtitle => setOffer({ subtitle })} />
+            <TextInput label="Configuration" value={built.content.configuration} onChange={configuration => setOffer({ configuration })} />
+            <TextInput label="Submitted to" value={built.content.submittedTo} onChange={submittedTo => setOffer({ submittedTo })} />
+            <div className="grid cols-2" style={{ gap: 0, columnGap: 12 }}>
+              <TextInput label="Kind attention" value={built.content.attentionName} onChange={attentionName => setOffer({ attentionName })} />
+              <TextInput label="Attention email" value={built.content.attentionEmail} onChange={attentionEmail => setOffer({ attentionEmail })} />
+            </div>
+          </Card>
+
+          <Card title="Commercial header">
+            <TextInput label="Price basis" value={built.content.priceBasis} onChange={priceBasis => setOffer({ priceBasis })} />
+            <TextInput label="Manufacturer" value={built.content.manufacturer} onChange={manufacturer => setOffer({ manufacturer })} />
+            <TextInput label="Supplied through" value={built.content.suppliedThrough} onChange={suppliedThrough => setOffer({ suppliedThrough })} />
+            <TextInput label="Delivery period" value={built.content.deliveryPeriod} onChange={deliveryPeriod => setOffer({ deliveryPeriod })} />
+            <NumberInput label="Validity" value={built.content.validityDays} unit="days" min={1} max={180} onChange={validityDays => setOffer({ validityDays })} />
+            <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input type="checkbox" checked={built.content.confidential} disabled={!writable} style={{ width: 'auto' }}
+                onChange={e => setOffer({ confidential: e.target.checked })} />
+              <span style={{ margin: 0 }}>Mark the footer private &amp; confidential</span>
+            </label>
+            <Field label="Cover image">
+              <input value={built.content.coverImage ?? ''} placeholder="Capture one from the 3D studio, or paste a URL"
+                disabled={!writable} onChange={e => setOffer({ coverImage: e.target.value || null })} />
+            </Field>
+            <p className="muted">
+              {project
+                ? <>Open the <Link to={`/studio?project=${project.id}`}>3D studio</Link> and use “Capture for offer” to place a rendered cut-away on the cover. With no image the document draws a vector cut-away from the sizing.</>
+                : 'With no image the document draws a vector cut-away from the sizing.'}
+            </p>
+            <button className="btn sm" disabled={!writable} onClick={() => quote && void saveQuote({ ...quote, offer: {} }, 'Offer content reset to the generated defaults.')}>
+              <RotateCcw size={13} /> Reset all offer content
+            </button>
+          </Card>
+
+          <Card title="Narrative" subtitle="One item per line">
+            <Field label="Why us — heading and body separated by a colon">
+              <textarea rows={5} disabled={!writable}
+                value={built.content.highlights.map(h => `${h.title}: ${h.body}`).join('\n')}
+                onChange={e => setOffer({ highlights: e.target.value.split('\n').filter(Boolean).map(line => {
+                  const i = line.indexOf(':');
+                  return i < 0 ? { title: line.trim(), body: '' } : { title: line.slice(0, i).trim(), body: line.slice(i + 1).trim() };
+                }) })} />
+            </Field>
+            <Field label="Basis and qualifications">
+              <textarea rows={7} disabled={!writable} value={built.content.qualifications.join('\n')}
+                onChange={e => setOffer({ qualifications: e.target.value.split('\n').filter(Boolean) })} />
+            </Field>
+            <Field label="Acceptance note">
+              <textarea rows={3} disabled={!writable} value={built.content.acceptanceNote}
+                onChange={e => setOffer({ acceptanceNote: e.target.value })} />
+            </Field>
+          </Card>
+        </div>
+      ) : <Card><Empty title="No sizing behind this quotation" message="The project this quotation was raised against is no longer available, so the offer cannot be built." /></Card>)}
+
+      {tab === 'offer' && (built ? (
+        <div className="offer-preview" ref={offerRef}>
+          <Offer quote={quote} org={org} sizing={built.sizing} finance={built.finance} content={built.content}
+            priceBook={{ ...priceBook, currency: quote.currency }} />
+        </div>
+      ) : <Card><Empty title="No sizing behind this quotation" message="The project this quotation was raised against is no longer available, so the offer cannot be built." /></Card>)}
 
       {tab === 'proposal' && <Proposal quote={quote} org={org} />}
     </div>

@@ -37,13 +37,16 @@ export function costLines(sizing: SizingResult, pb: PriceBook): CostLine[] {
 
   if (pb.costingMode === 'landed-import') {
     const landed = landedForSizing(sizing, pb), fx = pb.landed.exchangeRateInrPerUsd;
-    // The offer bundles one converter with each container; a system whose power rating needs fewer
-    // converters than containers is priced on the converters actually installed.
+    // The issued proposal bundles one converter allowance with each enclosure. Where a plant needs
+    // fewer converters than enclosures, the per-kW basis prices the converters actually installed.
     lines.push(
       line('battery', 'equipment', `${enc.model} ${enc.family} · ${(sizing.installedDcMWh / sizing.units).toFixed(3)} MWh each, delivered`, sizing.units, 'unit', landed.deliveredInr / fx,
         `FOB $${pb.landed.basicPriceUsdPerKWh}/kWh + ${pb.landed.oceanFreightPct}% freight + ${pb.landed.customsDutyPct}% duty + ${pb.landed.inlandClearancePct}% clearance`),
-      line('pcs', 'equipment', `${sizing.pcs.model} power conversion system`, sizing.pcsCount * sizing.pcs.ratedKW, 'kW', pb.landed.pcsCostInrPerKW / fx,
-        `${sizing.pcsCount} × ${sizing.pcs.ratedKW} kW · ${sizing.pcs.approvedVendors.slice(0, 3).join(', ')}`),
+      pb.landed.pcsBasis === 'per-enclosure'
+        ? line('pcs', 'equipment', `${sizing.pcs.model} power conversion system`, sizing.units, 'enclosure', landed.pcsInr / fx,
+            `One converter allowance per enclosure · ${sizing.pcs.approvedVendors.slice(0, 3).join(', ')}`)
+        : line('pcs', 'equipment', `${sizing.pcs.model} power conversion system`, sizing.pcsCount * sizing.pcs.ratedKW, 'kW', pb.landed.pcsCostInrPerKW / fx,
+            `${sizing.pcsCount} × ${sizing.pcs.ratedKW} kW · ${sizing.pcs.approvedVendors.slice(0, 3).join(', ')}`),
     );
   } else {
     const batteryRate = pb.batteryPerKWh[enc.id] ?? 110, pcsRate = pb.pcsPerKW[sizing.pcs.id] ?? 45;

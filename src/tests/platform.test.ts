@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { cells, enclosures, packSpecs, pcsUnits, byId, cellOf, packOf, enclosureEnergyKWh, enclosureCellCount, enclosureStrings, packEnergyKWh } from '../catalog/products';
-import { currencies, defaultPriceBook, defaultLandedCost, landedCost, offerPcsInrPerKW, formatMoney, convert } from '../catalog/pricing';
+import { currencies, defaultPriceBook, defaultLandedCost, landedCost, localRate, offerPcsInrPerKW, formatMoney, convert } from '../catalog/pricing';
 import { applications, application } from '../sizing/applications';
 import {
   defaultSizingInput, sizeSystem, normaliseSizingInput, retentionAt, retentionFromTable,
@@ -8,8 +8,10 @@ import {
 } from '../sizing/engine';
 import { evaluateFinance, annualBenefitUsd, chargingEnergyMWh } from '../sizing/finance';
 import { buildQuoteLines, createQuote, nextQuoteNumber, quoteTotals, reviseQuote, uplift } from '../quoting/quote';
+import { defaultOfferContent, energySchedule, offerOf, offerTotals, plantConfiguration } from '../quoting/offer';
+import { defaultBranding } from '../brand/brand';
 import { LocalRepository } from '../platform/repo';
-import { can, roles, type Customer, type Project, type Quote } from '../platform/types';
+import { can, roles, type Customer, type Organization, type Project, type Quote } from '../platform/types';
 
 const input = (patch: Partial<ReturnType<typeof defaultSizingInput>> = {}) => ({ ...defaultSizingInput(), ...patch });
 
@@ -237,9 +239,9 @@ describe('quotation build-up', () => {
   it('carries contingency and margin into the sell price without exposing them', () => {
     const factor = uplift(finance);
     expect(factor).toBeGreaterThan(1);
-    const lines = buildQuoteLines(sizing, finance, 'USD');
+    const lines = buildQuoteLines(sizing, finance, 'USD', defaultPriceBook);
     const battery = lines.find(l => l.id === 'battery')!, cost = finance.lines.find(l => l.id === 'battery')!;
-    expect(battery.unitPrice).toBeCloseTo(cost.unitCostUsd * factor, 6);
+    expect(battery.unitPrice).toBeCloseTo(cost.unitCostUsd * factor * localRate(defaultPriceBook, 'USD'), 6);
     expect(JSON.stringify(lines)).not.toContain('margin');
   });
 
@@ -347,6 +349,13 @@ describe('fidelity to the supplied workbooks', () => {
     expect(b.pcsInr).toBeCloseTo(3_250_000, 2);
     expect(b.totalInr).toBeCloseTo(41_022_014.6125, 2);
     expect(offerPcsInrPerKW * 2507.5).toBeCloseTo(3_250_000, 6);
+    // The issued 350 MW proposal, at USD 69/kWh.
+    const issued = landedCost({ ...defaultLandedCost(), basicPriceUsdPerKWh: 69 }, 5015, 2507.5);
+    expect(issued.fobUsd).toBeCloseTo(346_035, 4);
+    expect(issued.oceanFreightUsd).toBeCloseTo(5_190.525, 4);
+    expect(Math.round(issued.deliveredInr)).toBe(38_327_485);
+    expect(Math.round(issued.totalInr)).toBe(41_577_485);
+    expect(Math.round(issued.totalInr * 140)).toBe(5_820_847_958);
   });
 
   it('moves the landed cost with each input independently', () => {
@@ -490,10 +499,14 @@ describe('editable design inputs', () => {
     const perUnit = landedCost(landedBook.landed, sizing.installedDcMWh * 1000 / sizing.units, sizing.enclosure.ratedKW);
     const batteryLine = landedFinance.lines.find(l => l.id === 'battery')!;
     expect(batteryLine.totalUsd).toBeCloseTo(sizing.units * perUnit.deliveredInr / landedBook.landed.exchangeRateInrPerUsd, 6);
-    // Converters are priced on the converters installed, not one per container.
+    // The issued proposal bundles one converter allowance per enclosure.
     const pcsLine = landedFinance.lines.find(l => l.id === 'pcs')!;
-    expect(pcsLine.quantity).toBeCloseTo(sizing.pcsCount * sizing.pcs.ratedKW, 6);
-    expect(pcsLine.totalUsd).toBeCloseTo(sizing.pcsCount * sizing.pcs.ratedKW * landedBook.landed.pcsCostInrPerKW / landedBook.landed.exchangeRateInrPerUsd, 6);
+    expect(pcsLine.quantity).toBe(sizing.units);
+    expect(pcsLine.totalUsd).toBeCloseTo(sizing.units * landedBook.landed.pcsCostInrPerUnit / landedBook.landed.exchangeRateInrPerUsd, 6);
+    // On the per-kW basis it follows the converters actually installed instead.
+    const perKw = evaluateFinance(sizing, { ...landedBook, landed: { ...landedBook.landed, pcsBasis: 'per-installed-kw' as const } });
+    const perKwLine = perKw.lines.find(l => l.id === 'pcs')!;
+    expect(perKwLine.quantity).toBeCloseTo(sizing.pcsCount * sizing.pcs.ratedKW, 6);
   });
 
   it('prices charging from an open-access plant at the wheeled PPA rate', () => {
@@ -520,5 +533,102 @@ describe('stored projects written by an earlier version', () => {
     expect(normalised.degradation.retention).toEqual(suppliedRetention);
     expect(() => sizeSystem(legacy)).not.toThrow();
     expect(sizeSystem(legacy).units).toBeGreaterThan(0);
+  });
+});
+
+describe('offer document', () => {
+  const sizing = sizeSystem({ ...defaultSizingInput('solar-shifting'), powerMW: 5, durationH: 4 });
+  const book = { ...defaultPriceBook, currency: 'INR' as const };
+  const finance = evaluateFinance(sizing, book);
+  const org = { id: 'o', name: 'Solarworld', branding: defaultBranding, currency: 'INR', plan: 'trial', createdAt: '', createdBy: '' } as unknown as Organization;
+  const quote = createQuote({
+    orgId: 'o', customer: { id: 'c', name: 'Greenko Group' } as Customer, project: { id: 'p', name: 'Plant' } as Project,
+    sizing, finance, priceBook: book, currency: 'INR', number: 'SW/BESS/2026-27/001',
+    preparedBy: 'Tester', preparedByEmail: 't@example.com',
+  });
+
+  it('prices the quotation at the exchange rate the offer quotes, not a reference rate', () => {
+    expect(localRate(book, 'INR')).toBe(book.landed.exchangeRateInrPerUsd);
+    expect(localRate({ ...book, costingMode: 'direct' }, 'INR')).toBe(currencies.INR.perUsd);
+    const battery = quote.lines.find(l => l.id === 'battery')!;
+    const perUnitUsd = finance.lines.find(l => l.id === 'battery')!.unitCostUsd;
+    expect(battery.unitPrice).toBeCloseTo(perUnitUsd * uplift(finance) * book.landed.exchangeRateInrPerUsd, 4);
+  });
+
+  it('reconciles the per-enclosure build-up with the order value on the same page', () => {
+    // The customer-facing build-up carries contingency and margin inside the basic rate.
+    const factor = uplift(finance);
+    const sell = landedCost({
+      ...book.landed,
+      basicPriceUsdPerKWh: book.landed.basicPriceUsdPerKWh * factor,
+      pcsCostInrPerUnit: book.landed.pcsCostInrPerUnit * factor,
+      pcsCostInrPerKW: book.landed.pcsCostInrPerKW * factor,
+    }, finance.landed!.kWh, finance.landed!.ratedKW);
+    const enclosures = sizing.units * sell.deliveredInr, pcs = sizing.units * sell.pcsInr;
+    // Anything outside the landed build-up — here the transformers — is carried as its own row, so
+    // the three parts add up to the subtotal the customer sees.
+    const other = quote.lines.filter(l => !l.optional && l.id !== 'battery' && l.id !== 'pcs').reduce((s, l) => s + l.total, 0);
+    expect(enclosures + pcs + other).toBeCloseTo(quote.subtotal, 2);
+    expect(other).toBeGreaterThan(0);
+    expect(quote.total).toBeCloseTo(quote.subtotal - quote.discount + quote.freight + quote.tax, 6);
+
+    // Supply-only with no transformer leaves the build-up alone against the order value.
+    const supplyOnly = sizeSystem({ ...sizing.input, transformerId: null });
+    const soFinance = evaluateFinance(supplyOnly, book);
+    const soQuote = createQuote({
+      orgId: 'o', customer: { id: 'c', name: 'X' } as Customer, project: { id: 'p', name: 'Y' } as Project,
+      sizing: supplyOnly, finance: soFinance, priceBook: book, currency: 'INR', number: 'N',
+      preparedBy: 'T', preparedByEmail: 't@example.com',
+    });
+    const soFactor = uplift(soFinance);
+    const soSell = landedCost({
+      ...book.landed, basicPriceUsdPerKWh: book.landed.basicPriceUsdPerKWh * soFactor,
+      pcsCostInrPerUnit: book.landed.pcsCostInrPerUnit * soFactor, pcsCostInrPerKW: book.landed.pcsCostInrPerKW * soFactor,
+    }, soFinance.landed!.kWh, soFinance.landed!.ratedKW);
+    expect(supplyOnly.units * (soSell.deliveredInr + soSell.pcsInr)).toBeCloseTo(soQuote.subtotal, 2);
+  });
+
+  it('builds plant configuration, the energy schedule and its totals from the sizing', () => {
+    const config = plantConfiguration(sizing);
+    expect(config.find(r => r.parameter.startsWith('Cell'))!.total).toBe(`${sizing.cells.toLocaleString()} cells`);
+    expect(config.find(r => r.parameter.startsWith('Enclosure'))!.total).toBe(`${sizing.units} enclosures`);
+    expect(config.some(r => r.parameter.includes('transformer'))).toBe(!!sizing.transformer);
+
+    const schedule = energySchedule(sizing);
+    expect(schedule).toHaveLength(sizing.input.projectYears + 1);
+    expect(schedule[0].year).toBe(0);
+    expect(schedule[0].cycles).toBeNull();
+    expect(schedule[1].retention).toBeCloseTo(0.95, 6);
+    const totals = offerTotals(sizing);
+    expect(totals.cycles).toBe(sizing.input.projectYears * Math.round(sizing.input.cyclesPerDay * sizing.input.daysPerYear));
+    expect(totals.suppliedGWh).toBeCloseTo(schedule.slice(1).reduce((s, r) => s + r.suppliedGWh, 0), 6);
+  });
+
+  it('derives offer content from the organization and the sizing, and takes overrides', () => {
+    const content = defaultOfferContent({
+      org, sizing, customerName: 'Greenko Group', projectName: 'Plant', number: 'SW/001',
+      deliveryWeeks: 20, warrantyYears: 5,
+    });
+    expect(content.title).toContain('MW');
+    expect(content.submittedTo).toBe('Greenko Group');
+    expect(content.highlights).toHaveLength(4);
+    expect(content.qaStages.length).toBeGreaterThan(3);
+    expect(content.interfaces.length).toBeGreaterThan(3);
+    expect(content.approvedMakes.some(m => m.make === 'jouleWise')).toBe(true);
+    expect(content.qualifications.join(' ')).toContain('open-access');
+    // Anything stored on the quotation wins over the generated default.
+    const overridden = offerOf({ ...quote, offer: { reference: 'CUSTOM/1', validityDays: 30 } }, content);
+    expect(overridden.reference).toBe('CUSTOM/1');
+    expect(overridden.validityDays).toBe(30);
+    expect(overridden.submittedTo).toBe('Greenko Group');
+  });
+
+  it('names the augmentation programme in the qualifications when one is scheduled', () => {
+    const augmented = sizeSystem({ ...defaultSizingInput('energy-arbitrage'), powerMW: 5, augmentation: 'periodic' });
+    expect(augmented.augmentations.length).toBeGreaterThan(0);
+    const content = defaultOfferContent({ org, sizing: augmented, customerName: 'X', projectName: 'Y', number: 'N', deliveryWeeks: 20, warrantyYears: 5 });
+    expect(content.qualifications.join(' ')).toContain('augmentation deliveries');
+    const plain = defaultOfferContent({ org, sizing, customerName: 'X', projectName: 'Y', number: 'N', deliveryWeeks: 20, warrantyYears: 5 });
+    expect(plain.qualifications.join(' ')).toContain('assume no augmentation');
   });
 });

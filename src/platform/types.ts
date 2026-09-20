@@ -40,6 +40,7 @@ export type Project = {
   site: { location: string; latitude: number | null; longitude: number | null; gridOperator: string; commissioningTarget: string };
   sizing: SizingInput;
   studioConfig: unknown | null;   // serialised 3D studio configuration, when engineering has opened it
+  studioImage?: string | null;    // captured assembly view, used as the offer cover
   notes: string; createdAt: string; updatedAt: string; updatedBy: string;
 };
 
@@ -55,6 +56,7 @@ export type Quote = {
   validUntil: string; incoterms: string; paymentTerms: string; deliveryWeeks: number; warrantyYears: number;
   scopeIncluded: string[]; scopeExcluded: string[]; assumptions: string[];
   sizingSnapshot: unknown; financeSnapshot: unknown; priceBookId: string;
+  offer?: Record<string, unknown>;   // narrative overrides for the offer document
   preparedBy: string; preparedByEmail: string; createdAt: string; updatedAt: string; sentAt: string | null;
 };
 

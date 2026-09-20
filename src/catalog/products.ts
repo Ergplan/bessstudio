@@ -29,6 +29,8 @@ export type EnclosureSpec = {
   auxMWhPerDayCharge: number; auxMWhPerDayDischarge: number;
   dcMaxV: number; dcMinV: number;
   bms: string; certifications: string[];
+  batteryIpRating: string; doorBaysPerSide: number; communications: string;
+  operatingRangeC: [number, number]; fireSafety: string;
   studioPreset: 'reference' | 'alternative' | null; provenance: Provenance;
 };
 
@@ -77,41 +79,54 @@ export const enclosures: EnclosureSpec[] = [
   {
     id: 'enc-5mwh-20ft', model: 'SWESLC1331.2V314Ah', family: 'container', packSpecId: 'pack-104s',
     racks: 12, packsPerRack: 4, packsInSeries: 4, labelKWh: 5015, ratedKW: 2507.5,
-    lengthMm: 12000, widthMm: 3500, heightMm: 2600, massKg: 42000, cooling: 'liquid', ipRating: 'IP55',
+    lengthMm: 10444, widthMm: 2532.2, heightMm: 2200, massKg: 42000, cooling: 'liquid', ipRating: 'IP55',
     auxMWhPerDayCharge: 0.5, auxMWhPerDayDischarge: 0.5, dcMaxV: 1518.4, dcMinV: 1040,
-    bms: 'BMSer or Simila', certifications: systemCerts, studioPreset: 'reference', provenance: 'supplied',
+    bms: 'Three-level — pack, cluster, rack', certifications: systemCerts,
+    batteryIpRating: 'IP67', doorBaysPerSide: 6, communications: 'CAN, RS485, Ethernet',
+    operatingRangeC: [-30, 55], fireSafety: 'Multi-stage aerosol suppression, BMS interlocked',
+    studioPreset: 'reference', provenance: 'supplied',
   },
   {
     id: 'enc-5mwh-alt', model: 'SWESLC998.4V314Ah', family: 'container', packSpecId: 'pack-104s',
     racks: 16, packsPerRack: 3, packsInSeries: 3, labelKWh: 5015, ratedKW: 2507.5,
-    lengthMm: 12200, widthMm: 3500, heightMm: 2600, massKg: 42200, cooling: 'liquid', ipRating: 'IP55',
+    lengthMm: 10444, widthMm: 2532.2, heightMm: 2200, massKg: 42200, cooling: 'liquid', ipRating: 'IP55',
     auxMWhPerDayCharge: 0.5, auxMWhPerDayDischarge: 0.5, dcMaxV: 1138.8, dcMinV: 780,
-    bms: 'BMSer or Simila', certifications: systemCerts, studioPreset: 'alternative', provenance: 'supplied',
+    bms: 'Three-level — pack, cluster, rack', certifications: systemCerts,
+    batteryIpRating: 'IP67', doorBaysPerSide: 6, communications: 'CAN, RS485, Ethernet',
+    operatingRangeC: [-30, 55], fireSafety: 'Multi-stage aerosol suppression, BMS interlocked',
+    studioPreset: 'alternative', provenance: 'supplied',
   },
   {
     id: 'enc-261-ci', model: 'SWESLC832V314Ah', family: 'cabinet', packSpecId: 'pack-52s',
     racks: 1, packsPerRack: 5, packsInSeries: 5, labelKWh: 261, ratedKW: 125,
     lengthMm: 1400, widthMm: 1200, heightMm: 2200, massKg: 2600, cooling: 'liquid', ipRating: 'IP54',
     auxMWhPerDayCharge: 0.035, auxMWhPerDayDischarge: 0.035, dcMaxV: 949, dcMinV: 650,
-    bms: 'BMSer or Simila', certifications: systemCerts, studioPreset: null, provenance: 'supplied',
+    bms: 'BMSer or Simila', certifications: systemCerts,     batteryIpRating: 'IP67', doorBaysPerSide: 2, communications: 'CAN, RS485, Ethernet',
+    operatingRangeC: [-20, 55], fireSafety: 'Aerosol suppression, BMS interlocked',
+    studioPreset: null, provenance: 'supplied',
   },
   {
     id: 'enc-16-small', model: 'SB51314 cabinet', family: 'rack', packSpecId: 'pack-16s-314',
     racks: 1, packsPerRack: 1, packsInSeries: 1, labelKWh: 16.076, ratedKW: 5,
     lengthMm: 600, widthMm: 400, heightMm: 900, massKg: 130, cooling: 'air', ipRating: 'IP21',
     auxMWhPerDayCharge: 0.004, auxMWhPerDayDischarge: 0.004, dcMaxV: 58.4, dcMinV: 40,
-    bms: 'BMSer or Simila', certifications: ['IS 16270', 'IEC 62619 or UL 1973'], studioPreset: null, provenance: 'supplied',
+    bms: 'BMSer or Simila', certifications: ['IS 16270', 'IEC 62619 or UL 1973'],     batteryIpRating: 'IP21', doorBaysPerSide: 1, communications: 'CAN, RS485',
+    operatingRangeC: [-10, 45], fireSafety: 'Pack-level detection',
+    studioPreset: null, provenance: 'supplied',
   },
   {
     id: 'enc-52-rack', model: 'SB166314 rack', family: 'rack', packSpecId: 'pack-52s',
     racks: 1, packsPerRack: 1, packsInSeries: 1, labelKWh: 52.25, ratedKW: 26,
     lengthMm: 700, widthMm: 600, heightMm: 1400, massKg: 380, cooling: 'air', ipRating: 'IP21',
     auxMWhPerDayCharge: 0.008, auxMWhPerDayDischarge: 0.008, dcMaxV: 189.8, dcMinV: 130,
-    bms: 'BMSer or Simila', certifications: moduleCerts, studioPreset: null, provenance: 'supplied',
+    bms: 'BMSer or Simila', certifications: moduleCerts,     batteryIpRating: 'IP21', doorBaysPerSide: 1, communications: 'CAN, RS485',
+    operatingRangeC: [-10, 45], fireSafety: 'Pack-level detection',
+    studioPreset: null, provenance: 'supplied',
   },
 ];
 
 export const pcsUnits: PcsSpec[] = [
+  { id: 'pcs-5000', model: 'PCS 5000 kW', ratedKW: 5000, dcMinV: 1000, dcMaxV: 1500, dcMaxA: 6000, efficiency: 0.9885, acV: 690, topology: 'central', approvedVendors: ['Sungrow', 'Sineng', 'Newen'], provenance: 'supplied' },
   { id: 'pcs-2507', model: 'PCS 2507.5 kW', ratedKW: 2507.5, dcMinV: 1000, dcMaxV: 1500, dcMaxA: 3000, efficiency: 0.985, acV: 690, topology: 'central', approvedVendors: ['Innovance', 'BEELECTRIQ', 'Newen', 'Sungrow', 'Sineng'], provenance: 'supplied' },
   { id: 'pcs-1725', model: 'PCS 1725 kW', ratedKW: 1725, dcMinV: 900, dcMaxV: 1500, dcMaxA: 2200, efficiency: 0.985, acV: 630, topology: 'central', approvedVendors: ['Sungrow', 'Sineng', 'Newen'], provenance: 'indicative' },
   { id: 'pcs-630', model: 'PCS 630 kW', ratedKW: 630, dcMinV: 700, dcMaxV: 1500, dcMaxA: 1000, efficiency: 0.985, acV: 400, topology: 'string', approvedVendors: ['Innovance', 'Sungrow'], provenance: 'indicative' },
@@ -120,6 +135,7 @@ export const pcsUnits: PcsSpec[] = [
 ];
 
 export const transformers: TransformerSpec[] = [
+  { id: 'tx-6300', model: 'IDT 6300 kVA', ratedKVA: 6300, lvKV: 0.69, hvKV: 33, efficiency: 0.99, provenance: 'supplied' },
   { id: 'tx-3150', model: 'IDT 3150 kVA', ratedKVA: 3150, lvKV: 0.69, hvKV: 33, efficiency: 0.99, provenance: 'indicative' },
   { id: 'tx-5000', model: 'IDT 5000 kVA', ratedKVA: 5000, lvKV: 0.69, hvKV: 33, efficiency: 0.99, provenance: 'indicative' },
   { id: 'tx-1600', model: 'IDT 1600 kVA', ratedKVA: 1600, lvKV: 0.4, hvKV: 11, efficiency: 0.99, provenance: 'indicative' },

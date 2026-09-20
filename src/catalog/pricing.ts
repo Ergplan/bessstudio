@@ -16,9 +16,12 @@ export const currencies: Record<Currency, { symbol: string; name: string; perUsd
  * FOB → ocean freight → CIF → exchange → customs duty and inland clearance on CIF → delivered,
  * with the power conversion system priced separately in local currency.
  */
+export type PcsBasis = 'per-enclosure' | 'per-installed-kw';
 export type LandedCost = {
   basicPriceUsdPerKWh: number; oceanFreightPct: number; exchangeRateInrPerUsd: number;
-  customsDutyPct: number; inlandClearancePct: number; pcsCostInrPerKW: number;
+  customsDutyPct: number; inlandClearancePct: number;
+  /** The issued proposal bundles a converter allowance with each enclosure; per-kW is the alternative. */
+  pcsBasis: PcsBasis; pcsCostInrPerUnit: number; pcsCostInrPerKW: number;
 };
 
 export type CostingMode = 'landed-import' | 'direct';
@@ -46,7 +49,8 @@ export const offerPcsInrPerKW = 3_250_000 / 2507.5;
 
 export const defaultLandedCost = (): LandedCost => ({
   basicPriceUsdPerKWh: 68, oceanFreightPct: 1.5, exchangeRateInrPerUsd: 97,
-  customsDutyPct: 11, inlandClearancePct: 1.5, pcsCostInrPerKW: offerPcsInrPerKW,
+  customsDutyPct: 11, inlandClearancePct: 1.5,
+  pcsBasis: 'per-enclosure', pcsCostInrPerUnit: 3_250_000, pcsCostInrPerKW: offerPcsInrPerKW,
 });
 
 export type LandedBreakdown = {
@@ -66,7 +70,7 @@ export function landedCost(l: LandedCost, kWh: number, ratedKW: number): LandedB
   const customsDutyInr = cifInr * l.customsDutyPct / 100;
   const inlandClearanceInr = cifInr * l.inlandClearancePct / 100;
   const deliveredInr = cifInr + customsDutyInr + inlandClearanceInr;
-  const pcsInr = ratedKW * l.pcsCostInrPerKW;
+  const pcsInr = l.pcsBasis === 'per-enclosure' ? l.pcsCostInrPerUnit : ratedKW * l.pcsCostInrPerKW;
   const totalInr = deliveredInr + pcsInr;
   const fx = Math.max(l.exchangeRateInrPerUsd, 1e-6);
   return {
@@ -96,6 +100,15 @@ export const defaultPriceBook: PriceBook = {
 };
 
 export const convert = (amountUsd: number, to: Currency) => amountUsd * currencies[to].perUsd;
+
+/**
+ * Units of the quotation currency per US dollar. Under the landed-import basis the rate quoted in
+ * the build-up is the authority — converting the same offer back at a different reference rate is
+ * what makes a price build-up fail to reconcile with its own order value.
+ */
+export const localRate = (pb: PriceBook, currency: Currency) =>
+  pb.costingMode === 'landed-import' ? pb.landed.exchangeRateInrPerUsd : currencies[currency].perUsd;
+export const toLocal = (amountUsd: number, pb: PriceBook, currency: Currency) => amountUsd * localRate(pb, currency);
 
 /** The minus sign leads the symbol, so a negative cash flow reads as −$1.2 M rather than $-1.2 M. */
 export function formatMoney(amount: number, currency: Currency, compact = false) {

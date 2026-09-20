@@ -19,7 +19,8 @@ rather than a rewrite.
 | Landed-import costing: FOB, freight, exchange, duty and clearance, supply-only or turnkey | `src/catalog/pricing.ts` |
 | Design checks: C-rate, DC window, ambient, altitude, cooling, throughput, shortfall | `src/sizing/engine.ts` |
 | Lifetime economics: cost stack, cash flow, LCOS, NPV, IRR, payback | `src/sizing/finance.ts` |
-| Versioned quotations with scope, terms and a printable white-label proposal | `src/quoting`, `src/app/components/Proposal.tsx` |
+| Versioned quotations with scope, terms and a one-page summary | `src/quoting`, `src/app/components/Proposal.tsx` |
+| Four-page A4 offer document with a generated cut-away, print-to-PDF and HTML export | `src/quoting/offer.ts`, `src/app/components/Offer.tsx` |
 | Equipment catalogue and per-organization price book in six currencies | `src/catalog` |
 | Parametric 3D container assembly with electrical and coolant routing | `src/domain`, `src/scene` |
 | Offline demo workspace so a demonstration never depends on the network | `src/platform/repo.ts` |
@@ -28,11 +29,10 @@ rather than a rewrite.
 
 ## Near term — completes the sell/deliver loop
 
-**1. Proposal pack as a real document.** The proposal prints today. Generate a paginated PDF with a
-cover, company profile, single-line diagram, layout plan, degradation table and warranty appendix,
-and store it against the quotation so what was sent is always recoverable. The Solarworld corporate
-deck already supplies the cover material: order book, plant capacity, certifications and track
-record.
+**1. Store what was sent.** The four-page offer prints to PDF and exports as HTML today, but the
+file is not kept. Render it server-side on “mark as sent” and store it against the quotation, so the
+document a customer holds is always recoverable. Adding a single-line diagram and a site layout
+plan to the technical page is the natural next increment.
 
 **2. Approval workflow.** Discount and margin thresholds that route a quotation to an approver
 before it can be marked sent, with the decision written to the activity trail. The role model and

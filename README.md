@@ -15,7 +15,8 @@ against one customer record.
 | **Sizing** | Eight application presets, a slider-driven loss chain, an editable year-by-year degradation schedule, cohort augmentation scheduling, PCS and transformer selection, and design checks for C-rate, DC window, ambient, altitude, throughput and capacity shortfall. |
 | **Costing** | Landed-import build-up — FOB, ocean freight, CIF, exchange rate, customs duty and inland clearance — or a direct rate card, each under supply-only or turnkey scope. |
 | **Economics** | Itemised cost stack, year-by-year cash flow, LCOS, NPV, IRR and payback, with charging energy priced separately from gross revenue and open-access wheeling losses carried through. |
-| **Quotations** | Sell-price build-up, editable line items, scope and terms, discount and tax, versioned revisions, and a printable white-label proposal. |
+| **Quotations** | Sell-price build-up, editable line items, scope and terms, discount and tax, versioned revisions, and a one-page summary. |
+| **Offers** | A four-page A4 technical and commercial proposal generated from the project: cover with a cut-away of the quoted enclosure, plant configuration and specifications, the year-by-year energy schedule, and the landed price build-up with the order value. Prints to PDF or exports as a standalone HTML file. |
 | **3D studio** | The original parametric container assembly — racks, packs, 4 992 cells, busbars, HV, coolant loops and BMS routing — for the engineering conversation. |
 | **Catalogue** | Cells, packs, enclosures, power conversion and transformers, each carrying its provenance. |
 
@@ -31,7 +32,7 @@ browser, seeded with a reference pipeline of five customers, projects and quotat
 works offline, which is what you want in front of a customer on hotel wifi.
 
 ```bash
-npm test             # 56 tests across the geometry, sizing, finance, quoting and tenancy layers
+npm test             # 61 tests across the geometry, sizing, finance, quoting and tenancy layers
 npm run typecheck
 npm run build
 ```
@@ -76,6 +77,7 @@ Every number the studio quotes traces back to an input you can see and move.
 |---|---|
 | Battery product schedule | The eight-model pack family from SB12100 to the 1 331.2 V / 5 015 kWh container: series counts, voltage windows, continuous and maximum currents, temperature limits, cell vendors and certifications. |
 | Supply offer | The landed-cost build-up: FOB $68/kWh, 1.5% ocean freight, ₹97/$, 11% customs duty, 1.5% inland clearance and ₹3 250 000 of conversion per container — ₹8 180/kWh delivered. Also the approved PCS and cell vendors, the BMS options, the five-year warranty and the optional energy management system. |
+| Issued 350 MW / 700 MWh proposal | The offer document's structure, the enclosure envelope (10 444 × 2 532.2 × 2 200 mm), ingress and operating ratings, the three-level BMS, the compliance matrix and the commercial terms. Its price build-up at USD 69/kWh reproduces to the rupee: ₹41 577 485 per enclosure, ₹5 820 847 958 for 140. |
 | BESS sizing model | The 20-year capacity retention schedule (95% at year 1 falling to 69% at year 20) and the loss chain: 95% usable DC window, 95% DC round trip, 0.25% DC cable, 1.5% conversion, 0.25% AC cable, 1.0% transformer, 0.5 MWh/day auxiliary each way, 10.78% open-access wheeling and a 95% dispatch availability factor. |
 
 The engine reproduces the supplied sizing model to within 0.004% on stored energy, usable AC energy
@@ -97,6 +99,22 @@ and charging energy, and the landed build-up to the rupee. Both are locked by te
   where nothing is spare the two are identical, which is what the supplied sheet computes.
 - The supplied sheet applies transformer loss on charge but not on discharge. Both directions are
   modelled, with a switch that reproduces the sheet exactly and an explanation of the difference.
+
+### The offer document
+
+`src/quoting/offer.ts` assembles the document's content from the organization, the sizing result and
+the price book; `src/app/components/Offer.tsx` lays it out as four A4 pages. Two points are worth
+knowing:
+
+- **The build-up on the customer's page is a selling-price build-up.** Contingency and margin ride
+  inside the basic rate, exactly as they do in a supplier's own offer, so the per-enclosure figures
+  multiply out to the order value printed beside them. A test asserts that reconciliation.
+- **The exchange rate quoted in the build-up governs the whole quotation.** Converting the same
+  offer back at a different reference rate is what makes a price build-up fail to agree with its own
+  order value.
+
+The pages are laid out to fit A4 exactly. If edited text pushes a page past 297 mm the preview says
+so on screen, and print clips rather than spilling onto a fifth sheet.
 
 ### Known findings
 

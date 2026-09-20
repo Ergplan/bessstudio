@@ -1,6 +1,6 @@
 import { type SizingResult } from '../sizing/engine';
 import { type FinanceResult } from '../sizing/finance';
-import { convert, type Currency, type PriceBook } from '../catalog/pricing';
+import { toLocal, type Currency, type PriceBook } from '../catalog/pricing';
 import { nowIso, uid, type Customer, type Project, type Quote, type QuoteLine } from '../platform/types';
 
 export const scopeIncludedDefault = [
@@ -38,23 +38,23 @@ export const assumptionsDefault = (sizing: SizingResult) => {
 /** Sell-price uplift that carries contingency and margin without exposing either on the customer document. */
 export const uplift = (finance: FinanceResult) => (finance.subtotalUsd > 0 ? (finance.subtotalUsd + finance.contingencyUsd + finance.marginUsd) / finance.subtotalUsd : 1);
 
-export function buildQuoteLines(sizing: SizingResult, finance: FinanceResult, currency: Currency): QuoteLine[] {
+export function buildQuoteLines(sizing: SizingResult, finance: FinanceResult, currency: Currency, priceBook: PriceBook): QuoteLine[] {
   const factor = uplift(finance);
   const lines = finance.lines.map<QuoteLine>(l => {
-    const unitPrice = convert(l.unitCostUsd * factor, currency);
+    const unitPrice = toLocal(l.unitCostUsd * factor, priceBook, currency);
     return { id: l.id, category: l.category, label: l.label, quantity: Number(l.quantity.toFixed(3)), unit: l.unit, unitPrice, total: unitPrice * l.quantity, note: l.note, optional: false };
   });
   const omUsd = sizing.ratedPowerMW * 1000 * 7.5 * 2;
   lines.push({
     id: 'ltsa', category: 'services', label: 'Extended service agreement — years 3 to 5 (optional)', quantity: 1, unit: 'lot',
-    unitPrice: convert(omUsd * factor, currency), total: convert(omUsd * factor, currency),
+    unitPrice: toLocal(omUsd * factor, priceBook, currency), total: toLocal(omUsd * factor, priceBook, currency),
     note: 'Preventive maintenance, spares and performance reporting', optional: true,
   });
   // The supply offer lists the energy management system as an optional add-on.
   const emsUsd = sizing.ratedPowerMW * 1000 * 6;
   lines.push({
     id: 'ems', category: 'equipment', label: 'jouleWise energy management system (optional)', quantity: 1, unit: 'lot',
-    unitPrice: convert(emsUsd * factor, currency), total: convert(emsUsd * factor, currency),
+    unitPrice: toLocal(emsUsd * factor, priceBook, currency), total: toLocal(emsUsd * factor, priceBook, currency),
     note: 'Dispatch optimisation, remote monitoring and performance reporting', optional: true,
   });
   return lines;
@@ -79,7 +79,7 @@ export function createQuote(args: {
   orgId: string; customer: Customer; project: Project; sizing: SizingResult; finance: FinanceResult;
   priceBook: PriceBook; currency: Currency; number: string; preparedBy: string; preparedByEmail: string;
 }): Quote {
-  const lines = buildQuoteLines(args.sizing, args.finance, args.currency);
+  const lines = buildQuoteLines(args.sizing, args.finance, args.currency, args.priceBook);
   const totals = quoteTotals(lines, 0, args.priceBook.taxPct, 0);
   const validUntil = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
   return {
