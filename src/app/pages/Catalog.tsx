@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Card, Badge, Tabs, KV } from '../components/ui';
-import { cells, enclosures, packSpecs, pcsUnits, transformers, cellOf, packOf, packEnergyKWh } from '../../catalog/products';
+import { cells, enclosures, packSpecs, pcsUnits, transformers, cellOf, packOf, packEnergyKWh, enclosureStrings } from '../../catalog/products';
 import { enclosureSummary } from '../../sizing/engine';
 import { applications } from '../../sizing/applications';
 
@@ -23,14 +23,17 @@ export function Catalog() {
       {tab === 'enclosures' && (
         <Card tight>
           <table className="data">
-            <thead><tr><th>Model</th><th>Family</th><th className="num">Energy</th><th className="num">Racks × packs</th><th className="num">Cells</th><th className="num">Footprint</th><th className="num">Mass</th><th>Cooling</th><th className="num">DC window</th><th>Provenance</th></tr></thead>
+            <thead><tr><th>Model</th><th>Family</th><th className="num">Energy</th><th className="num">Power</th><th className="num">Topology</th><th className="num">Cells</th><th className="num">DC window</th><th className="num">Aux</th><th>Cooling</th><th>Provenance</th></tr></thead>
             <tbody>{enclosures.map(e => { const s = enclosureSummary(e); return (
-              <tr key={e.id}><td><b>{e.model}</b><div className="muted" style={{ fontSize: 11 }}>{e.lengthMm}×{e.widthMm}×{e.heightMm} mm</div></td>
+              <tr key={e.id}><td><b>{e.model}</b><div className="muted" style={{ fontSize: 11 }}>{e.lengthMm}×{e.widthMm}×{e.heightMm} mm · {(e.massKg / 1000).toFixed(2)} t · {packOf(e).model}</div></td>
                 <td style={{ textTransform: 'capitalize' }}>{e.family}</td>
-                <td className="num"><b>{(s.energyKWh / 1000).toFixed(3)} MWh</b></td>
-                <td className="num">{e.racks} × {e.packsPerRack}</td><td className="num">{s.cells.toLocaleString()}</td>
-                <td className="num">{s.footprintM2.toFixed(1)} m²</td><td className="num">{(e.massKg / 1000).toFixed(1)} t</td>
-                <td>{e.cooling} · {e.ipRating}</td><td className="num">{e.dcMinV}–{e.dcMaxV} V</td>
+                <td className="num"><b>{(s.energyKWh / 1000).toFixed(3)} MWh</b><div className="muted" style={{ fontSize: 11 }}>label {(e.labelKWh / 1000).toFixed(3)}</div></td>
+                <td className="num">{e.ratedKW.toLocaleString()} kW</td>
+                <td className="num">{e.packsInSeries}S × {enclosureStrings(e)}P<div className="muted" style={{ fontSize: 11 }}>{e.racks} racks × {e.packsPerRack}</div></td>
+                <td className="num">{s.cells.toLocaleString()}</td>
+                <td className="num">{e.dcMinV}–{e.dcMaxV} V</td>
+                <td className="num">{e.auxMWhPerDayCharge} / {e.auxMWhPerDayDischarge}<div className="muted" style={{ fontSize: 11 }}>MWh per day</div></td>
+                <td>{e.cooling} · {e.ipRating}</td>
                 <td><Badge tone={tone(e.provenance)}>{e.provenance}</Badge></td></tr>
             ); })}</tbody>
           </table>
@@ -41,25 +44,27 @@ export function Catalog() {
         <div className="grid cols-2">
           <Card title="Cells" tight>
             <table className="data">
-              <thead><tr><th>Model</th><th>Chemistry</th><th className="num">Capacity</th><th className="num">Energy</th><th className="num">Cycle life</th><th className="num">Calendar</th><th>Provenance</th></tr></thead>
+              <thead><tr><th>Model</th><th className="num">Capacity</th><th className="num">Voltage window</th><th className="num">Cycle life</th><th className="num">Temperature</th><th>Approved vendors</th></tr></thead>
               <tbody>{cells.map(c => (
-                <tr key={c.id}><td><b>{c.model}</b><div className="muted" style={{ fontSize: 11 }}>{c.widthMm}×{c.heightMm}×{c.thicknessMm} mm · {c.massKg} kg</div></td>
-                  <td>{c.chemistry}</td><td className="num">{c.ah} Ah @ {c.nominalV} V</td>
-                  <td className="num">{(c.nominalV * c.ah / 1000).toFixed(3)} kWh</td>
-                  <td className="num">{c.cycleLife.toLocaleString()} → {(c.cycleLifeRetention * 100).toFixed(0)}%</td>
-                  <td className="num">{c.calendarYears} yr → {(c.calendarRetention * 100).toFixed(0)}%</td>
-                  <td><Badge tone={tone(c.provenance)}>{c.provenance}</Badge></td></tr>
+                <tr key={c.id}><td><b>{c.model}</b><div className="muted" style={{ fontSize: 11 }}>{c.widthMm}×{c.heightMm}×{c.thicknessMm} mm · {c.massKg} kg · {c.chemistry}</div></td>
+                  <td className="num">{c.ah} Ah @ {c.nominalV} V<div className="muted" style={{ fontSize: 11 }}>{(c.nominalV * c.ah / 1000).toFixed(3)} kWh</div></td>
+                  <td className="num">{c.minV}–{c.maxV} V</td>
+                  <td className="num">{c.cycleLife.toLocaleString()} → {(c.cycleLifeRetention * 100).toFixed(0)}%<div className="muted" style={{ fontSize: 11 }}>{c.calendarYears} yr → {(c.calendarRetention * 100).toFixed(0)}%</div></td>
+                  <td className="num">{c.chargeTempC[0]} to {c.chargeTempC[1]} °C<div className="muted" style={{ fontSize: 11 }}>discharge {c.dischargeTempC[0]} to {c.dischargeTempC[1]}</div></td>
+                  <td className="muted" style={{ fontSize: 11.5 }}>{c.approvedVendors.join(', ')}<div>{c.certifications.join(' · ')}</div></td></tr>
               ))}</tbody>
             </table>
           </Card>
           <Card title="Packs" tight>
             <table className="data">
-              <thead><tr><th>Model</th><th>Cell</th><th className="num">Arrangement</th><th className="num">Energy</th><th className="num">Mass</th><th>Provenance</th></tr></thead>
+              <thead><tr><th>Model</th><th className="num">Arrangement</th><th className="num">Voltage</th><th className="num">Energy</th><th className="num">Current</th><th className="num">Mass</th></tr></thead>
               <tbody>{packSpecs.map(p => (
-                <tr key={p.id}><td><b>{p.model}</b></td><td>{cellOf(p).model}</td>
-                  <td className="num">{p.series}S{p.parallel}P · {p.rows}×{p.columns}</td>
-                  <td className="num"><b>{packEnergyKWh(p).toFixed(3)} kWh</b></td><td className="num">{p.massKg} kg</td>
-                  <td><Badge tone={tone(p.provenance)}>{p.provenance}</Badge></td></tr>
+                <tr key={p.id}><td><b>{p.model}</b><div className="muted" style={{ fontSize: 11 }}>{cellOf(p).model}</div></td>
+                  <td className="num">{p.series}S{p.parallel}P<div className="muted" style={{ fontSize: 11 }}>{p.rows}×{p.columns}</div></td>
+                  <td className="num">{p.nominalV} V<div className="muted" style={{ fontSize: 11 }}>{p.minV}–{p.maxV} V</div></td>
+                  <td className="num"><b>{packEnergyKWh(p).toFixed(3)} kWh</b><div className="muted" style={{ fontSize: 11 }}>label {p.labelKWh}</div></td>
+                  <td className="num">{p.continuousA} A<div className="muted" style={{ fontSize: 11 }}>max {p.maxA} A</div></td>
+                  <td className="num">{p.massKg} kg</td></tr>
               ))}</tbody>
             </table>
           </Card>
@@ -75,7 +80,7 @@ export function Catalog() {
                 <tr key={p.id}><td><b>{p.model}</b><div className="muted" style={{ fontSize: 11 }}>{p.acV} V AC</div></td>
                   <td className="num">{p.ratedKW.toLocaleString()} kW</td><td className="num">{p.dcMinV}–{p.dcMaxV} V</td>
                   <td className="num">{p.dcMaxA.toLocaleString()} A</td><td className="num">{(p.efficiency * 100).toFixed(2)}%</td>
-                  <td style={{ textTransform: 'capitalize' }}>{p.topology}</td></tr>
+                  <td style={{ textTransform: 'capitalize' }}>{p.topology}<div className="muted" style={{ fontSize: 11, textTransform: 'none' }}>{p.approvedVendors.join(', ')}</div></td></tr>
               ))}</tbody>
             </table>
           </Card>
@@ -109,7 +114,10 @@ export function Catalog() {
           ))}
         </div>
       )}
-      <p className="muted">Pack reference: {packOf(enclosures[0]).model} — the supplied 104S1P assembly modelled in the 3D studio.</p>
+      <p className="muted">
+        Pack reference: {packOf(enclosures[0]).model} — the supplied 104S1P assembly modelled in the 3D studio.
+        Computed pack energy uses the cell nominal voltage, which differs slightly from the nameplate label; both are shown.
+      </p>
     </div>
   );
 }

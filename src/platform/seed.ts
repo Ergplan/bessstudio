@@ -62,7 +62,7 @@ export async function seedOrganization(orgId: string, member: Member) {
       contacts: [{ id: `con_seed_${i + 1}`, ...s.contact, primary: true }],
       ownerUid: member.uid, ownerName: member.displayName, createdAt: at, updatedAt: at,
     };
-    const sizing = { ...defaultSizingInput(), ...s.sizing };
+    const sizing = { ...defaultSizingInput(s.sizing.applicationId ?? 'peak-shaving'), ...s.sizing };
     const project: Project = {
       id: `prj_seed_${i + 1}`, orgId, customerId: customer.id, customerName: customer.name,
       name: s.project.name, reference: s.project.reference,

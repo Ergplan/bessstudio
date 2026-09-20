@@ -6,9 +6,11 @@ import { nowIso, uid, type Customer, type Project, type Quote, type QuoteLine } 
 export const scopeIncludedDefault = [
   'Supply of battery energy storage enclosures with integrated BMS, thermal management and fire detection',
   'Power conversion system and factory-tested DC connection kit',
+  'Cells certified to UL 1973 or UL 1642, IEC 62619 with IEC 63056, IS 16270 and UN 38.3',
+  'System certified to UL 9540 or IEC 62933-5-1 with IEC 62933-5-2, and UL 9540A',
   'Detailed engineering, single-line diagrams, layout drawings and O&M documentation',
   'Installation supervision, commissioning and site acceptance testing',
-  'Operator training and first-year remote monitoring',
+  'After-sales technical support from the Roorkee BESS manufacturing facility',
 ];
 export const scopeExcludedDefault = [
   'Grid connection application, utility charges and export licensing',
@@ -17,13 +19,21 @@ export const scopeExcludedDefault = [
   'Auxiliary supply, communications backhaul and metering owned by the network operator',
   'Any works arising from site conditions not disclosed at the time of quotation',
 ];
-export const assumptionsDefault = (sizing: SizingResult) => [
-  `Duty cycle of ${sizing.input.cyclesPerDay} cycle(s) per day over ${sizing.input.daysPerYear} days per year at ${Math.round(sizing.input.dod * 100)}% depth of discharge.`,
-  `Design ambient temperature ${sizing.input.ambientC} °C at ${sizing.input.altitudeM} m altitude; site thermal study to confirm.`,
-  `Grid connection at ${sizing.input.gridKV} kV, ${sizing.input.frequencyHz} Hz, power factor ${sizing.input.powerFactor}.`,
-  'Capacity retention follows catalogue ageing anchors; supplier warranty curves govern the contract.',
-  'Prices are based on the price book in force on the quotation date and are subject to the stated validity.',
-];
+export const assumptionsDefault = (sizing: SizingResult) => {
+  const r = sizing.input.degradation.retention, last = Math.min(sizing.input.projectYears, r.length - 1);
+  const L = sizing.input.losses;
+  return [
+    `Duty cycle of ${sizing.input.cyclesPerDay} cycle(s) per day over ${sizing.input.daysPerYear} days per year at ${Math.round(sizing.input.dod * 100)}% depth of discharge, across a ${Math.round(L.usableDcWindow * 100)}% usable DC window.`,
+    `Design ambient temperature ${sizing.input.ambientC} °C at ${sizing.input.altitudeM} m altitude; site thermal study to confirm.`,
+    `Grid connection at ${sizing.input.gridKV} kV, ${sizing.input.frequencyHz} Hz, power factor ${sizing.input.powerFactor}.`,
+    `Efficiency chain: ${(L.dcCableLoss * 100).toFixed(2)}% DC cable, ${(L.pcsLoss * 100).toFixed(2)}% conversion, ${(L.acCableLoss * 100).toFixed(2)}% AC cable and ${(L.idtLoss * 100).toFixed(2)}% transformer loss, giving ${(sizing.rteAc * 100).toFixed(1)}% round trip at AC.`,
+    `Auxiliary consumption of ${sizing.auxMWhPerDay.toFixed(2)} MWh per day across the installed fleet.`,
+    sizing.input.degradation.mode === 'table'
+      ? `Capacity retention per the agreed schedule: ${Math.round((r[1] ?? 1) * 100)}% at year 1 and ${Math.round((r[last] ?? 1) * 100)}% at year ${last}. Supplier warranty curves govern the contract.`
+      : 'Capacity retention derived from the cell warranty anchors at the design duty cycle and temperature. Supplier warranty curves govern the contract.',
+    'Prices are based on the price book in force on the quotation date and are subject to the stated validity.',
+  ];
+};
 
 /** Sell-price uplift that carries contingency and margin without exposing either on the customer document. */
 export const uplift = (finance: FinanceResult) => (finance.subtotalUsd > 0 ? (finance.subtotalUsd + finance.contingencyUsd + finance.marginUsd) / finance.subtotalUsd : 1);
@@ -39,6 +49,13 @@ export function buildQuoteLines(sizing: SizingResult, finance: FinanceResult, cu
     id: 'ltsa', category: 'services', label: 'Extended service agreement — years 3 to 5 (optional)', quantity: 1, unit: 'lot',
     unitPrice: convert(omUsd * factor, currency), total: convert(omUsd * factor, currency),
     note: 'Preventive maintenance, spares and performance reporting', optional: true,
+  });
+  // The supply offer lists the energy management system as an optional add-on.
+  const emsUsd = sizing.ratedPowerMW * 1000 * 6;
+  lines.push({
+    id: 'ems', category: 'equipment', label: 'jouleWise energy management system (optional)', quantity: 1, unit: 'lot',
+    unitPrice: convert(emsUsd * factor, currency), total: convert(emsUsd * factor, currency),
+    note: 'Dispatch optimisation, remote monitoring and performance reporting', optional: true,
   });
   return lines;
 }

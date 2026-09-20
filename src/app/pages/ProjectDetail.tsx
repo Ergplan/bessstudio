@@ -1,20 +1,24 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Box, FileText, RotateCcw } from 'lucide-react';
-import { Card, Stat, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, Field, levelTone, pct, date } from '../components/ui';
+import { Card, Stat, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, Field, Slider, pct, date } from '../components/ui';
 import { LineChart, BarChart, CompositionBar, series, status } from '../components/viz';
 import { useWorkspace, quotesOf } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
 import { can, quoteStatuses } from '../../platform/types';
 import { applications, application } from '../../sizing/applications';
-import { defaultSizingInput, sizeSystem, enclosureSummary, type AugmentationStrategy, type SizingMode } from '../../sizing/engine';
+import {
+  defaultSizingInput, sizeSystem, normaliseSizingInput, enclosureSummary, defaultLossChain, defaultDegradation,
+  suppliedRetention, retentionAt, cellTemperature, temperatureFactor,
+  type AugmentationStrategy, type SizingMode, type DegradationMode, type LossChain,
+} from '../../sizing/engine';
 import { evaluateFinance } from '../../sizing/finance';
 import { createQuote, nextQuoteNumber } from '../../quoting/quote';
-import { enclosures, pcsUnits, transformers } from '../../catalog/products';
+import { enclosures, pcsUnits, transformers, cellOf, packOf } from '../../catalog/products';
 import { convert, formatMoney } from '../../catalog/pricing';
 import type { ApplicationId } from '../../sizing/applications';
 
-type Tab = 'requirements' | 'design' | 'performance' | 'economics';
+type Tab = 'requirements' | 'losses' | 'design' | 'performance' | 'economics';
 
 export function ProjectDetail() {
   const { projectId = '' } = useParams();
@@ -39,7 +43,13 @@ export function ProjectDetail() {
   const app = application(project.sizing.applicationId);
   const errors = sizing.warnings.filter(w => w.level === 'error');
   const writable = can(role, 'project.write');
-  const set = (patch: Partial<typeof project.sizing>) => void saveProject({ ...project, sizing: { ...project.sizing, ...patch } });
+  const set = (patch: Partial<typeof project.sizing>) => void saveProject({ ...project, sizing: { ...normaliseSizingInput(project.sizing), ...patch } });
+  const setLoss = (patch: Partial<LossChain>) => set({ losses: { ...project.sizing.losses, ...patch } });
+  const setRetention = (year: number, value: number) => {
+    const retention = [...normaliseSizingInput(project.sizing).degradation.retention];
+    retention[year] = value;
+    set({ degradation: { ...project.sizing.degradation, retention } });
+  };
 
   const issueQuote = async () => {
     const customerName = project.customerName;
@@ -67,7 +77,8 @@ export function ProjectDetail() {
         <Stat label="Rated power" value={sizing.ratedPowerMW.toFixed(2)} unit="MW" foot={`${sizing.pcsCount} × ${sizing.pcs.model}`} />
         <Stat label="Contracted usable" value={sizing.requiredUsableMWh.toFixed(1)} unit="MWh" foot={`${sizing.effectiveDurationH.toFixed(2)} h duration`} />
         <Stat label="Installed DC" value={sizing.installedDcMWh.toFixed(2)} unit="MWh" foot={`${sizing.units} × ${sizing.enclosure.model}${sizing.augmentations.length ? ` + ${sizing.totalUnits - sizing.units} augmentation` : ''}`} />
-        <Stat label="Turnkey price" value={money(finance.capexUsd)} foot={`${money(finance.capexPerKWhUsd, false)} per kWh DC`} />
+        <Stat label={priceBook.supplyScope === 'turnkey' ? 'Turnkey price' : 'Delivered equipment price'}
+          value={money(finance.capexUsd)} foot={`${money(finance.capexPerKWhUsd, false)} per kWh DC`} />
       </div>
 
       {errors.length > 0 && (
@@ -75,8 +86,9 @@ export function ProjectDetail() {
       )}
 
       <Tabs<Tab> active={tab} onChange={setTab} tabs={[
-        { id: 'requirements', label: 'Requirements' }, { id: 'design', label: 'Design' },
-        { id: 'performance', label: 'Performance & ageing' }, { id: 'economics', label: 'Economics' },
+        { id: 'requirements', label: 'Requirements' }, { id: 'losses', label: 'Losses & degradation' },
+        { id: 'design', label: 'Design' }, { id: 'performance', label: 'Performance & ageing' },
+        { id: 'economics', label: 'Economics' },
       ]} />
 
       {tab === 'requirements' && (
@@ -97,36 +109,140 @@ export function ProjectDetail() {
             <SelectInput label="Sizing mode" value={project.sizing.mode} options={[{ value: 'power-duration', label: 'Power × duration' }, { value: 'usable-energy', label: 'Usable energy target' }]}
               onChange={mode => set({ mode: mode as SizingMode })} />
             {project.sizing.mode === 'power-duration'
-              ? <><NumberInput label="Rated power" value={project.sizing.powerMW} unit="MW" min={0.05} max={1000} step={0.05} onChange={powerMW => set({ powerMW })} />
-                  <NumberInput label="Duration at rated power" value={project.sizing.durationH} unit="h" min={0.25} max={24} step={0.25} onChange={durationH => set({ durationH })} /></>
-              : <><NumberInput label="Usable energy" value={project.sizing.usableEnergyMWh} unit="MWh" min={0.1} max={5000} step={0.5} onChange={usableEnergyMWh => set({ usableEnergyMWh })} />
-                  <NumberInput label="Discharge duration" value={project.sizing.durationH} unit="h" min={0.25} max={24} step={0.25} onChange={durationH => set({ durationH })} /></>}
-            <NumberInput label="Cycles per day" value={project.sizing.cyclesPerDay} unit="/day" min={0.01} max={20} step={0.05} onChange={cyclesPerDay => set({ cyclesPerDay })} />
-            <NumberInput label="Operating days per year" value={project.sizing.daysPerYear} unit="days" min={1} max={366} onChange={daysPerYear => set({ daysPerYear })} />
-            <NumberInput label="Depth of discharge" value={Math.round(project.sizing.dod * 100)} unit="%" min={20} max={100} onChange={n => set({ dod: n / 100 })} />
-            <NumberInput label="Availability" value={Math.round(project.sizing.availability * 100)} unit="%" min={50} max={100} onChange={n => set({ availability: n / 100 })}
+              ? <><Slider label="Rated power" value={project.sizing.powerMW} min={0.05} max={200} step={0.05} decimals={2} unit="MW" onChange={powerMW => set({ powerMW })} />
+                  <Slider label="Duration at rated power" value={project.sizing.durationH} min={0.25} max={12} step={0.25} decimals={2} unit="h" onChange={durationH => set({ durationH })} /></>
+              : <><Slider label="Usable energy" value={project.sizing.usableEnergyMWh} min={0.1} max={1000} step={0.1} decimals={1} unit="MWh" onChange={usableEnergyMWh => set({ usableEnergyMWh })} />
+                  <Slider label="Discharge duration" value={project.sizing.durationH} min={0.25} max={12} step={0.25} decimals={2} unit="h" onChange={durationH => set({ durationH })} /></>}
+            <Slider label="Cycles per day" value={project.sizing.cyclesPerDay} min={0.05} max={12} step={0.05} decimals={2} unit="/day" onChange={cyclesPerDay => set({ cyclesPerDay })} />
+            <Slider label="Operating days per year" value={project.sizing.daysPerYear} min={30} max={366} step={1} unit="days" onChange={daysPerYear => set({ daysPerYear })} />
+            <Slider label="Depth of discharge" value={project.sizing.dod} scale={100} min={20} max={100} step={1} unit="%" onChange={dod => set({ dod })} />
+            <Slider label="Availability" value={project.sizing.availability} scale={100} min={50} max={100} step={0.5} decimals={1} unit="%" onChange={availability => set({ availability })}
               hint="Time-based availability. Applied to throughput and revenue, not to the energy in a single discharge." />
           </Card>
 
           <Card title="Site, grid and equipment">
             <TextInput label="Site location" value={project.site.location} onChange={location => void saveProject({ ...project, site: { ...project.site, location } })} />
-            <div className="grid cols-2" style={{ gap: 0, columnGap: 12 }}>
-              <NumberInput label="Design ambient" value={project.sizing.ambientC} unit="°C" min={-40} max={60} onChange={ambientC => set({ ambientC })} />
-              <NumberInput label="Altitude" value={project.sizing.altitudeM} unit="m" min={0} max={5000} step={10} onChange={altitudeM => set({ altitudeM })} />
-            </div>
-            <SelectInput label="Enclosure" value={project.sizing.enclosureId} options={enclosures.map(e => ({ value: e.id, label: `${e.model} · ${(enclosureSummary(e).energyKWh / 1000).toFixed(2)} MWh ${e.family}` }))} onChange={enclosureId => set({ enclosureId })} />
+            <Slider label="Design ambient temperature" value={project.sizing.ambientC} min={-20} max={58} step={1} unit="°C" onChange={ambientC => set({ ambientC })} />
+            <Slider label="Altitude" value={project.sizing.altitudeM} min={0} max={5000} step={10} unit="m" onChange={altitudeM => set({ altitudeM })} />
+            <SelectInput label="System" value={project.sizing.enclosureId} options={enclosures.map(e => ({ value: e.id, label: `${e.model} · ${(enclosureSummary(e).energyKWh / 1000).toFixed(3)} MWh / ${e.ratedKW} kW ${e.family}` }))} onChange={enclosureId => set({ enclosureId })} />
             <SelectInput label="Power conversion" value={project.sizing.pcsId} options={pcsUnits.map(p => ({ value: p.id, label: `${p.model} · ${p.ratedKW} kW ${p.topology}` }))} onChange={pcsId => set({ pcsId })} />
             <SelectInput label="Step-up transformer" value={project.sizing.transformerId ?? ''} options={[{ value: '', label: 'None — connect at LV' }, ...transformers.map(t => ({ value: t.id, label: `${t.model} · ${t.ratedKVA} kVA ${t.lvKV}/${t.hvKV} kV` }))]} onChange={id => set({ transformerId: id || null })} />
             <div className="grid cols-2" style={{ gap: 0, columnGap: 12 }}>
               <NumberInput label="Grid voltage" value={project.sizing.gridKV} unit="kV" min={0.4} max={400} step={0.1} onChange={gridKV => set({ gridKV })} />
-              <NumberInput label="Project life" value={project.sizing.projectYears} unit="yr" min={1} max={30} onChange={projectYears => set({ projectYears })} />
+              <NumberInput label="Power factor" value={project.sizing.powerFactor} unit="pf" min={0.8} max={1} step={0.01} onChange={powerFactor => set({ powerFactor })} />
             </div>
+            <Slider label="Project life" value={project.sizing.projectYears} min={1} max={30} step={1} unit="yr" onChange={projectYears => set({ projectYears })} />
             <SelectInput label="Capacity maintenance strategy" value={project.sizing.augmentation}
               options={[{ value: 'oversize-day1', label: 'Oversize on day one' }, { value: 'periodic', label: 'Augment when capacity falls short' }, { value: 'none', label: 'No maintenance — accept decline' }]}
               onChange={augmentation => set({ augmentation: augmentation as AugmentationStrategy })} />
           </Card>
         </div>
       )}
+
+      {tab === 'losses' && (() => {
+        const normalised = normaliseSizingInput(project.sizing), L = normalised.losses, deg = normalised.degradation;
+        const cell = cellOf(packOf(sizing.enclosure));
+        const modelCurve = Array.from({ length: project.sizing.projectYears + 1 }, (_, y) =>
+          retentionAt(y, sizing.efcPerYear, cell, temperatureFactor(cellTemperature(project.sizing.ambientC, sizing.enclosure.cooling))));
+        return (
+          <div className="grid" style={{ gap: 16 }}>
+            <div className="grid cols-3">
+              <Card title="Efficiency chain" subtitle="Every loss between the grid and the cell, as supplied and editable">
+                <Slider label="Usable DC window" value={L.usableDcWindow} scale={100} min={50} max={100} step={0.5} decimals={1} unit="%"
+                  onChange={usableDcWindow => setLoss({ usableDcWindow })} hint="Fraction of nameplate energy actually cycled." />
+                <Slider label="Charge efficiency, DC side" value={L.chargeEfficiencyDc} scale={100} min={80} max={100} step={0.25} decimals={2} unit="%"
+                  onChange={chargeEfficiencyDc => setLoss({ chargeEfficiencyDc })} />
+                <Slider label="Discharge efficiency, DC side" value={L.dischargeEfficiencyDc} scale={100} min={80} max={100} step={0.25} decimals={2} unit="%"
+                  onChange={dischargeEfficiencyDc => setLoss({ dischargeEfficiencyDc })}
+                  hint="Defaults to the square root of the 95% round trip, matching the supplied sizing sheet." />
+                <Slider label="DC cable loss" value={L.dcCableLoss} scale={100} min={0} max={3} step={0.05} decimals={2} unit="%" onChange={dcCableLoss => setLoss({ dcCableLoss })} />
+                <Slider label="PCS loss" value={L.pcsLoss} scale={100} min={0} max={5} step={0.05} decimals={2} unit="%" onChange={pcsLoss => setLoss({ pcsLoss })} />
+                <Slider label="AC cable loss" value={L.acCableLoss} scale={100} min={0} max={3} step={0.05} decimals={2} unit="%" onChange={acCableLoss => setLoss({ acCableLoss })} />
+                <Slider label="Transformer loss" value={L.idtLoss} scale={100} min={0} max={4} step={0.05} decimals={2} unit="%" onChange={idtLoss => setLoss({ idtLoss })}
+                  hint={sizing.transformer ? `Applied to ${sizing.transformer.model}.` : 'No transformer in scope, so this is not applied.'} />
+                <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                  <input type="checkbox" checked={L.idtOnDischarge} disabled={!writable} onChange={e => setLoss({ idtOnDischarge: e.target.checked })} style={{ width: 'auto' }} />
+                  <span style={{ margin: 0 }}>Apply transformer loss on discharge as well as charge</span>
+                </label>
+                <p className="muted" style={{ fontSize: 11.5 }}>The supplied sheet omits it on discharge. Clearing this box reproduces that sheet exactly.</p>
+              </Card>
+
+              <Card title="Auxiliaries, wheeling and availability">
+                <Slider label="Auxiliary consumption" value={L.auxScale} scale={100} min={0} max={300} step={5} unit="%"
+                  onChange={auxScale => setLoss({ auxScale })}
+                  hint={`Scales the catalogue figure of ${sizing.enclosure.auxMWhPerDayCharge} MWh/day charging and ${sizing.enclosure.auxMWhPerDayDischarge} MWh/day discharging per unit.`} />
+                <Slider label="Open access / wheeling losses" value={L.openAccessLoss} scale={100} min={0} max={30} step={0.1} decimals={2} unit="%"
+                  onChange={openAccessLoss => setLoss({ openAccessLoss })}
+                  hint="Grosses charging energy up to the generation end when the system charges from a remote plant." />
+                <Slider label="Dispatch availability factor" value={L.availabilityFactor} scale={100} min={50} max={100} step={0.5} decimals={1} unit="%"
+                  onChange={availabilityFactor => setLoss({ availabilityFactor })}
+                  hint="Applied to annual delivered and charged energy, as in the supplied sheet." />
+                <div style={{ marginTop: 14 }}>
+                  <KV label="Discharge path">{pct(sizing.dischargePathEfficiency, 2)}</KV>
+                  <KV label="Charge path">{pct(sizing.chargePathEfficiency, 2)}</KV>
+                  <KV label="Round trip at AC">{pct(sizing.rteAc, 2)}</KV>
+                  <KV label="Auxiliary energy">{sizing.auxMWhPerDay.toFixed(3)} MWh/day</KV>
+                </div>
+                <button className="btn sm" style={{ marginTop: 12 }} disabled={!writable} onClick={() => set({ losses: defaultLossChain() })}>
+                  <RotateCcw size={13} /> Reset to supplied chain
+                </button>
+              </Card>
+
+              <Card title="Year one energy balance" subtitle="At the current configuration">
+                <KV label="Stored DC energy">{sizing.years[1]?.storedDcMWh.toFixed(3)} MWh</KV>
+                <KV label="Usable at AC">{sizing.years[1]?.usableMWh.toFixed(3)} MWh</KV>
+                <KV label="Delivered to customer">{Math.round(sizing.years[1]?.deliveredMWh ?? 0).toLocaleString()} MWh/yr</KV>
+                <KV label="Charging energy">{Math.round(sizing.years[1]?.chargeMWh ?? 0).toLocaleString()} MWh/yr</KV>
+                <KV label="Required at generation end">{Math.round(sizing.years[1]?.gridChargeMWh ?? 0).toLocaleString()} MWh/yr</KV>
+                <p className="muted" style={{ marginTop: 12 }}>
+                  Delivered energy is the mean of this year's and last year's usable capacity over the annual cycle count,
+                  scaled by the dispatch availability factor — the convention used in the supplied sizing model.
+                </p>
+              </Card>
+            </div>
+
+            <Card title="Capacity retention schedule" subtitle="The supplied 20-year degradation curve, editable year by year"
+              actions={
+                <div className="row" style={{ gap: 6 }}>
+                  <button className="btn sm" disabled={!writable} onClick={() => set({ degradation: defaultDegradation() })}>Reset to supplied curve</button>
+                  <button className="btn sm" disabled={!writable}
+                    onClick={() => set({ degradation: { mode: 'table', retention: modelCurve } })}>Fill from ageing model</button>
+                </div>
+              }>
+              <SelectInput label="Degradation basis" value={deg.mode}
+                options={[{ value: 'table', label: 'Year-by-year schedule (supplied)' }, { value: 'model', label: 'Derived from duty cycle and temperature' }]}
+                onChange={mode => set({ degradation: { ...deg, mode: mode as DegradationMode } })}
+                hint={deg.mode === 'table'
+                  ? 'Each year is set explicitly. Augmented capacity is aged from its own installation year against the same schedule.'
+                  : `Calendar and cycle fade from the ${cell.model} warranty anchors at ${sizing.cellTempC.toFixed(1)} °C cell temperature and ${sizing.efcPerYear.toFixed(0)} equivalent full cycles per year.`} />
+
+              <div style={{ margin: '14px 0' }}>
+                <LineChart xLabel="Year" width={720} yMin={0.5} format={n => `${(n * 100).toFixed(0)}%`}
+                  data={[
+                    { name: 'Schedule in use', color: series[0], points: Array.from({ length: project.sizing.projectYears + 1 }, (_, y) => ({ x: y, y: sizing.years[y]?.retention ?? 1 })) },
+                    { name: 'Supplied curve', color: series[3], dashed: true, points: suppliedRetention.slice(0, project.sizing.projectYears + 1).map((v, y) => ({ x: y, y: v })) },
+                  ]} />
+                <p className="muted" style={{ fontSize: 11.5, marginTop: 4 }}>Axis starts at 50% retention.</p>
+              </div>
+
+              {deg.mode === 'table' ? (
+                <div className="degradation-grid">
+                  {Array.from({ length: Math.max(project.sizing.projectYears, deg.retention.length - 1) }, (_, i) => i + 1).map(year => (
+                    <Slider key={year} label={`Year ${year}`} value={deg.retention[year] ?? suppliedRetention.at(-1) ?? 0.69}
+                      scale={100} min={20} max={100} step={0.5} decimals={1} unit="%" disabled={!writable}
+                      onChange={v => setRetention(year, v)} />
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">
+                  Switch to the year-by-year schedule to edit individual years, or use “Fill from ageing model” to copy the
+                  model curve into an editable schedule.
+                </p>
+              )}
+            </Card>
+          </div>
+        );
+      })()}
 
       {tab === 'design' && (
         <div className="grid cols-3">
@@ -146,7 +262,7 @@ export function ProjectDetail() {
                   <KV label="Mass">{sizing.massTonnes.toFixed(1)} t</KV>
                   <KV label="PCS">{sizing.pcsCount} × {sizing.pcs.ratedKW} kW ({sizing.pcsTotalMW.toFixed(2)} MW)</KV>
                   <KV label="Transformer">{sizing.transformer ? `${sizing.transformerCount} × ${sizing.transformer.ratedKVA} kVA` : 'Not included'}</KV>
-                  <KV label="Auxiliary load (peak)">{sizing.auxKW.toFixed(0)} kW</KV>
+                  <KV label="Auxiliary energy">{sizing.auxMWhPerDay.toFixed(2)} MWh/day</KV>
                   <KV label="Round trip at AC">{pct(sizing.rteAc)}</KV>
                 </div>
               </div>
@@ -174,7 +290,7 @@ export function ProjectDetail() {
                 { label: 'Balance of plant', value: finance.bopUsd, color: series[1] },
                 { label: 'Services', value: finance.servicesUsd, color: series[2] },
                 { label: 'Contingency & margin', value: finance.contingencyUsd + finance.marginUsd, color: series[3] },
-              ]} />
+              ].filter(p => p.value > 0)} />
             </Card>
           </div>
         </div>
@@ -209,7 +325,7 @@ export function ProjectDetail() {
             </Card>
             <Card title="Annual energy discharged" subtitle="Throughput at the contracted duty cycle and availability">
               <BarChart width={460} format={n => `${(n / 1000).toFixed(1)} GWh`} colorFor={(b) => (sizing.augmentations.some(a => String(a.year) === b.label) ? status.warning : series[0])}
-                bars={sizing.years.filter(y => y.year > 0).map(y => ({ label: String(y.year), value: y.throughputMWh, note: y.augmentedMWh ? `Augmented +${y.augmentedMWh.toFixed(2)} MWh` : undefined }))} />
+                bars={sizing.years.filter(y => y.year > 0).map(y => ({ label: String(y.year), value: y.deliveredMWh, note: y.augmentedMWh ? `Augmented +${y.augmentedMWh.toFixed(2)} MWh` : undefined }))} />
               {sizing.augmentations.length > 0 && <p className="muted" style={{ marginTop: 8 }}>Highlighted years carry an augmentation delivery.</p>}
             </Card>
           </div>

@@ -47,6 +47,40 @@ export function NumberInput({ label, value, onChange, min = 0, max = 1e9, step =
   );
 }
 
+/**
+ * Slider for a continuous design input. Dragging updates the readout locally and commits on
+ * release, so a drag does not write to the database on every animation frame. The number beside
+ * it stays editable for anyone who knows the value they want.
+ */
+export function Slider({ label, value, min, max, step = 1, unit, hint, decimals = 0, scale = 1, disabled, onChange }: {
+  label: string; value: number; min: number; max: number; step?: number; unit?: string;
+  hint?: string; decimals?: number; scale?: number; disabled?: boolean; onChange: (n: number) => void;
+}) {
+  const [draft, setDraft] = useState(value * scale);
+  const [typing, setTyping] = useState('');
+  useEffect(() => setDraft(value * scale), [value, scale]);
+  const commit = (next: number) => { const clamped = Math.min(max, Math.max(min, next)); setDraft(clamped); onChange(clamped / scale); };
+  const shown = draft.toFixed(decimals);
+  return (
+    <div className="slider">
+      <div className="slider-head">
+        <span>{label}</span>
+        <span className="slider-value">
+          <input type="number" value={typing === '' ? shown : typing} min={min} max={max} step={step} disabled={disabled} aria-label={label}
+            onChange={e => setTyping(e.target.value)}
+            onBlur={e => { const n = Number(e.target.value); setTyping(''); if (Number.isFinite(n)) commit(n); }}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
+          {unit && <i>{unit}</i>}
+        </span>
+      </div>
+      <input type="range" value={draft} min={min} max={max} step={step} disabled={disabled} aria-label={`${label} slider`}
+        onInput={e => setDraft(Number(e.currentTarget.value))}
+        onChange={e => commit(Number(e.currentTarget.value))} />
+      {hint && <small className="slider-hint">{hint}</small>}
+    </div>
+  );
+}
+
 export function Modal({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };

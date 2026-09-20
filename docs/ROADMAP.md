@@ -15,6 +15,8 @@ rather than a rewrite.
 | Multi-tenant workspace with roles, membership and an append-only audit trail | `src/platform` |
 | Customer, contact and pipeline management with a sales funnel | `src/app/pages/Customers.tsx` |
 | Application-led sizing with cohort degradation and augmentation scheduling | `src/sizing/engine.ts` |
+| Slider-driven loss chain and an editable year-by-year degradation schedule | `src/app/pages/ProjectDetail.tsx` |
+| Landed-import costing: FOB, freight, exchange, duty and clearance, supply-only or turnkey | `src/catalog/pricing.ts` |
 | Design checks: C-rate, DC window, ambient, altitude, cooling, throughput, shortfall | `src/sizing/engine.ts` |
 | Lifetime economics: cost stack, cash flow, LCOS, NPV, IRR, payback | `src/sizing/finance.ts` |
 | Versioned quotations with scope, terms and a printable white-label proposal | `src/quoting`, `src/app/components/Proposal.tsx` |
@@ -103,6 +105,20 @@ take-back obligations that are entering procurement terms.
 works without connectivity and reconciles on reconnect.
 
 ---
+
+## Data the studio is still missing
+
+These came up while wiring in the supplied workbooks and would each remove an assumption:
+
+- **Measured degradation per cell vendor.** The schedule in use is one curve. Highstar, Ganfeng,
+  Cornex and Cospower will each warrant something different, and the quotation should say which.
+- **PCS DC window per approved vendor.** The offer lists five converter brands without ratings,
+  which is why the 1 518.4 V finding cannot yet be closed against a specific model.
+- **Auxiliary load against ambient.** 0.5 MWh/day each way is a single figure; HVAC draw at 45 °C
+  in Bikaner is not the draw at 22 °C in Vilnius.
+- **Freight and duty by destination.** One ocean-freight percentage and one duty rate cover every
+  market today.
+- **Pack and enclosure masses.** Taken as indicative for everything except the 104S pack.
 
 ## Platform work that supports the above
 

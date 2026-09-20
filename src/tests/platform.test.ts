@@ -1,8 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { cells, enclosures, packSpecs, pcsUnits, byId, cellOf, packOf, enclosureEnergyKWh, enclosureCellCount, packEnergyKWh } from '../catalog/products';
-import { currencies, defaultPriceBook, formatMoney, convert } from '../catalog/pricing';
+import { cells, enclosures, packSpecs, pcsUnits, byId, cellOf, packOf, enclosureEnergyKWh, enclosureCellCount, enclosureStrings, packEnergyKWh } from '../catalog/products';
+import { currencies, defaultPriceBook, defaultLandedCost, landedCost, offerPcsInrPerKW, formatMoney, convert } from '../catalog/pricing';
 import { applications, application } from '../sizing/applications';
-import { defaultSizingInput, sizeSystem, retentionAt, cellTemperature, temperatureFactor } from '../sizing/engine';
+import {
+  defaultSizingInput, sizeSystem, normaliseSizingInput, retentionAt, retentionFromTable,
+  cellTemperature, temperatureFactor, suppliedRetention, defaultLossChain, type SizingInput,
+} from '../sizing/engine';
 import { evaluateFinance, annualBenefitUsd, chargingEnergyMWh } from '../sizing/finance';
 import { buildQuoteLines, createQuote, nextQuoteNumber, quoteTotals, reviseQuote, uplift } from '../quoting/quote';
 import { LocalRepository } from '../platform/repo';
@@ -15,10 +18,32 @@ describe('equipment catalogue', () => {
     const pack = byId(packSpecs, 'pack-104s');
     expect(pack.series * pack.parallel).toBe(104);
     expect(pack.rows * pack.columns).toBe(104);
+    expect(pack.nominalV).toBeCloseTo(332.8, 6);
     expect(packEnergyKWh(pack)).toBeCloseTo(104.4992, 6);
+    expect(pack.labelKWh).toBe(104.45);              // the nameplate label, retained alongside the computed figure
     const enclosure = byId(enclosures, 'enc-5mwh-20ft');
     expect(enclosureEnergyKWh(enclosure)).toBeCloseTo(5015.9616, 4);
     expect(enclosureCellCount(enclosure)).toBe(4992);
+    expect(enclosureStrings(enclosure)).toBe(12);    // 104S × 4 in series × 12 parallel strings
+    expect(enclosure.ratedKW).toBe(2507.5);
+  });
+
+  it('transcribes the supplied product schedule', () => {
+    const schedule: [string, number, number, number][] = [
+      // model, series, nameplate volts, label kWh
+      ['SB12100', 4, 12.8, 1.28], ['SB24100', 8, 25.6, 2.56], ['SB51100', 16, 51.2, 5.12],
+      ['SB51314', 16, 51.2, 16.076], ['SB166314', 52, 166.4, 52.25], ['SB332314', 104, 332.8, 104.45],
+    ];
+    for (const [model, series, volts, label] of schedule) {
+      const pack = packSpecs.find(p => p.model === model);
+      expect(pack, model).toBeDefined();
+      expect(pack!.series).toBe(series);
+      expect(pack!.nominalV).toBeCloseTo(volts, 6);
+      expect(pack!.labelKWh).toBe(label);
+      expect(pack!.nominalV).toBeCloseTo(cellOf(pack!).nominalV * series, 6);
+    }
+    // Every 314 Ah pack runs at the 157 A continuous rating quoted in the schedule.
+    for (const model of ['SB166314', 'SB332314']) expect(packSpecs.find(p => p.model === model)!.continuousA).toBe(157);
   });
 
   it('describes every entry with dimensions, warranty anchors and provenance', () => {
@@ -26,11 +51,18 @@ describe('equipment catalogue', () => {
       expect(cell.cycleLifeRetention).toBeGreaterThan(0.5);
       expect(cell.calendarRetention).toBeGreaterThan(cell.cycleLifeRetention - 0.2);
       expect(['supplied', 'indicative', 'assumed']).toContain(cell.provenance);
+      expect(cell.approvedVendors.length).toBeGreaterThan(0);
+      expect(cell.certifications.length).toBeGreaterThan(2);
     }
     for (const enclosure of enclosures) {
       expect(() => packOf(enclosure)).not.toThrow();
       expect(() => cellOf(packOf(enclosure))).not.toThrow();
       expect(enclosure.dcMaxV).toBeGreaterThan(enclosure.dcMinV);
+      expect(enclosure.ratedKW).toBeGreaterThan(0);
+      expect(enclosure.racks * enclosure.packsPerRack % enclosure.packsInSeries).toBe(0);
+      // The DC window must follow from the pack window and the string depth.
+      expect(enclosure.dcMaxV).toBeCloseTo(packOf(enclosure).maxV * enclosure.packsInSeries, 4);
+      expect(enclosure.dcMinV).toBeCloseTo(packOf(enclosure).minV * enclosure.packsInSeries, 4);
     }
     expect(new Set(enclosures.map(e => e.id)).size).toBe(enclosures.length);
     expect(() => byId(pcsUnits, 'missing')).toThrow();
@@ -78,8 +110,7 @@ describe('sizing engine', () => {
 
   it('never exceeds the cell discharge rating, adding enclosures when power dominates', () => {
     const result = sizeSystem(input({ powerMW: 8, durationH: 1, augmentation: 'periodic' }));
-    const rating = cellOf(packOf(result.enclosure)).dischargeC;
-    expect(result.systemCRate).toBeLessThanOrEqual(rating + 1e-9);
+    expect(result.systemCRate).toBeLessThanOrEqual(result.packCRate + 1e-9);
     expect(result.warnings.some(w => w.code === 'power-limited')).toBe(true);
     expect(result.warnings.some(w => w.code === 'c-rate')).toBe(false);
   });
@@ -108,7 +139,8 @@ describe('sizing engine', () => {
     expect(high.warnings.some(w => w.code === 'altitude')).toBe(true);
     const mismatched = sizeSystem(input({ pcsId: 'pcs-125' }));
     expect(mismatched.warnings.some(w => w.code === 'dc-window-high')).toBe(true);
-    const airCooled = sizeSystem(input({ enclosureId: 'enc-skid-nmc', ambientC: 45, powerMW: 0.2, durationH: 2 }));
+    expect(mismatched.warnings.find(w => w.code === 'dc-window-high')!.text).toContain('per cell');
+    const airCooled = sizeSystem(input({ enclosureId: 'enc-52-rack', pcsId: 'pcs-125', ambientC: 45, powerMW: 0.02, durationH: 2 }));
     expect(airCooled.warnings.some(w => w.code === 'cooling')).toBe(true);
     expect(sizeSystem(input()).warnings.some(w => w.code === 'validation')).toBe(true);
   });
@@ -116,14 +148,14 @@ describe('sizing engine', () => {
   it('treats availability as a time metric, not an energy derate', () => {
     const full = sizeSystem(input({ availability: 1 })), reduced = sizeSystem(input({ availability: 0.8 }));
     expect(reduced.day1UsableMWh).toBeCloseTo(full.day1UsableMWh, 9);
-    expect(reduced.years[1].throughputMWh).toBeLessThan(full.years[1].throughputMWh);
+    expect(reduced.years[1].deliveredMWh).toBeLessThan(full.years[1].deliveredMWh);
   });
 
   it('gives every application a preset that sizes without an error', () => {
     for (const app of applications) {
       const result = sizeSystem(defaultSizingInput(app.id));
       expect(result.units).toBeGreaterThan(0);
-      expect(result.warnings.filter(w => w.level === 'error')).toEqual([]);
+      expect(result.warnings.filter(w => w.level === 'error'), app.id).toEqual([]);
       expect(result.rteAc).toBeGreaterThan(0.8);
       expect(result.rteAc).toBeLessThan(1);
     }
@@ -143,13 +175,19 @@ describe('financial model', () => {
 
   it('charges imported energy once, separately from gross revenue', () => {
     const sizing = sizeSystem(input({ applicationId: 'energy-arbitrage', powerMW: 5 }));
-    const throughput = sizing.years[1].throughputMWh;
-    const charge = chargingEnergyMWh(sizing, throughput);
-    expect(charge).toBeGreaterThan(throughput);          // losses are added on top of the imported share
+    const year = sizing.years[1];
+    const charge = chargingEnergyMWh(sizing, year);
+    expect(charge).toBeGreaterThan(year.deliveredMWh);   // losses and auxiliaries ride on top
     expect(annualBenefitUsd(sizing, defaultPriceBook)).toBeGreaterThan(0);
-    // A regulation duty is close to energy neutral, so it imports far less than it discharges.
+    // A regulation duty is close to energy neutral: it buys its losses and auxiliaries, but only a
+    // tenth of the energy it cycles. The same plant on an arbitrage duty buys all of it.
     const regulation = sizeSystem(input({ applicationId: 'frequency-regulation', powerMW: 5 }));
-    expect(chargingEnergyMWh(regulation, 1000)).toBeLessThan(300);
+    const rYear = regulation.years[1];
+    const neutral = chargingEnergyMWh(regulation, rYear);
+    const lossesAndAux = rYear.chargeMWh - rYear.deliveredMWh;
+    const wheeling = rYear.gridChargeMWh / rYear.chargeMWh;   // charging is bought at the generation end
+    expect(neutral).toBeCloseTo((rYear.deliveredMWh * 0.1 + lossesAndAux) * wheeling, 6);
+    expect(neutral).toBeLessThan(rYear.gridChargeMWh);
   });
 
   it('keeps net present value, internal rate of return and payback mutually consistent', () => {
@@ -171,7 +209,7 @@ describe('financial model', () => {
     expect(finance.augmentationUsd).toBeGreaterThan(0);
     for (const aug of sizing.augmentations) expect(finance.rows[aug.year].capexUsd).toBeGreaterThan(0);
     const firstUnitCost = finance.rows[sizing.augmentations[0].year].capexUsd / sizing.augmentations[0].units;
-    const dayOneUnitCost = finance.lines.find(l => l.id === 'battery')!.totalUsd / sizing.units;
+    const dayOneUnitCost = finance.capexUsd / sizing.units;
     expect(firstUnitCost).toBeLessThan(dayOneUnitCost * 1.2);
   });
 });
@@ -291,3 +329,196 @@ describe('application presets', () => {
 });
 
 beforeEach(() => globalThis.localStorage?.clear?.());
+
+/**
+ * These lock the engine to the supplied workbooks. If a default moves, one of these fails and the
+ * quoted numbers stop matching the offer that was issued to the customer.
+ */
+describe('fidelity to the supplied workbooks', () => {
+  it('reproduces the supply offer landed-cost build-up', () => {
+    const b = landedCost(defaultLandedCost(), 5015, 2507.5);
+    expect(b.fobUsd).toBeCloseTo(341_020, 4);
+    expect(b.oceanFreightUsd).toBeCloseTo(5_115.3, 4);
+    expect(b.cifUsd).toBeCloseTo(346_135.3, 4);
+    expect(b.cifInr).toBeCloseTo(33_575_124.1, 2);
+    expect(b.customsDutyInr).toBeCloseTo(3_693_263.651, 2);
+    expect(b.inlandClearanceInr).toBeCloseTo(503_626.8615, 2);
+    expect(b.deliveredInr).toBeCloseTo(37_772_014.6125, 2);
+    expect(b.pcsInr).toBeCloseTo(3_250_000, 2);
+    expect(b.totalInr).toBeCloseTo(41_022_014.6125, 2);
+    expect(offerPcsInrPerKW * 2507.5).toBeCloseTo(3_250_000, 6);
+  });
+
+  it('moves the landed cost with each input independently', () => {
+    const base = landedCost(defaultLandedCost(), 5015, 2507.5);
+    const dearer = landedCost({ ...defaultLandedCost(), basicPriceUsdPerKWh: 80 }, 5015, 2507.5);
+    expect(dearer.fobUsd / base.fobUsd).toBeCloseTo(80 / 68, 9);
+    const weakRupee = landedCost({ ...defaultLandedCost(), exchangeRateInrPerUsd: 110 }, 5015, 2507.5);
+    expect(weakRupee.deliveredInr / base.deliveredInr).toBeCloseTo(110 / 97, 9);
+    // A pure exchange-rate move leaves the dollar cost of imported equipment unchanged.
+    expect(weakRupee.deliveredInr / 110).toBeCloseTo(base.deliveredInr / 97, 6);
+    const noDuty = landedCost({ ...defaultLandedCost(), customsDutyPct: 0 }, 5015, 2507.5);
+    expect(noDuty.customsDutyInr).toBe(0);
+    expect(noDuty.deliveredInr).toBeCloseTo(base.deliveredInr - base.customsDutyInr, 6);
+  });
+
+  it('carries the supplied 20-year degradation schedule', () => {
+    expect(suppliedRetention).toHaveLength(21);
+    expect(suppliedRetention[0]).toBe(1);
+    expect(suppliedRetention[1]).toBe(0.95);
+    expect(suppliedRetention[10]).toBe(0.80);
+    expect(suppliedRetention[20]).toBe(0.69);
+    for (let y = 1; y < suppliedRetention.length; y++) expect(suppliedRetention[y]).toBeLessThan(suppliedRetention[y - 1]);
+    expect(retentionFromTable(0, suppliedRetention)).toBe(1);
+    expect(retentionFromTable(7, suppliedRetention)).toBe(0.84);
+    // Past the end of the schedule the last year-on-year step repeats rather than falling off.
+    expect(retentionFromTable(22, suppliedRetention)).toBeCloseTo(0.67, 9);
+  });
+
+  it('reproduces the supplied energy chain year by year', () => {
+    const base = defaultSizingInput('solar-shifting');
+    const result = sizeSystem({
+      ...base, mode: 'usable-energy', usableEnergyMWh: 3.8, durationH: 2,
+      cyclesPerDay: 1, daysPerYear: 365, dod: 1, availability: 1, projectYears: 20,
+      augmentation: 'none', losses: { ...base.losses, idtOnDischarge: false },
+    });
+    expect(result.units).toBe(1);
+    // Discharge path: sqrt(95%) DC, then DC cable, PCS and AC cable — the sheet's own chain.
+    expect(result.dischargePathEfficiency).toBeCloseTo(Math.sqrt(0.95) * 0.9975 * 0.985 * 0.9975, 9);
+    expect(result.chargePathEfficiency).toBeCloseTo(0.95 * 0.9975 * 0.985 * 0.9975 * 0.99, 9);
+
+    const scale = 5.015 / (result.installedDcMWh);    // the sheet quotes the nameplate label
+    for (const [year, storedMWh, usableMWh] of [[1, 4.526037, 3.823565], [10, 3.811400, 3.140897], [20, 3.287332, 2.640274]] as const) {
+      const row = result.years[year];
+      expect(row.storedDcMWh * scale).toBeCloseTo(storedMWh, 5);
+      // Auxiliaries are a fixed MWh/day subtraction, so they do not scale with the nameplate label.
+      expect((row.usableMWh + 0.5) * scale - 0.5).toBeCloseTo(usableMWh, 4);
+    }
+
+    // Charging energy, in the years where the plant has nothing spare and cycles in full.
+    for (const [year, chargeKWh, solarKWh] of [[10, 1_616_108.292408, 1_811_374.459099], [20, 1_418_964.6127, 1_590_410.908653]] as const) {
+      const row = result.years[year];
+      expect(row.chargeMWh * 1000 * scale).toBeCloseTo(chargeKWh, -2);
+      expect(row.gridChargeMWh * 1000 * scale).toBeCloseTo(solarKWh, -2);
+      expect(row.gridChargeMWh / row.chargeMWh).toBeCloseTo(1 / (1 - 0.1078), 9);
+    }
+  });
+
+  it('charges only what it delivers once the plant has spare capacity', () => {
+    const base = defaultSizingInput('solar-shifting');
+    const common = {
+      ...base, mode: 'usable-energy' as const, cyclesPerDay: 1, daysPerYear: 365,
+      dod: 1, availability: 1, projectYears: 20, augmentation: 'none' as const,
+    };
+    // Year one has more capacity than the contract needs, so the battery does not cycle in full.
+    const clipped = sizeSystem({ ...common, usableEnergyMWh: 3 });
+    const factor = 365 * clipped.input.losses.availabilityFactor;
+    expect(clipped.years[1].deliveredMWh).toBeCloseTo(3 * factor, 6);
+    // A full cycle would move the whole stored charge; the contract only calls for part of it.
+    const fullCycleCharge = clipped.years[1].storedDcMWh / clipped.chargePathEfficiency * factor;
+    expect(clipped.years[1].chargeMWh).toBeLessThan(fullCycleCharge);
+    // Once capacity has faded past the contract the plant cycles in full and both fall together.
+    expect(clipped.years[20].usableMWh).toBeLessThan(3);
+    expect(clipped.years[20].deliveredMWh).toBeLessThan(clipped.years[1].deliveredMWh);
+    expect(clipped.years[20].chargeMWh).toBeLessThan(clipped.years[1].chargeMWh);
+  });
+
+  it('keeps the transformer-loss treatment visible rather than silent', () => {
+    const withIdt = sizeSystem(defaultSizingInput());
+    const sheetStyle = sizeSystem({ ...defaultSizingInput(), losses: { ...defaultLossChain(), idtOnDischarge: false } });
+    expect(sheetStyle.dischargePathEfficiency).toBeGreaterThan(withIdt.dischargePathEfficiency);
+    expect(sheetStyle.dischargePathEfficiency / withIdt.dischargePathEfficiency).toBeCloseTo(1 / 0.99, 6);
+    expect(sheetStyle.warnings.some(w => w.code === 'idt-discharge')).toBe(true);
+    expect(withIdt.warnings.some(w => w.code === 'idt-discharge')).toBe(false);
+  });
+
+  it('surfaces the 1 518 V string against a 1 500 V converter', () => {
+    const enclosure = byId(enclosures, 'enc-5mwh-20ft');
+    expect(enclosure.dcMaxV).toBeCloseTo(1518.4, 4);
+    expect(sizeSystem(defaultSizingInput()).warnings.some(w => w.code === 'dc-window-high')).toBe(true);
+  });
+});
+
+describe('editable design inputs', () => {
+  const base = () => defaultSizingInput('solar-shifting');
+
+  it('responds to every loss slider in the expected direction', () => {
+    const reference = sizeSystem(base());
+    const lossier = sizeSystem({ ...base(), losses: { ...defaultLossChain(), pcsLoss: 0.05 } });
+    expect(lossier.day1UsableMWh).toBeLessThan(reference.day1UsableMWh);
+    expect(lossier.units).toBeGreaterThanOrEqual(reference.units);
+
+    const narrower = sizeSystem({ ...base(), losses: { ...defaultLossChain(), usableDcWindow: 0.8 } });
+    expect(narrower.day1UsableMWh).toBeLessThan(reference.day1UsableMWh);
+
+    const thirstier = sizeSystem({ ...base(), losses: { ...defaultLossChain(), auxScale: 2 } });
+    expect(thirstier.auxMWhPerDay / thirstier.units).toBeGreaterThan(reference.auxMWhPerDay / reference.units);
+    expect(thirstier.day1UsableMWh / thirstier.units).toBeLessThan(reference.day1UsableMWh / reference.units);
+
+    const wheeled = sizeSystem({ ...base(), losses: { ...defaultLossChain(), openAccessLoss: 0.25 } });
+    expect(wheeled.years[1].gridChargeMWh).toBeGreaterThan(reference.years[1].gridChargeMWh);
+    expect(wheeled.years[1].chargeMWh).toBeCloseTo(reference.years[1].chargeMWh, 6);
+  });
+
+  it('uses the edited degradation schedule instead of the model curve', () => {
+    const flat = Array.from({ length: 21 }, (_, y) => (y === 0 ? 1 : 0.99));
+    const kind = sizeSystem({ ...base(), degradation: { mode: 'table', retention: flat }, augmentation: 'oversize-day1' });
+    const supplied = sizeSystem({ ...base(), augmentation: 'oversize-day1' });
+    expect(kind.endOfLifeRetention).toBeCloseTo(0.99, 6);
+    expect(kind.units).toBeLessThanOrEqual(supplied.units);
+    expect(supplied.endOfLifeRetention).toBeCloseTo(0.69, 6);
+
+    const modelled = sizeSystem({ ...base(), degradation: { mode: 'model', retention: [] } });
+    expect(modelled.endOfLifeRetention).not.toBeCloseTo(0.69, 3);
+  });
+
+  it('prices a quotation through whichever costing basis is selected', () => {
+    const sizing = sizeSystem({ ...base(), powerMW: 5, durationH: 4 });
+    const landedBook = { ...defaultPriceBook, costingMode: 'landed-import' as const, supplyScope: 'supply-only' as const };
+    const directBook = { ...defaultPriceBook, costingMode: 'direct' as const, supplyScope: 'turnkey' as const };
+    const landedFinance = evaluateFinance(sizing, landedBook), directFinance = evaluateFinance(sizing, directBook);
+
+    expect(landedFinance.landed).not.toBeNull();
+    expect(landedFinance.lines.some(l => l.id === 'freight')).toBe(false);   // ocean freight is inside CIF
+    expect(landedFinance.lines.some(l => l.id === 'civil')).toBe(false);     // supply only
+    expect(directFinance.landed).toBeNull();
+    expect(directFinance.lines.some(l => l.id === 'freight')).toBe(true);
+    expect(directFinance.lines.some(l => l.id === 'civil')).toBe(true);
+    expect(directFinance.capexUsd).toBeGreaterThan(landedFinance.capexUsd);
+
+    // The landed battery line must equal the delivered price of the fleet, to the rupee.
+    const perUnit = landedCost(landedBook.landed, sizing.installedDcMWh * 1000 / sizing.units, sizing.enclosure.ratedKW);
+    const batteryLine = landedFinance.lines.find(l => l.id === 'battery')!;
+    expect(batteryLine.totalUsd).toBeCloseTo(sizing.units * perUnit.deliveredInr / landedBook.landed.exchangeRateInrPerUsd, 6);
+    // Converters are priced on the converters installed, not one per container.
+    const pcsLine = landedFinance.lines.find(l => l.id === 'pcs')!;
+    expect(pcsLine.quantity).toBeCloseTo(sizing.pcsCount * sizing.pcs.ratedKW, 6);
+    expect(pcsLine.totalUsd).toBeCloseTo(sizing.pcsCount * sizing.pcs.ratedKW * landedBook.landed.pcsCostInrPerKW / landedBook.landed.exchangeRateInrPerUsd, 6);
+  });
+
+  it('prices charging from an open-access plant at the wheeled PPA rate', () => {
+    const sizing = sizeSystem({ ...base(), powerMW: 5 });
+    const solar = evaluateFinance(sizing, { ...defaultPriceBook, chargeSource: 'open-access-solar', solarPpaPerMWh: 31 });
+    const grid = evaluateFinance(sizing, { ...defaultPriceBook, chargeSource: 'grid', energyBuyPerMWh: 62 });
+    expect(solar.rows[1].chargingUsd).toBeLessThan(grid.rows[1].chargingUsd);
+    expect(grid.rows[1].chargingUsd / solar.rows[1].chargingUsd).toBeCloseTo(62 / 31, 6);
+  });
+});
+
+describe('stored projects written by an earlier version', () => {
+  it('fills in the loss chain, degradation schedule and retired catalogue ids', () => {
+    const legacy = {
+      applicationId: 'peak-shaving', mode: 'power-duration', powerMW: 5, durationH: 2, usableEnergyMWh: 10,
+      cyclesPerDay: 1, daysPerYear: 250, projectYears: 20, dod: 0.9, availability: 0.97,
+      ambientC: 35, altitudeM: 100, enclosureId: 'enc-3745-20ft', pcsId: 'pcs-2500', transformerId: 'tx-3150',
+      augmentation: 'oversize-day1', gridKV: 33, frequencyHz: 50, powerFactor: 0.95,
+    } as unknown as SizingInput;
+    const normalised = normaliseSizingInput(legacy);
+    expect(normalised.enclosureId).toBe('enc-5mwh-20ft');
+    expect(normalised.pcsId).toBe('pcs-2507');
+    expect(normalised.losses.usableDcWindow).toBe(0.95);
+    expect(normalised.degradation.retention).toEqual(suppliedRetention);
+    expect(() => sizeSystem(legacy)).not.toThrow();
+    expect(sizeSystem(legacy).units).toBeGreaterThan(0);
+  });
+});

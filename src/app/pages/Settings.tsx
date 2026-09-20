@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Card, Tabs, TextInput, NumberInput, SelectInput, Badge, KV, Field } from '../components/ui';
+import { Card, Tabs, TextInput, NumberInput, SelectInput, Slider, Badge, KV, Field } from '../components/ui';
 import { useSession } from '../../platform/auth';
 import { useWorkspace } from '../../platform/workspace';
 import { repository, usingFirestore } from '../../platform/repo';
 import { can, roles, type Member, type Role } from '../../platform/types';
-import { currencies, type Currency, type PriceBook } from '../../catalog/pricing';
-import { enclosures, pcsUnits } from '../../catalog/products';
+import {
+  currencies, defaultLandedCost, landedCost, formatMoney,
+  type ChargeSource, type CostingMode, type Currency, type PriceBook, type SupplyScope,
+} from '../../catalog/pricing';
+import { enclosures, pcsUnits, enclosureEnergyKWh, byId } from '../../catalog/products';
 import { brand } from '../../brand/brand';
 
 type Tab = 'branding' | 'pricing' | 'team' | 'platform';
@@ -76,6 +79,48 @@ export function Settings() {
 
       {tab === 'pricing' && (
         <div className="grid cols-3">
+          <Card title="Landed cost build-up" subtitle="Import basis taken from the supply offer">
+            <SelectInput label="Costing basis" value={draft.costingMode}
+              options={[{ value: 'landed-import', label: 'Landed import — FOB, duty and clearance' }, { value: 'direct', label: 'Direct price book — rate per kWh' }]}
+              onChange={costingMode => setDraft({ ...draft, costingMode: costingMode as CostingMode })} />
+            <SelectInput label="Scope of supply" value={draft.supplyScope}
+              options={[{ value: 'supply-only', label: 'Supply only — equipment delivered' }, { value: 'turnkey', label: 'Turnkey — with civil, installation and commissioning' }]}
+              onChange={supplyScope => setDraft({ ...draft, supplyScope: supplyScope as SupplyScope })} />
+            {draft.costingMode === 'landed-import' && <>
+              <Slider label="Basic price, FOB" value={draft.landed.basicPriceUsdPerKWh} min={30} max={200} step={1} unit="$/kWh"
+                onChange={basicPriceUsdPerKWh => setDraft({ ...draft, landed: { ...draft.landed, basicPriceUsdPerKWh } })} />
+              <Slider label="Ocean freight" value={draft.landed.oceanFreightPct} min={0} max={10} step={0.1} decimals={1} unit="%"
+                onChange={oceanFreightPct => setDraft({ ...draft, landed: { ...draft.landed, oceanFreightPct } })} hint="Percentage of FOB value." />
+              <Slider label="Exchange rate" value={draft.landed.exchangeRateInrPerUsd} min={60} max={140} step={0.25} decimals={2} unit="₹/$"
+                onChange={exchangeRateInrPerUsd => setDraft({ ...draft, landed: { ...draft.landed, exchangeRateInrPerUsd } })} />
+              <Slider label="Customs duty" value={draft.landed.customsDutyPct} min={0} max={40} step={0.5} decimals={1} unit="%"
+                onChange={customsDutyPct => setDraft({ ...draft, landed: { ...draft.landed, customsDutyPct } })} hint="Applied to the CIF value in local currency." />
+              <Slider label="Inland freight and clearance" value={draft.landed.inlandClearancePct} min={0} max={10} step={0.1} decimals={1} unit="%"
+                onChange={inlandClearancePct => setDraft({ ...draft, landed: { ...draft.landed, inlandClearancePct } })} />
+              <Slider label="Power conversion" value={draft.landed.pcsCostInrPerKW} min={200} max={4000} step={10} unit="₹/kW"
+                onChange={pcsCostInrPerKW => setDraft({ ...draft, landed: { ...draft.landed, pcsCostInrPerKW } })} />
+              <button className="btn sm" onClick={() => setDraft({ ...draft, landed: defaultLandedCost() })}>Reset to offer basis</button>
+              {(() => {
+                const reference = byId(enclosures, 'enc-5mwh-20ft');
+                const b = landedCost(draft.landed, enclosureEnergyKWh(reference), reference.ratedKW);
+                const inr = (n: number) => formatMoney(n, 'INR', true);
+                return (
+                  <div style={{ marginTop: 14 }}>
+                    <h4 style={{ fontSize: 11.5, marginBottom: 6 }}>One {reference.model}, {(b.kWh / 1000).toFixed(3)} MWh</h4>
+                    <KV label="FOB">{formatMoney(b.fobUsd, 'USD', true)}</KV>
+                    <KV label="CIF">{formatMoney(b.cifUsd, 'USD', true)} · {inr(b.cifInr)}</KV>
+                    <KV label="Customs duty">{inr(b.customsDutyInr)}</KV>
+                    <KV label="Inland clearance">{inr(b.inlandClearanceInr)}</KV>
+                    <KV label="Delivered">{inr(b.deliveredInr)}</KV>
+                    <KV label="Power conversion">{inr(b.pcsInr)}</KV>
+                    <KV label="Total">{inr(b.totalInr)}</KV>
+                    <KV label="Rate">₹{Math.round(b.totalInrPerKWh).toLocaleString()} / kWh · ${b.totalUsdPerKWh.toFixed(2)} / kWh</KV>
+                  </div>
+                );
+              })()}
+            </>}
+          </Card>
+
           <Card title="Commercial rates" subtitle="Applied to every new quotation">
             <SelectInput label="Quotation currency" value={org.currency} options={(Object.keys(currencies) as Currency[]).map(c => ({ value: c, label: `${c} — ${currencies[c].name}` }))} onChange={c => void setCurrency(c)} />
             <NumberInput label="Margin" value={draft.marginPct} unit="%" min={0} max={60} step={0.5} onChange={marginPct => setDraft({ ...draft, marginPct })} />
@@ -85,7 +130,7 @@ export function Settings() {
             <NumberInput label="Inflation" value={draft.inflationPct} unit="%" min={0} max={25} step={0.25} onChange={inflationPct => setDraft({ ...draft, inflationPct })} />
             <NumberInput label="Battery price decline" value={draft.batteryPriceDeclinePct} unit="%/yr" min={0} max={20} step={0.5} onChange={batteryPriceDeclinePct => setDraft({ ...draft, batteryPriceDeclinePct })} />
           </Card>
-          <Card title="Equipment rates" subtitle="USD basis, converted at quotation time">
+          <Card title="Direct equipment rates" subtitle={draft.costingMode === 'landed-import' ? 'Not in use while the landed build-up is selected' : 'USD basis, converted at quotation time'}>
             {enclosures.map(e => (
               <NumberInput key={e.id} label={`${e.model}`} value={draft.batteryPerKWh[e.id] ?? 110} unit="$/kWh" min={20} max={600}
                 onChange={v => setDraft({ ...draft, batteryPerKWh: { ...draft.batteryPerKWh, [e.id]: v } })} />
@@ -101,6 +146,13 @@ export function Settings() {
             <NumberInput label="Civil works" value={draft.civilPerM2} unit="$/m²" min={0} max={2000} step={10} onChange={civilPerM2 => setDraft({ ...draft, civilPerM2 })} />
             <NumberInput label="Freight per unit" value={draft.freightPerUnit} unit="$" min={0} max={200000} step={250} onChange={freightPerUnit => setDraft({ ...draft, freightPerUnit })} />
             <NumberInput label="Operations & maintenance" value={draft.omPerKWYear} unit="$/kW·yr" min={0} max={80} step={0.5} onChange={omPerKWYear => setDraft({ ...draft, omPerKWYear })} />
+            <SelectInput label="Charging energy source" value={draft.chargeSource}
+              options={[{ value: 'grid', label: 'Grid import at the tariff' }, { value: 'open-access-solar', label: 'Open access from a solar plant' }]}
+              onChange={chargeSource => setDraft({ ...draft, chargeSource: chargeSource as ChargeSource })} />
+            {draft.chargeSource === 'open-access-solar'
+              ? <NumberInput label="Solar PPA price" value={draft.solarPpaPerMWh} unit="$/MWh" min={0} max={400} onChange={solarPpaPerMWh => setDraft({ ...draft, solarPpaPerMWh })}
+                  hint="Charging energy is grossed up for the project's wheeling losses before it is priced." />
+              : null}
             <NumberInput label="Energy import price" value={draft.energyBuyPerMWh} unit="$/MWh" min={0} max={600} onChange={energyBuyPerMWh => setDraft({ ...draft, energyBuyPerMWh })} />
             <NumberInput label="Energy export price" value={draft.energySellPerMWh} unit="$/MWh" min={0} max={2000} onChange={energySellPerMWh => setDraft({ ...draft, energySellPerMWh })} />
             <NumberInput label="Demand charge" value={draft.demandChargePerKWMonth} unit="$/kW·mo" min={0} max={200} step={0.5} onChange={demandChargePerKWMonth => setDraft({ ...draft, demandChargePerKWMonth })} />
