@@ -1,0 +1,70 @@
+rules_version = '2';
+
+// Every customer, project, quotation and activity entry lives under one organization document.
+// Authorisation is therefore a single question on every path: is the caller a member of that
+// organization, and does the member's role permit the write?
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function memberDoc(orgId) { return get(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)); }
+    function isMember(orgId) { return signedIn() && exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)); }
+    function role(orgId) { return memberDoc(orgId).data.role; }
+    function hasRole(orgId, allowed) { return isMember(orgId) && role(orgId) in allowed; }
+    function canWrite(orgId) { return hasRole(orgId, ['owner', 'admin', 'engineer', 'sales']); }
+    function canManage(orgId) { return hasRole(orgId, ['owner', 'admin']); }
+    // A record may not be moved to a different tenant by writing a foreign orgId.
+    function staysInOrg(orgId) { return !('orgId' in request.resource.data) || request.resource.data.orgId == orgId; }
+
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /organizations/{orgId} {
+      // The first member is written in the same client session that creates the organization.
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow read: if isMember(orgId);
+      allow update: if canManage(orgId);
+      allow delete: if hasRole(orgId, ['owner']);
+
+      match /members/{uid} {
+        allow read: if isMember(orgId);
+        // Bootstrap: the organization creator may add themselves as owner.
+        allow create: if canManage(orgId)
+          || (signedIn() && request.auth.uid == uid
+              && get(/databases/$(database)/documents/organizations/$(orgId)).data.createdBy == request.auth.uid);
+        allow update, delete: if canManage(orgId);
+      }
+
+      match /settings/{docId} {
+        allow read: if isMember(orgId);
+        allow write: if canManage(orgId);
+      }
+
+      match /customers/{docId} {
+        allow read: if isMember(orgId);
+        allow write: if canWrite(orgId) && staysInOrg(orgId);
+      }
+
+      match /projects/{docId} {
+        allow read: if isMember(orgId);
+        allow write: if canWrite(orgId) && staysInOrg(orgId);
+      }
+
+      match /quotes/{docId} {
+        allow read: if isMember(orgId);
+        allow create, update: if canWrite(orgId) && staysInOrg(orgId);
+        allow delete: if canManage(orgId);
+      }
+
+      match /activities/{docId} {
+        allow read: if isMember(orgId);
+        // The audit trail is append-only: entries are never edited or removed from the client.
+        allow create: if canWrite(orgId) && request.resource.data.actorUid == request.auth.uid;
+        allow update, delete: if false;
+      }
+    }
+
+    match /{document=**} { allow read, write: if false; }
+  }
+}

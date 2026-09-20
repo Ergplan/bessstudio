@@ -93,11 +93,20 @@ const emptyLocal = (): LocalShape => ({ organizations: {}, members: {}, settings
 export class LocalRepository implements Repository {
   readonly kind = 'local' as const;
   private listeners = new Map<string, Set<(rows: never[]) => void>>();
+  // Local storage is unavailable in private browsing, under a full quota, and in tests, so the
+  // repository keeps an in-memory copy and treats the browser store as a best-effort cache.
+  private memory: LocalShape = emptyLocal();
   private read(): LocalShape {
-    try { const raw = globalThis.localStorage?.getItem(KEY); return raw ? { ...emptyLocal(), ...JSON.parse(raw) } : emptyLocal(); }
-    catch { return emptyLocal(); }
+    try {
+      const raw = globalThis.localStorage?.getItem(KEY);
+      if (raw) this.memory = { ...emptyLocal(), ...JSON.parse(raw) };
+    } catch { /* fall back to the in-memory copy */ }
+    return this.memory;
   }
-  private write(shape: LocalShape) { try { globalThis.localStorage?.setItem(KEY, JSON.stringify(shape)); } catch { /* quota or private mode: state stays in memory for this session */ } }
+  private write(shape: LocalShape) {
+    this.memory = shape;
+    try { globalThis.localStorage?.setItem(KEY, JSON.stringify(shape)); } catch { /* quota or private mode: this session keeps the in-memory copy */ }
+  }
   private notify(orgId: string, name: CollectionName) {
     const rows = this.rows(this.read(), orgId, name);
     this.listeners.get(`${orgId}/${name}`)?.forEach(fn => (fn as (r: unknown[]) => void)(rows));

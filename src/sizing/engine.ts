@@ -88,8 +88,10 @@ export function sizeSystem(input: SizingInput): SizingResult {
   const efcPerYear = input.cyclesPerDay * input.daysPerYear * input.dod;
   const unitDcMWh = enclosureEnergyKWh(enclosure) / 1000;
 
-  // Day-1 fleet is sized for the worst year the strategy has to carry unaided.
-  const designYear = input.augmentation === 'oversize-day1' ? input.projectYears : input.augmentation === 'periodic' ? 1 : input.projectYears;
+  // Day-1 fleet is sized for the worst year the strategy has to carry unaided. Oversizing carries
+  // the whole life; periodic augmentation and an unmaintained fleet are both sized for day one,
+  // and the roll-forward below then either tops the fleet up or reports the shortfall.
+  const designYear = input.augmentation === 'oversize-day1' ? input.projectYears : 1;
   const designRetention = retentionAt(designYear, efcPerYear, cell, tempFactor);
   // Availability is a time metric: it limits how often the system can run, not how much energy a
   // healthy system delivers in one discharge. It is applied to throughput and revenue, not here.

@@ -31,6 +31,12 @@ const niceTicks = (min: number, max: number, count = 4) => {
   return out;
 };
 
+/** Trim a tick label to the space its slot allows, so neighbouring labels never collide. */
+const clip = (label: string, slotWidth: number) => {
+  const budget = Math.floor(slotWidth / 5.3);
+  return label.length <= budget ? label : `${label.slice(0, Math.max(1, budget - 1)).trimEnd()}\u2026`;
+};
+
 /** Drop ticks that render to the same label, so an axis never repeats a value. */
 const dedupe = (ticks: number[], format: (n: number) => string) => {
   const seen = new Set<string>();
@@ -95,7 +101,7 @@ export function BarChart({ bars, height = 200, width: w = 720, format, colorFor 
           return (
             <g key={b.label + i} {...bind(<><b>{b.label}</b><div className="num">{format(b.value)}</div>{b.note && <div>{b.note}</div>}</>)}>
               <rect x={x} y={top} width={bw} height={Math.max(2, bottom - top)} rx="4" fill={colorFor?.(b, i) ?? series[0]} />
-              {bars.length <= 24 && <text x={x + bw / 2} y={height - 10} textAnchor="middle">{b.label}</text>}
+              {bars.length <= 24 && <text x={x + bw / 2} y={height - 10} textAnchor="middle">{clip(b.label, slot)}</text>}
             </g>
           );
         })}

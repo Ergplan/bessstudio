@@ -2,3 +2,8 @@ node_modules/
 dist/
 *.tsbuildinfo
 .sites-runtime/
+
+.env
+.env.local
+.firebaserc
+.firebase/
