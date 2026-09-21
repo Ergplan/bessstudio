@@ -51,10 +51,9 @@ https://bessstudio-e55e1.web.app.
 
 1. In the console, enable **Authentication** (Email/Password, and Google for single sign-on) and
    **Cloud Firestore**.
-2. Copy `.env.example` to `.env` and fill in `NEXT_PUBLIC_FIREBASE_API_KEY` from
-   **Project settings → Your apps → Web app → Config**. Everything else is committed in
-   `src/platform/firebaseConfig.ts`.
-3. `npm run deploy` — builds, publishes hosting, and pushes the Firestore rules and indexes.
+2. `npm run deploy` — builds, publishes hosting, and pushes the Firestore rules and indexes. The
+   web app configuration is committed in `src/platform/firebaseConfig.ts`, so there is nothing to
+   set up first.
 
 Pushes to `main` deploy automatically once the `FIREBASE_SERVICE_ACCOUNT` repository secret exists.
 

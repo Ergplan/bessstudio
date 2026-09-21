@@ -25,6 +25,38 @@ export type Session = {
   refreshOrg(): Promise<void>;
 };
 
+/**
+ * Firebase auth failures arrive as codes. Two of them are project configuration rather than
+ * anything the person at the keyboard did, and both are worth saying plainly — otherwise the first
+ * deployment looks like broken software.
+ */
+const AUTH_MESSAGES: Record<string, string> = {
+  'auth/configuration-not-found':
+    'Authentication is not switched on for this Firebase project yet. Enable Email/Password under Authentication in the Firebase console, then try again.',
+  'auth/operation-not-allowed':
+    'That sign-in method is not enabled for this Firebase project. Turn it on under Authentication → Sign-in method.',
+  'auth/unauthorized-domain':
+    'This address is not in the project’s authorised domains. Add it under Authentication → Settings → Authorized domains.',
+  'auth/invalid-credential': 'Email or password not recognised.',
+  'auth/invalid-login-credentials': 'Email or password not recognised.',
+  'auth/wrong-password': 'Email or password not recognised.',
+  'auth/user-not-found': 'No account exists for that email address.',
+  'auth/invalid-email': 'That does not look like an email address.',
+  'auth/email-already-in-use': 'An account already exists for that email address. Sign in instead.',
+  'auth/weak-password': 'Choose a password of at least six characters.',
+  'auth/too-many-requests': 'Too many attempts from this device. Wait a few minutes and try again.',
+  'auth/network-request-failed': 'Firebase could not be reached. Check the connection and try again.',
+  'auth/popup-blocked': 'The sign-in window was blocked by the browser. Allow pop-ups for this site.',
+  'auth/popup-closed-by-user': 'The sign-in window closed before it finished.',
+};
+
+export function describeAuthError(error: unknown): string {
+  const code = (error as { code?: string })?.code;
+  if (code && AUTH_MESSAGES[code]) return AUTH_MESSAGES[code];
+  const message = error instanceof Error ? error.message.replace(/^Firebase:\s*/, '') : '';
+  return message || 'Sign-in failed.';
+}
+
 const SessionContext = createContext<Session | null>(null);
 export const useSession = () => {
   const ctx = useContext(SessionContext);
@@ -68,6 +100,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return;
     }
     return onAuthStateChanged(fb.auth, async account => {
+      // Opening the demonstration workspace signs in locally while this listener is still live.
+      // Firebase then reports "no user", which would sign that session straight back out.
+      if (demoModeActive()) return;
       if (!account) { setUser(null); setOrg(null); setOrganizations([]); setRole(null); setReady(true); return; }
       const next: SessionUser = { uid: account.uid, email: account.email ?? '', displayName: account.displayName ?? account.email?.split('@')[0] ?? 'User', photoURL: account.photoURL };
       setUser(next);
@@ -89,8 +124,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await repo.saveMember(organization.id, member);
     await repo.saveSettings(organization.id, { priceBook: defaultPriceBook });
     await seedOrganization(organization.id, member);
-    const fb = firebase();
-    if (fb) await setDoc(doc(fb.db, 'users', account.uid), { email: account.email, displayName: account.displayName, orgIds: arrayUnion(organization.id), updatedAt: nowIso() }, { merge: true });
+    // The profile document only exists in Firestore, and only a signed-in caller may write it. In
+    // the demonstration workspace there is no such caller, and a rejected write here would abandon
+    // the organization that was just created.
+    if (repository().kind === 'firestore') {
+      const fb = firebase();
+      try {
+        if (fb) await setDoc(doc(fb.db, 'users', account.uid), { email: account.email, displayName: account.displayName, orgIds: arrayUnion(organization.id), updatedAt: nowIso() }, { merge: true });
+      } catch { /* the workspace is usable without the profile index; membership is what grants access */ }
+    }
     return organization;
   };
 
@@ -120,11 +162,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     },
     async signInAsDemo() {
       setDemoMode(true);
+      const fb = firebase();
+      if (fb && fb.auth.currentUser) await signOut(fb.auth);
       const account: SessionUser = { uid: 'demo-user', email: 'demo@joulewise.com', displayName: 'Demo Engineer', photoURL: null };
       globalThis.localStorage?.setItem(LOCAL_USER, JSON.stringify(account));
       setUser(account);
-      await loadOrgs(account, true);
-      setReady(true);
+      try { await loadOrgs(account, true); } finally { setReady(true); }
     },
     async signOutUser() {
       const fb = firebase();

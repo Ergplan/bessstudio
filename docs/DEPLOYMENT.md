@@ -25,7 +25,8 @@ work on them without further configuration. A custom domain needs adding there a
 In the [Firebase console](https://console.firebase.google.com/project/bessstudio-e55e1):
 
 1. **Build → Authentication → Get started.** Enable **Email/Password**. Enable **Google** if you
-   want single sign-on.
+   want single sign-on. Until this is done every sign-in fails with `auth/configuration-not-found`,
+   which the sign-in form reports in plain words rather than as a code.
 2. **Build → Firestore Database → Create database.** Start in production mode; the rules in this
    repository replace the defaults on the first deploy. Pick the region closest to your sales team —
    it cannot be changed later.
@@ -34,19 +35,18 @@ In the [Firebase console](https://console.firebase.google.com/project/bessstudio
 
 ## 2. Configure the repository
 
-```bash
-cp .env.example .env
-```
+Nothing to do. The whole web app configuration is committed in
+`src/platform/firebaseConfig.ts`, so a clean checkout builds and deploys as it stands. Every value
+can be overridden by its own `NEXT_PUBLIC_FIREBASE_*` variable, which is how a build is pointed at
+a staging project or a customer's own tenant.
 
-The project id, auth domain, storage bucket, sender id and app id are committed in
-`src/platform/firebaseConfig.ts`, so there is exactly one value to supply:
+Two settings are deliberately not on by default:
 
-| Variable | Where it comes from |
-|---|---|
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | `apiKey` in the web app config |
-
-Every other value can be overridden by its own `NEXT_PUBLIC_FIREBASE_*` variable, which is how a
-build is pointed at a staging project or a customer's own tenant.
+- **Google Analytics.** The measurement id is in the configuration but the tracker only loads when
+  `NEXT_PUBLIC_ENABLE_ANALYTICS=true`. It sets cookies, so switching it on is a decision about what
+  the site does to visitors, and consent handling belongs with that decision.
+- **An HTTP-referrer restriction on the API key.** Worth adding under **APIs & Services →
+  Credentials** in the Google Cloud console so the key only answers for the studio's own domains.
 
 `.env` is git-ignored. These `VITE_` variables are compiled into the client bundle and are not
 secrets — a Firebase web API key identifies the project; the Firestore rules are what protect the

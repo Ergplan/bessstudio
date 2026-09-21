@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { brand, defaultBranding } from '../../brand/brand';
-import { useSession } from '../../platform/auth';
+import { describeAuthError, useSession } from '../../platform/auth';
 import { firebaseEnabled } from '../../platform/firebase';
 
 export function Login() {
@@ -13,7 +13,7 @@ export function Login() {
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true); setError('');
-    try { await fn(); } catch (e) { setError(e instanceof Error ? e.message.replace('Firebase: ', '') : 'Sign-in failed.'); }
+    try { await fn(); } catch (e) { setError(describeAuthError(e)); }
     finally { setBusy(false); }
   };
 
