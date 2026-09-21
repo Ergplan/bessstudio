@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { brand } from '../../brand/brand';
 import { useSession } from '../../platform/auth';
@@ -7,6 +7,7 @@ import { repository } from '../../platform/repo';
 import { nowIso, uid, type Customer, type Project } from '../../platform/types';
 import { defaultSizingInput, sizeSystem } from '../../sizing/engine';
 import { application, applications, type ApplicationId } from '../../sizing/applications';
+import { BuildSequence } from '../landing/BuildSequence';
 import '../landing/landing.css';
 
 const number = (value: string | null, fallback: number) => {
@@ -20,12 +21,18 @@ const number = (value: string | null, fallback: number) => {
  * It sits outside the workspace gate so the intent survives signing in: anyone already in a
  * workspace goes straight through, and anyone who is not is offered the demonstration workspace or
  * a sign-in without losing what they typed.
+ *
+ * The build sequence plays while the project is being sized and written. The workbench opens when
+ * both have finished, so the sequence never cuts a save short and never leaves a finished save
+ * waiting on the animation.
  */
 export function Start() {
   const params = useSearchParams();
   const router = useRouter();
   const { ready, user, org, signInAsDemo } = useSession();
   const [error, setError] = useState('');
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [played, setPlayed] = useState(false);
   const started = useRef(false);
 
   const powerMW = number(params.get('power'), 5);
@@ -34,16 +41,21 @@ export function Start() {
   const applicationId = (applications.some(a => a.id === params.get('application'))
     ? params.get('application') : 'solar-shifting') as ApplicationId;
 
+  const sizingInput = useMemo(() => ({
+    ...defaultSizingInput(applicationId),
+    mode: 'power-duration' as const, powerMW, durationH: dischargeH, chargeDurationH: chargeH,
+  }), [applicationId, powerMW, dischargeH, chargeH]);
+
+  // Sized once, up front: the sequence narrates this result and the project is saved against it.
+  const sizing = useMemo(() => {
+    try { return sizeSystem(sizingInput); } catch { return null; }
+  }, [sizingInput]);
+
   const build = useCallback(async () => {
-    if (!org || !user || started.current) return;
+    if (!org || !user || !sizing || started.current) return;
     started.current = true;
     try {
-      const sizing = {
-        ...defaultSizingInput(applicationId),
-        mode: 'power-duration' as const, powerMW, durationH: dischargeH, chargeDurationH: chargeH,
-      };
-      const result = sizeSystem(sizing);
-      const label = `${powerMW >= 1 ? powerMW.toFixed(powerMW % 1 ? 2 : 0) : `${Math.round(powerMW * 1000)} k`}${powerMW >= 1 ? ' MW' : 'W'} / ${result.requiredUsableMWh.toFixed(result.requiredUsableMWh < 10 ? 2 : 0)} MWh`;
+      const label = `${powerMW >= 1 ? powerMW.toFixed(powerMW % 1 ? 2 : 0) : `${Math.round(powerMW * 1000)} k`}${powerMW >= 1 ? ' MW' : 'W'} / ${sizing.requiredUsableMWh.toFixed(sizing.requiredUsableMWh < 10 ? 2 : 0)} MWh`;
 
       const repo = repository();
       // New opportunities land against a holding account until the real customer is known.
@@ -61,20 +73,30 @@ export function Start() {
         reference: `NEW-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`,
         status: 'sizing',
         site: { location: '', latitude: null, longitude: null, gridOperator: '', commissioningTarget: '' },
-        sizing, studioConfig: null, studioImage: null, notes: '',
+        sizing: sizingInput, studioConfig: null, studioImage: null, notes: '',
         createdAt: nowIso(), updatedAt: nowIso(), updatedBy: user.displayName,
       };
       await repo.save(org.id, 'projects', project);
-      router.replace(`/app/projects/?id=${project.id}`);
+      setProjectId(project.id);
     } catch (e) {
       started.current = false;
       setError(e instanceof Error ? e.message : 'The project could not be created.');
     }
-  }, [org, user, applicationId, powerMW, dischargeH, chargeH, router]);
+  }, [org, user, sizing, sizingInput, applicationId, powerMW]);
 
   useEffect(() => { if (ready && user && org) void build(); }, [ready, user, org, build]);
 
+  // Both halves have to land before the workbench opens.
+  useEffect(() => {
+    if (played && projectId) router.replace(`/app/projects/?id=${projectId}`);
+  }, [played, projectId, router]);
+
+  const onDone = useCallback(() => setPlayed(true), []);
   const summary = `${powerMW >= 1 ? `${powerMW} MW` : `${Math.round(powerMW * 1000)} kW`} · ${dischargeH} h discharge · ${chargeH} h charge`;
+
+  if (ready && user && org && sizing && !error) {
+    return <div className="landing"><BuildSequence sizing={sizing} saving={!projectId} onDone={onDone} /></div>;
+  }
 
   return (
     <div className="landing" style={{ display: 'grid', placeItems: 'center', padding: 32 }}>
@@ -97,11 +119,20 @@ export function Start() {
           </>
         ) : (
           <>
-            <h2 className="l-question-title" style={{ marginBottom: 14 }}>{error ? 'That did not work' : 'Building your plant…'}</h2>
-            <p style={{ color: error ? '#E5B4AA' : 'var(--l-muted)', fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>
-              {error || 'Sizing the fleet, selecting the conversion and opening the workbench.'}
+            <h2 className="l-question-title" style={{ marginBottom: 14 }}>
+              {error ? 'That did not work' : !sizing ? 'That plant could not be sized' : 'Opening your workspace…'}
+            </h2>
+            <p style={{ color: error || !sizing ? '#E5B4AA' : 'var(--l-muted)', fontSize: 13.5, lineHeight: 1.6, margin: 0 }}>
+              {error || (!sizing
+                ? 'Go back and try a different power rating or duration.'
+                : 'Sizing the fleet, selecting the conversion and opening the workbench.')}
             </p>
-            {error && <button className="l-btn" style={{ width: '100%', justifyContent: 'center', marginTop: 20 }} onClick={() => { started.current = false; void build(); }}>Try again</button>}
+            {(error || !sizing) && (
+              <button className="l-btn" style={{ width: '100%', justifyContent: 'center', marginTop: 20 }}
+                onClick={() => { if (error) { started.current = false; setError(''); void build(); } else router.push('/'); }}>
+                {error ? 'Try again' : 'Back to the question'}
+              </button>
+            )}
           </>
         )}
         <p className="l-question-note">{brand.credit}</p>
