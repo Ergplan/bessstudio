@@ -119,7 +119,9 @@ table.offer-table tr.total td.num,table.offer-table tr.subtotal td.num{font-vari
 .offer-legend i{width:3mm;height:3mm;border-radius:.6mm;display:inline-block}
 
 /* Screen preview: the pages float on the app surface; print drops the chrome. */
-.offer-preview{background:#E9EEF1;padding:18px;border-radius:14px;overflow:auto}
+/* The surround is the desk the page sits on, so it follows the workbench rather than the
+   document. Print drops it entirely. */
+.offer-preview{background:#0B0E12;padding:22px;border:1px solid rgba(255,255,255,.055);overflow:auto}
 @media print{
   @page{size:A4;margin:0}
   html,body{background:#fff!important}

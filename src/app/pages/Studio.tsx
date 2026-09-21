@@ -78,8 +78,8 @@ export function Studio() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 18px', background: '#153956', color: '#fff', fontSize: 12.5 }}>
-        <Link href={project ? `/app/projects?id=${project.id}` : '/app'} style={{ color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '9px 18px', background: '#0A0C0F', borderBottom: '1px solid rgba(255,255,255,.08)', color: '#F2F5F7', fontSize: 12.5 }}>
+        <Link href={project ? `/app/projects?id=${project.id}` : '/app'} style={{ color: '#F2F5F7', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
           <ArrowLeft size={15} /> Back to {project ? 'project' : 'workspace'}
         </Link>
         <span style={{ opacity: .55 }}>|</span>
@@ -90,20 +90,20 @@ export function Studio() {
         {status && <em style={{ opacity: .85 }}>{status}</em>}
         {project && (
           <button onClick={() => void captureForOffer()}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.12)', color: '#fff', border: '1px solid rgba(255,255,255,.28)', borderRadius: 7, padding: '5px 11px', fontSize: 12, fontWeight: 600 }}>
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.06)', color: '#F2F5F7', border: '1px solid rgba(255,255,255,.2)', padding: '6px 12px', fontSize: 11, fontWeight: 500, letterSpacing: '.1em', textTransform: 'uppercase', fontFamily: 'var(--mono)' }}>
             <Camera size={14} /> Capture for offer
           </button>
         )}
         {project && (
           <button onClick={saveToProject}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#93BE49', color: '#1B2D12', border: 0, borderRadius: 7, padding: '5px 11px', fontSize: 12, fontWeight: 600 }}>
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: '#93BE49', color: '#101A08', border: 0, padding: '6px 12px', fontSize: 11, fontWeight: 600, letterSpacing: '.1em', textTransform: 'uppercase', fontFamily: 'var(--mono)' }}>
             <Save size={14} /> Save to project
           </button>
         )}
         <a href={brand.vendorUrl} target="_blank" rel="noreferrer" style={{ color: brand.goldLight, fontSize: 11.5 }}>{brand.credit}</a>
       </div>
       <div style={{ flex: 1, minHeight: 0 }} ref={canvasHost}>
-        <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#61738D' }}>Loading the 3D assembly…</div>}>
+        <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#5E6C79' }}>Loading the 3D assembly…</div>}>
           <Studio3D brandName={(org?.branding.displayName ?? brand.vendorShort).toUpperCase()} brandLogo={org?.branding.logo ?? null} projectName={project?.name} />
         </Suspense>
       </div>

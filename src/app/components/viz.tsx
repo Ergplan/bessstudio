@@ -2,15 +2,17 @@
 import { useState, type ReactNode } from 'react';
 
 /**
- * Chart primitives. The categorical palette is stepped from the Solarworld deck hues and
- * validated for lightness band, chroma floor, colour-vision separation and surface contrast;
- * hues are assigned in fixed order and never cycled. A sequential ramp carries magnitude,
- * status colours carry state, and both are kept out of the categorical order.
+ * Chart primitives. The categorical palette is the Solarworld deck hues stepped for the dark
+ * workbench surface (#0E1116) and validated there for lightness band, chroma floor, colour-vision
+ * separation and contrast; the order is what makes it colour-vision safe, so hues are assigned in
+ * it and never cycled. Worst adjacent pair is deuteranope ΔE 11.5 — green and red are deliberately
+ * kept apart, being the pair that collapses. A sequential ramp carries magnitude, dim to bright so
+ * it reads against the dark surface, and status colours carry state outside the categorical order.
  */
-export const series = ['#0F78C0', '#6E9E2B', '#9B6FD0', '#B08718', '#12907A', '#C4614C'] as const;
-export const ramp = ['#BBD9EE', '#8DBDE0', '#5C9FCE', '#2F80B5', '#1A6FA6', '#0B5183'] as const;
-export const status = { good: '#3F6B1F', warning: '#B08718', serious: '#C4614C', critical: '#96412E' } as const;
-const ink = { primary: '#1D293B', secondary: '#465469', muted: '#61738D' };
+export const series = ['#78A134', '#3E93C8', '#E2685E', '#9478CE', '#B58621', '#21A087'] as const;
+export const ramp = ['#16384F', '#1D5375', '#2A6E9B', '#3C8AC0', '#5CA6D8', '#8AC4E8'] as const;
+export const status = { good: '#8FBE55', warning: '#D2A03C', serious: '#E07A58', critical: '#F0685E' } as const;
+const ink = { primary: '#F2F5F7', secondary: '#8A99A6', muted: '#5E6C79' };
 
 type Tip = { x: number; y: number; content: ReactNode } | null;
 const useTip = () => {
@@ -143,7 +145,7 @@ export function Funnel({ rows, format }: { rows: { label: string; count: number;
           <div key={r.label} style={{ display: 'grid', gridTemplateColumns: '112px 1fr 96px', alignItems: 'center', gap: 10, padding: '5px 0' }}
             {...bind(<><b>{r.label}</b><div className="num">{r.count} opportunit{r.count === 1 ? 'y' : 'ies'} · {format(r.value)}</div></>)}>
             <span style={{ fontSize: 12.5, color: ink.secondary, textTransform: 'capitalize' }}>{r.label} <b style={{ color: ink.muted, fontWeight: 500 }}>({r.count})</b></span>
-            <div style={{ height: 22, background: '#F1F5F7', borderRadius: 5, overflow: 'hidden' }}>
+            <div style={{ height: 22, background: 'rgba(255,255,255,.06)', borderRadius: 0, overflow: 'hidden' }}>
               <div style={{ width: `${Math.max(2, r.value / max * 100)}%`, height: '100%', background: ramp[Math.min(i, ramp.length - 1)], borderRadius: 5 }} />
             </div>
             <span style={{ fontSize: 12, textAlign: 'right', color: ink.primary, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{format(r.value)}</span>

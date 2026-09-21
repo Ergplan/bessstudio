@@ -17,3 +17,116 @@
 .right-tabs{position:sticky;top:0;background:#fdfefe;z-index:2}
 
 .export-result{padding:12px;background:#eef4e6;border-radius:5px;margin-top:15px;font-size:12px;overflow-wrap:anywhere}.export-result a{color:#355c35}.export-result img{width:100%;height:auto;margin-top:8px}.export-result p{font-size:11px;color:#6d8067;margin-bottom:0}
+
+/* ---- dark workbench theme ----
+   The studio predates the platform and shipped with its own light palette. Rather than restyle
+   every rule in the sheet above, the surfaces, ink and controls are re-pointed here so the
+   assembly view reads as part of the same application as the workbench and the landing: near
+   black, hairline rules, square corners, one accent. Rules above that set light colours are
+   overridden by surface; anything not named here inherits and needs no colour of its own. */
+.app{--s-bg:#08090B;--s-panel:#0A0C0F;--s-raised:#0E1116;--s-line:rgba(255,255,255,.085);
+  --s-line-soft:rgba(255,255,255,.05);--s-text:#F2F5F7;--s-muted:#8A99A6;--s-dim:#5E6C79;
+  --s-accent:#93BE49;--s-mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+  background:var(--s-bg);color:var(--s-text);min-height:100vh}
+.app small{color:var(--s-dim)}
+.app header{background:var(--s-panel);border-bottom:1px solid var(--s-line)}
+.app .brand>strong,.app .brand>div{color:var(--s-text)}
+.app .brand i{background:var(--s-line)}
+.app .brand small{color:var(--s-dim);font-family:var(--s-mono)}
+.app .brand img{background:#fff;padding:3px}
+.app .local-tag{color:var(--s-dim);font-family:var(--s-mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+
+.app button{background:rgba(255,255,255,.03);border:1px solid var(--s-line);color:var(--s-text);border-radius:0}
+.app button:hover{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.26)}
+.app button.active{background:rgba(147,190,73,.14);border-color:rgba(147,190,73,.4);color:var(--s-text)}
+.app button.primary{background:var(--s-accent);border-color:var(--s-accent);color:#101A08;font-weight:600}
+.app button.primary:hover{background:#A5CE5C;border-color:#A5CE5C}
+.app button.plain{border:0;background:transparent;color:var(--s-muted)}
+.app button.plain:hover{background:rgba(255,255,255,.06);color:var(--s-text)}
+.app button:focus-visible,.app input:focus-visible,.app select:focus-visible{outline:2px solid var(--s-accent);outline-offset:2px}
+
+.app .workspace{border:0}
+.app .hierarchy{background:var(--s-panel);border-right:1px solid var(--s-line-soft)}
+.app .inspector{background:var(--s-panel);border-left:1px solid var(--s-line-soft)}
+.app .panel-heading,.app .tree h4,.app .eyebrow,.app .canvas-title>span{color:var(--s-dim);font-family:var(--s-mono);letter-spacing:.14em}
+.app .project-name b{color:var(--s-text)}
+.app .project-icon{background:rgba(147,190,73,.14);color:var(--s-accent);border-radius:0}
+.app .left-tabs,.app .right-tabs{border-bottom:1px solid var(--s-line-soft);background:var(--s-panel)}
+.app .left-tabs button{color:var(--s-dim);background:none;border:0}
+.app .left-tabs button.active{color:var(--s-text);border-bottom:1px solid var(--s-accent)}
+.app .right-tabs button{background:none;border:0;color:var(--s-dim)}
+.app .right-tabs button.active{background:rgba(147,190,73,.14);color:var(--s-accent)}
+.app .tree button{background:none;border:0;color:var(--s-muted)}
+.app .tree button:hover{background:rgba(255,255,255,.05);color:var(--s-text)}
+.app .tree button.selected{background:rgba(147,190,73,.14);color:var(--s-text)}
+.app .tree button span{color:var(--s-dim)}
+.app .left-bottom{border-top:1px solid var(--s-line-soft);color:var(--s-muted)}
+.app .left-bottom p,.app .left-bottom small{color:var(--s-dim)}
+
+.app .canvas-toolbar{background:var(--s-panel);border-bottom:1px solid var(--s-line-soft)}
+.app .breadcrumbs button{background:none;border:0;color:var(--s-muted)}
+.app .concept-chip{border:1px solid var(--s-line);color:var(--s-accent);border-radius:0;font-family:var(--s-mono)}
+.app .view-buttons button{background:transparent;border:0;color:var(--s-dim)}
+.app .view-buttons .active{background:rgba(255,255,255,.08);color:var(--s-text)}
+/* The 3D scene keeps a lit backdrop of its own; only its chrome goes dark. */
+.app .canvas-wrap{background:#0B0F14}
+.app .canvas-title h1{color:var(--s-text)}
+.app .canvas-title p,.app .canvas-hint{color:var(--s-dim)}
+.app .canvas-hint i{background:var(--s-dim)}
+.app .canvas-bottom>button{background:rgba(14,17,22,.86)}
+.app .scene-controls{background:var(--s-panel);border-top:1px solid var(--s-line-soft);border-bottom:1px solid var(--s-line-soft)}
+.app .scene-controls button{background:transparent;border-color:transparent;color:var(--s-muted)}
+.app .scene-controls button.active{background:rgba(147,190,73,.14);color:var(--s-text)}
+.app .scene-controls label{color:var(--s-muted)}
+.app .scene-controls label span{color:var(--s-dim)}
+.app .scene-controls input{accent-color:var(--s-accent)}
+.app .divider{background:var(--s-line)}
+
+.app .stats{background:var(--s-raised)}
+.app .stats>div{border-right:1px solid var(--s-line-soft)}
+.app .stats strong{color:var(--s-text);font-variant-numeric:tabular-nums}
+.app .stats span{color:var(--s-dim);font-family:var(--s-mono);letter-spacing:.14em;text-transform:uppercase}
+
+.app .inspector h2{color:var(--s-text)}
+.app .tag{border:1px solid var(--s-line);color:var(--s-muted);border-radius:0}
+.app section{border-bottom:1px solid var(--s-line-soft)}
+.app h3{color:var(--s-text)}
+.app h3>span{color:var(--s-accent);font-family:var(--s-mono)}
+.app .field-label,.app .muted,.app .data-row>span{color:var(--s-dim)}
+.app .data-row b{color:var(--s-text)}
+.app select,.app .wide{background:rgba(255,255,255,.04);border:1px solid var(--s-line);color:var(--s-text);border-radius:0}
+.app .number-field{color:var(--s-dim)}
+.app .number-field input{background:rgba(255,255,255,.04);border:1px solid var(--s-line);color:var(--s-text);border-radius:0}
+.app .number-field i{color:var(--s-dim)}
+.app .visibility-list input,.app .check-field input{accent-color:var(--s-accent)}
+.app .swatch{background:var(--s-accent)}
+
+.app .notice{background:rgba(255,255,255,.025);border:1px solid var(--s-line-soft);border-left:2px solid var(--s-dim);border-radius:0}
+.app .notice b{color:var(--s-text)}
+.app .notice p{color:var(--s-muted)}
+.app .notice.error{background:rgba(226,104,94,.08);border-left-color:#E2685E;color:var(--s-text)}
+.app .notice.error p{color:#E7A79F}
+.app .notice.warning{background:rgba(232,142,63,.08);border-color:var(--s-line-soft);border-left-color:#E88E3F}
+.app .notice.info{background:rgba(79,168,218,.08);border-left-color:#4FA8DA}
+.app .voltage-alert{background:rgba(20,16,8,.92);border:1px solid rgba(232,142,63,.34);color:#E7AC72;box-shadow:none}
+.app .voltage-alert small{color:#B8956B}
+
+.app .export-buttons button,.app .file-button{background:rgba(255,255,255,.03);border:1px solid var(--s-line);
+  color:var(--s-text);border-radius:0}
+.app .export-result{background:rgba(147,190,73,.1);border-radius:0;color:var(--s-muted)}
+.app .export-result a{color:var(--s-accent)}
+.app .export-result p{color:var(--s-dim)}
+.app .graph{background:rgba(255,255,255,.025);border:1px solid var(--s-line-soft);border-radius:0}
+.app .graph text{fill:var(--s-muted)}
+.app .cell-select button{background:rgba(255,255,255,.07);border-radius:0;border:0}
+.app .cell-select button.selected{background:var(--s-accent)}
+.app .error-text{color:#E2685E}
+.app .profile{color:var(--s-muted)}
+.app summary{color:var(--s-muted)}
+.app footer{background:var(--s-panel);border-top:1px solid var(--s-line);color:var(--s-dim)}
+.app .status-dot{background:var(--s-accent)}
+.app .toast{background:#12161C;border:1px solid var(--s-line);border-radius:0;color:var(--s-text)}
+/* Labels drawn into the scene keep a light chip so they stay readable against the model. */
+.app .scene-label{background:rgba(14,17,22,.92);color:#C7D3DC;border:1px solid var(--s-line);box-shadow:none}
+.app .dimension-label{background:rgba(14,17,22,.92);color:#9FC4D8}
+.app .polarity-label{background:rgba(14,17,22,.92);color:#F2F5F7}

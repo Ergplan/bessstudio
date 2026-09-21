@@ -19,13 +19,13 @@ export function Login() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,480px)' }}>
-      <div style={{ background: `linear-gradient(150deg,${defaultBranding.primaryDark},${defaultBranding.primary} 62%,#2F5A78)`, color: '#fff', padding: '56px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+      <div style={{ background: 'linear-gradient(160deg,#0B0E12 0%,#08090B 58%,#0C1108 100%)', borderRight: '1px solid rgba(255,255,255,.07)', color: '#F2F5F7', padding: '56px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <img src={defaultBranding.logo ?? ''} alt="" style={{ height: 46, background: '#fff', borderRadius: 10, padding: 5 }} />
-          <div><b style={{ fontSize: 17 }}>{defaultBranding.displayName}</b><br /><small style={{ opacity: .75, letterSpacing: '.09em', fontSize: 11 }}>BESS DESIGN STUDIO</small></div>
+          <img src={defaultBranding.logo ?? ''} alt="" style={{ height: 46, background: '#fff', padding: 5 }} />
+          <div><b style={{ fontSize: 17 }}>{defaultBranding.displayName}</b><br /><small style={{ color: '#5E6C79', letterSpacing: '.16em', fontSize: 10, fontFamily: 'var(--mono)' }}>{brand.platform.toUpperCase()}</small></div>
         </div>
         <div style={{ maxWidth: 520 }}>
-          <h2 style={{ color: '#fff', fontSize: 34, lineHeight: 1.18, letterSpacing: '-.02em' }}>Size, engineer and quote a storage project in one session.</h2>
+          <h2 style={{ color: '#F2F5F7', fontSize: 34, lineHeight: 1.18, letterSpacing: '-.02em' }}>Size, engineer and quote a storage project in one session.</h2>
           <p style={{ opacity: .82, fontSize: 14.5, lineHeight: 1.7, marginTop: 16 }}>
             Application-led sizing with degradation and augmentation modelling, a parametric 3D container
             assembly for the engineering conversation, lifetime economics, and a priced proposal — all against

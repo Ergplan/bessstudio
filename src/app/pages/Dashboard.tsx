@@ -57,18 +57,21 @@ export function Dashboard() {
         <Card title="Sales funnel" subtitle="Quoted value by customer stage">
           <Funnel rows={funnel} format={money} />
         </Card>
+        {/* Segments run in palette order. That order is what keeps neighbouring fills apart for
+            colour-vision deficiency, so the statuses are laid out to suit it rather than picking
+            slots by hand; won leads, which is also where the eye should land. */}
         <Card title="Quote value by status" subtitle="All quotations in this workspace">
           {quotes.length ? (
             <CompositionBar format={money} parts={[
-              { label: 'Draft', value: quotes.filter(q => q.status === 'draft').reduce((s, q) => s + q.total, 0), color: series[0] },
-              { label: 'Sent', value: quotes.filter(q => q.status === 'sent').reduce((s, q) => s + q.total, 0), color: series[2] },
-              { label: 'Won', value: wonValue, color: series[1] },
-              { label: 'Lost', value: quotes.filter(q => q.status === 'lost').reduce((s, q) => s + q.total, 0), color: series[5] },
+              { label: 'Won', value: wonValue, color: series[0] },
+              { label: 'Sent', value: quotes.filter(q => q.status === 'sent').reduce((s, q) => s + q.total, 0), color: series[1] },
+              { label: 'Lost', value: quotes.filter(q => q.status === 'lost').reduce((s, q) => s + q.total, 0), color: series[2] },
+              { label: 'Draft', value: quotes.filter(q => q.status === 'draft').reduce((s, q) => s + q.total, 0), color: series[3] },
             ].filter(p => p.value > 0)} />
           ) : <p className="muted">No quotations yet.</p>}
           {byApplication.length > 0 && <div style={{ marginTop: 22 }}>
             <h4 style={{ fontSize: 12.5, marginBottom: 8 }}>Projects by application</h4>
-            <BarChart bars={byApplication} height={168} width={460} format={n => String(Math.round(n))} colorFor={(_, i) => series[i % series.length]} />
+            <BarChart bars={byApplication} height={168} width={460} format={n => String(Math.round(n))} colorFor={() => series[1]} />
           </div>}
         </Card>
       </div>
