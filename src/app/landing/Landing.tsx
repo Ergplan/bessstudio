@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Boxes, FileText, Gauge, LineChart, Layers3, ShieldCheck } from 'lucide-react';
 import { brand, defaultBranding } from '../../brand/brand';
@@ -31,6 +31,11 @@ const steps = [
 export function Landing() {
   const energyMWh = enclosureEnergyKWh(reference) / 1000;
   const [asking, setAsking] = useState(false);
+  // `?build=1` opens the question straight away, so "New design" in the workbench lands on it
+  // rather than on the marketing page with the question still closed.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('build')) setAsking(true);
+  }, []);
   return (
     <div className="landing">
       <nav className="l-nav">

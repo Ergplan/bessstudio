@@ -1,8 +1,8 @@
 'use client';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
-  GoogleAuthProvider, createUserWithEmailAndPassword, onAuthStateChanged, signInWithEmailAndPassword,
-  signInWithPopup, signOut, updateProfile,
+  GoogleAuthProvider, createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification,
+  signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile,
 } from 'firebase/auth';
 import { doc, setDoc, arrayUnion } from 'firebase/firestore';
 import { firebase } from './firebase';
@@ -12,10 +12,19 @@ import { defaultPriceBook } from '../catalog/pricing';
 import { nowIso, type Member, type Organization, type Role } from './types';
 import { seedOrganization } from './seed';
 
-export type SessionUser = { uid: string; email: string; displayName: string; photoURL: string | null };
+export type SessionUser = { uid: string; email: string; displayName: string; photoURL: string | null; emailVerified: boolean };
 export type Session = {
   ready: boolean; user: SessionUser | null; org: Organization | null; role: Role | null;
   organizations: Organization[]; mode: 'firestore' | 'local'; error: string;
+  /**
+   * Whether this session may be shown prices. A verified address is required for it, so an
+   * unverified account can design and engineer but sees no money until it proves the mailbox.
+   */
+  emailVerified: boolean;
+  /** Re-send the verification mail. Resolves to the message to show, verified or not. */
+  sendVerification(): Promise<string>;
+  /** Re-read the account from Firebase, to pick up a verification completed in another tab. */
+  refreshVerification(): Promise<boolean>;
   signIn(email: string, password: string): Promise<void>;
   signUp(email: string, password: string, displayName: string, orgName: string): Promise<void>;
   signInWithGoogle(): Promise<void>;
@@ -48,6 +57,7 @@ const AUTH_MESSAGES: Record<string, string> = {
   'auth/network-request-failed': 'Firebase could not be reached. Check the connection and try again.',
   'auth/popup-blocked': 'The sign-in window was blocked by the browser. Allow pop-ups for this site.',
   'auth/popup-closed-by-user': 'The sign-in window closed before it finished.',
+  'auth/requires-recent-login': 'For this change, sign out and sign in again first.',
 };
 
 export function describeAuthError(error: unknown): string {
@@ -104,7 +114,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // Firebase then reports "no user", which would sign that session straight back out.
       if (demoModeActive()) return;
       if (!account) { setUser(null); setOrg(null); setOrganizations([]); setRole(null); setReady(true); return; }
-      const next: SessionUser = { uid: account.uid, email: account.email ?? '', displayName: account.displayName ?? account.email?.split('@')[0] ?? 'User', photoURL: account.photoURL };
+      const next: SessionUser = { uid: account.uid, email: account.email ?? '', displayName: account.displayName ?? account.email?.split('@')[0] ?? 'User', photoURL: account.photoURL, emailVerified: account.emailVerified };
       setUser(next);
       try { await loadOrgs(next); setError(''); } catch (e) { setError(e instanceof Error ? e.message : 'Workspace could not be loaded.'); }
       setReady(true);
@@ -138,6 +148,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<Session>(() => ({
     ready, user, org, role, organizations, error, mode: repository().kind,
+    // The demonstration workspace has no mailbox to verify and its prices are plainly not real,
+    // so it is treated as verified rather than being locked out of its own figures.
+    emailVerified: repository().kind === 'local' ? true : !!user?.emailVerified,
+    async sendVerification() {
+      const fb = firebase();
+      if (!fb?.auth.currentUser) return 'Sign in first.';
+      if (fb.auth.currentUser.emailVerified) return 'That address is already verified.';
+      try {
+        await sendEmailVerification(fb.auth.currentUser);
+        return `Verification sent to ${fb.auth.currentUser.email}. Open the link, then choose “I have verified”.`;
+      } catch (e) { return describeAuthError(e); }
+    },
+    async refreshVerification() {
+      const fb = firebase();
+      if (!fb?.auth.currentUser) return false;
+      await fb.auth.currentUser.reload();
+      const verified = fb.auth.currentUser.emailVerified;
+      setUser(u => (u ? { ...u, emailVerified: verified } : u));
+      return verified;
+    },
     async signIn(email, password) {
       setDemoMode(false);
       const fb = firebase();
@@ -150,9 +180,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (!fb) return this.signInAsDemo();
       const credential = await createUserWithEmailAndPassword(fb.auth, email, password);
       if (displayName) await updateProfile(credential.user, { displayName });
-      const account: SessionUser = { uid: credential.user.uid, email, displayName: displayName || email.split('@')[0], photoURL: null };
+      const account: SessionUser = { uid: credential.user.uid, email, displayName: displayName || email.split('@')[0], photoURL: null, emailVerified: false };
       const created = await createOrganization(account, orgName || `${account.displayName} workspace`);
       globalThis.localStorage?.setItem(LAST_ORG, created.id);
+      // A new account cannot see a price until the address is proved, so the mail goes out with
+      // the sign-up rather than waiting for them to find the banner.
+      try { await sendEmailVerification(credential.user); } catch { /* the banner offers it again */ }
     },
     async signInWithGoogle() {
       setDemoMode(false);
@@ -164,7 +197,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setDemoMode(true);
       const fb = firebase();
       if (fb && fb.auth.currentUser) await signOut(fb.auth);
-      const account: SessionUser = { uid: 'demo-user', email: 'demo@joulewise.com', displayName: 'Demo Engineer', photoURL: null };
+      const account: SessionUser = { uid: 'demo-user', email: 'demo@joulewise.com', displayName: 'Demo Engineer', photoURL: null, emailVerified: true };
       globalThis.localStorage?.setItem(LOCAL_USER, JSON.stringify(account));
       setUser(account);
       try { await loadOrgs(account, true); } finally { setReady(true); }

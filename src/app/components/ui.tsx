@@ -162,7 +162,7 @@ export const Tabs = <T extends string>({ tabs, active, onChange }: { tabs: { id:
 );
 
 export const stageTone: Record<string, Tone> = { lead: 'neutral', qualified: 'info', proposal: 'info', negotiation: 'warn', won: 'good', lost: 'bad' };
-export const quoteTone: Record<string, Tone> = { draft: 'neutral', 'internal-review': 'warn', sent: 'info', won: 'good', lost: 'bad', expired: 'bad' };
+export const quoteTone: Record<string, Tone> = { draft: 'neutral', submitted: 'info', 'internal-review': 'warn', 'pending-approval': 'warn', approved: 'good', sent: 'info', won: 'good', lost: 'bad', expired: 'bad' };
 export const levelTone: Record<string, Tone> = { error: 'bad', warning: 'warn', info: 'info' };
 export const pct = (n: number, digits = 1) => `${(n * 100).toFixed(digits)}%`;
 export const date = (iso: string) => (iso ? new Date(iso).toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' }) : '—');

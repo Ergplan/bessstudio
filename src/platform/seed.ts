@@ -78,6 +78,7 @@ export async function seedOrganization(orgId: string, member: Member) {
       const quote = createQuote({
         orgId, customer, project, sizing: result, finance, priceBook, currency: priceBook.currency,
         number: nextQuoteNumber(quotes), preparedBy: member.displayName, preparedByEmail: member.email,
+        kind: 'formal', ownerUid: member.uid,
       });
       quote.status = s.stage === 'won' ? 'won' : 'sent';
       quote.sentAt = at; quote.createdAt = at; quote.updatedAt = at;

@@ -73,7 +73,7 @@ export function Start() {
         reference: `NEW-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`,
         status: 'sizing',
         site: { location: '', latitude: null, longitude: null, gridOperator: '', commissioningTarget: '' },
-        sizing: sizingInput, studioConfig: null, studioImage: null, notes: '',
+        sizing: sizingInput, studioConfig: null, studioImage: null, notes: '', ownerUid: user.uid,
         createdAt: nowIso(), updatedAt: nowIso(), updatedBy: user.displayName,
       };
       await repo.save(org.id, 'projects', project);

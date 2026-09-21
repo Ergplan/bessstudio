@@ -234,7 +234,7 @@ describe('quotation build-up', () => {
   const project = { id: 'prj_1', name: 'Test project' } as Project;
   const make = (existing: Quote[] = []) => createQuote({
     orgId: 'org_1', customer, project, sizing, finance, priceBook: defaultPriceBook,
-    currency: 'USD', number: nextQuoteNumber(existing), preparedBy: 'Tester', preparedByEmail: 't@example.com',
+    currency: 'USD', number: nextQuoteNumber(existing), preparedBy: 'Tester', preparedByEmail: 't@example.com', ownerUid: 'u_sales',
   });
 
   it('carries contingency and margin into the sell price without exposing them', () => {
@@ -563,7 +563,7 @@ describe('offer document', () => {
   const org = { id: 'o', name: 'Solarworld', branding: defaultBranding, currency: 'INR', plan: 'trial', createdAt: '', createdBy: '' } as unknown as Organization;
   const quote = createQuote({
     orgId: 'o', customer: { id: 'c', name: 'Greenko Group' } as Customer, project: { id: 'p', name: 'Plant' } as Project,
-    sizing, finance, priceBook: book, currency: 'INR', number: 'SW/BESS/2026-27/001',
+    sizing, finance, priceBook: book, currency: 'INR', number: 'SW/BESS/2026-27/001', ownerUid: 'u_sales',
     preparedBy: 'Tester', preparedByEmail: 't@example.com',
   });
 
@@ -597,7 +597,7 @@ describe('offer document', () => {
     const soFinance = evaluateFinance(supplyOnly, book);
     const soQuote = createQuote({
       orgId: 'o', customer: { id: 'c', name: 'X' } as Customer, project: { id: 'p', name: 'Y' } as Project,
-      sizing: supplyOnly, finance: soFinance, priceBook: book, currency: 'INR', number: 'N',
+      sizing: supplyOnly, finance: soFinance, priceBook: book, currency: 'INR', number: 'N', ownerUid: 'u_sales',
       preparedBy: 'T', preparedByEmail: 't@example.com',
     });
     const soFactor = uplift(soFinance);

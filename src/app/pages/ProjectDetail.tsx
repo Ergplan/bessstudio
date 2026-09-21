@@ -7,7 +7,7 @@ import { Card, Stat, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput
 import { LineChart, BarChart, CompositionBar, series, status } from '../components/viz';
 import { useWorkspace, quotesOf } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
-import { can, quoteStatuses } from '../../platform/types';
+import { can, quoteStatuses, isCustomerRole } from '../../platform/types';
 import { applications, application } from '../../sizing/applications';
 import {
   defaultSizingInput, sizeSystem, normaliseSizingInput, enclosureSummary, defaultLossChain, defaultDegradation,
@@ -59,6 +59,8 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
       customer: { id: project.customerId, name: customerName } as never,
       project, sizing, finance, priceBook: { ...priceBook, currency }, currency,
       number: nextQuoteNumber(quotes), preparedBy: user!.displayName, preparedByEmail: user!.email,
+      // A customer pricing their own design gets an indicative quotation; only sales raises a formal one.
+      kind: isCustomerRole(role) ? 'indicative' : 'formal', ownerUid: user!.uid,
     });
     await saveQuote(quote, `Quotation ${quote.number} raised for ${project.name}.`, 'created');
     await saveProject({ ...project, status: 'quoted' });

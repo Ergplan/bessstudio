@@ -1,7 +1,7 @@
 import { type SizingResult } from '../sizing/engine';
 import { type FinanceResult } from '../sizing/finance';
 import { toLocal, type Currency, type PriceBook } from '../catalog/pricing';
-import { nowIso, uid, type Customer, type Project, type Quote, type QuoteLine } from '../platform/types';
+import { nowIso, uid, type Customer, type Project, type Quote, QuoteKind, type QuoteLine } from '../platform/types';
 
 export const scopeIncludedDefault = [
   'Supply of battery energy storage enclosures with integrated BMS, thermal management and fire detection',
@@ -78,6 +78,8 @@ export const nextQuoteNumber = (existing: Quote[], prefix = 'JW-Q') => {
 export function createQuote(args: {
   orgId: string; customer: Customer; project: Project; sizing: SizingResult; finance: FinanceResult;
   priceBook: PriceBook; currency: Currency; number: string; preparedBy: string; preparedByEmail: string;
+  /** A customer pricing their own design raises an indicative quotation; sales raises a formal one. */
+  kind?: QuoteKind; ownerUid: string;
 }): Quote {
   const lines = buildQuoteLines(args.sizing, args.finance, args.currency, args.priceBook);
   const totals = quoteTotals(lines, 0, args.priceBook.taxPct, 0);
@@ -86,6 +88,8 @@ export function createQuote(args: {
     id: uid('qt'), orgId: args.orgId, customerId: args.customer.id, customerName: args.customer.name,
     projectId: args.project.id, projectName: args.project.name,
     number: args.number, version: 1, status: 'draft', currency: args.currency, lines,
+    kind: args.kind ?? 'formal', ownerUid: args.ownerUid,
+    submittedAt: null, submittedBy: null, approvedAt: null, approvedBy: null, approvedByUid: null, returnedReason: null,
     discountPct: 0, taxPct: args.priceBook.taxPct, freight: 0, ...totals,
     validUntil, incoterms: 'DDP site', paymentTerms: '20% advance, 70% against dispatch, 10% on commissioning',
     deliveryWeeks: 20, warrantyYears: 5,

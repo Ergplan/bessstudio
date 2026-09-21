@@ -2,6 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { repository, logActivity } from './repo';
 import { useSession } from './auth';
+import { can } from './types';
 import { defaultPriceBook, type PriceBook } from '../catalog/pricing';
 import { nowIso, type Activity, type Customer, type Project, type Quote, type ActivityKind } from './types';
 
@@ -23,7 +24,8 @@ export const useWorkspace = () => {
 };
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { org, user } = useSession();
+  const { org, user, role } = useSession();
+  const canSeeAll = can(role, 'pipeline.view');
   const [loading, setLoading] = useState(true);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -54,7 +56,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [org, user]);
 
   const value = useMemo<Workspace>(() => ({
-    loading, customers, projects, quotes, activities, priceBook, toast, setToast,
+    loading,
+    // A customer's workspace is scoped here rather than on each page, so no screen can leak a
+    // record by forgetting to filter. The Firestore rules refuse the reads as well; this is what
+    // keeps the interface honest when the repository is the local one.
+    customers: canSeeAll ? customers : [],
+    projects: canSeeAll ? projects : projects.filter(p => p.ownerUid === user?.uid),
+    quotes: canSeeAll ? quotes : quotes.filter(q => q.ownerUid === user?.uid),
+    activities: canSeeAll ? activities : [],
+    priceBook, toast, setToast,
     async saveCustomer(customerValue, note) {
       if (!org) return;
       const next = { ...customerValue, orgId: org.id, updatedAt: nowIso() };
@@ -93,7 +103,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setPriceBook(value);
       setToast('Price book updated.');
     },
-  }), [loading, customers, projects, quotes, activities, priceBook, toast, org, user, record]);
+  }), [loading, canSeeAll, customers, projects, quotes, activities, priceBook, toast, org, user, record]);
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }

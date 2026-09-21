@@ -77,7 +77,7 @@ export function Studio() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '9px 18px', background: '#0A0C0F', borderBottom: '1px solid rgba(255,255,255,.08)', color: '#F2F5F7', fontSize: 12.5 }}>
         <Link href={project ? `/app/projects?id=${project.id}` : '/app'} style={{ color: '#F2F5F7', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
           <ArrowLeft size={15} /> Back to {project ? 'project' : 'workspace'}

@@ -34,6 +34,15 @@ const niceTicks = (min: number, max: number, count = 4) => {
   return out;
 };
 
+/**
+ * Width the value axis needs for its own labels. A fixed gutter is only ever right for the
+ * formatter it was measured against: a currency that reaches "−₹66.00 cr" overruns one sized for
+ * "40", and because the chart paints outside its box the label escapes into the card rather than
+ * being clipped, which is harder to notice.
+ */
+const axisGutter = (ticks: number[], format: (n: number) => string, min: number) =>
+  Math.max(min, Math.ceil(Math.max(...ticks.map(t => format(t).length)) * 5.9) + 14);
+
 /** Trim a tick label to the space its slot allows, so neighbouring labels never collide. */
 const clip = (label: string, slotWidth: number) => {
   const budget = Math.floor(slotWidth / 5.3);
@@ -56,13 +65,13 @@ export function LineChart({ data, height = 210, width: w = 720, yLabel, format, 
   const { bind, node } = useTip();
   const all = data.flatMap(s => s.points);
   if (!all.length) return <p className="muted">No data.</p>;
-  const pad = { t: 12, r: 16, b: 30, l: 58 };
   const xs = all.map(p => p.x), ys = all.map(p => p.y).concat(rule ? [rule.y] : []);
   const x0 = Math.min(...xs), x1 = Math.max(...xs);
   const y0 = yMin ?? Math.min(0, ...ys), y1 = Math.max(...ys) * 1.06 || 1;
+  const ticks = dedupe(niceTicks(y0, y1), format), xticks = niceTicks(x0, x1, 6).filter(t => Number.isInteger(t));
+  const pad = { t: 12, r: 16, b: 30, l: axisGutter(ticks, format, 58) };
   const px = (x: number) => pad.l + (x - x0) / Math.max(x1 - x0, 1e-9) * (w - pad.l - pad.r);
   const py = (y: number) => height - pad.b - (y - y0) / Math.max(y1 - y0, 1e-9) * (height - pad.t - pad.b);
-  const ticks = dedupe(niceTicks(y0, y1), format), xticks = niceTicks(x0, x1, 6).filter(t => Number.isInteger(t));
   const slots = data[0]?.points ?? [];
   return (
     <>
@@ -89,11 +98,11 @@ export function LineChart({ data, height = 210, width: w = 720, yLabel, format, 
 export function BarChart({ bars, height = 200, width: w = 720, format, colorFor }: { bars: { label: string; value: number; note?: string }[]; height?: number; width?: number; format: (n: number) => string; colorFor?: (b: { label: string; value: number }, i: number) => string }) {
   const { bind, node } = useTip();
   if (!bars.length) return <p className="muted">No data.</p>;
-  const pad = { t: 14, r: 14, b: 32, l: 62 };
   const y1 = Math.max(...bars.map(b => b.value), 0) * 1.08 || 1, y0 = Math.min(0, ...bars.map(b => b.value)) * 1.08;
+  const ticks = dedupe(niceTicks(y0, y1), format);
+  const pad = { t: 14, r: 14, b: 32, l: axisGutter(ticks, format, 62) };
   const py = (y: number) => height - pad.b - (y - y0) / Math.max(y1 - y0, 1e-9) * (height - pad.t - pad.b);
   const slot = (w - pad.l - pad.r) / bars.length, bw = Math.max(4, Math.min(38, slot - 6));
-  const ticks = dedupe(niceTicks(y0, y1), format);
   return (
     <>
       <svg className="chart" viewBox={`0 0 ${w} ${height}`} role="img" aria-label="Bar chart">

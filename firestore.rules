@@ -11,8 +11,18 @@ service cloud.firestore {
     function isMember(orgId) { return signedIn() && exists(/databases/$(database)/documents/organizations/$(orgId)/members/$(request.auth.uid)); }
     function role(orgId) { return memberDoc(orgId).data.role; }
     function hasRole(orgId, allowed) { return isMember(orgId) && role(orgId) in allowed; }
-    function canWrite(orgId) { return hasRole(orgId, ['owner', 'admin', 'engineer', 'sales']); }
+    function canWrite(orgId) { return hasRole(orgId, ['owner', 'admin', 'approver', 'engineer', 'sales']); }
     function canManage(orgId) { return hasRole(orgId, ['owner', 'admin']); }
+    // Staff see the whole workspace. The one external role, customer, sees only what it owns.
+    function isStaff(orgId) { return hasRole(orgId, ['owner', 'admin', 'approver', 'engineer', 'sales', 'viewer']); }
+    function isCustomer(orgId) { return hasRole(orgId, ['customer']); }
+    function canApprove(orgId) { return hasRole(orgId, ['owner', 'admin', 'approver']); }
+    // A price is the one thing here a stranger could act on, so it is not served to an address
+    // nobody has proved they control. Mirrors canSeeFinancials() in the client.
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
+    function ownsExisting() { return resource.data.ownerUid == request.auth.uid; }
+    function ownsIncoming() { return request.resource.data.ownerUid == request.auth.uid; }
+    function unchanged(field) { return request.resource.data[field] == resource.data[field]; }
     // A record may not be moved to a different tenant by writing a foreign orgId.
     function staysInOrg(orgId) { return !('orgId' in request.resource.data) || request.resource.data.orgId == orgId; }
 
@@ -28,7 +38,9 @@ service cloud.firestore {
       allow delete: if hasRole(orgId, ['owner']);
 
       match /members/{uid} {
-        allow read: if isMember(orgId);
+        // A customer may read their own membership — that is how the client learns its role —
+        // but not the supplier's staff list.
+        allow read: if isStaff(orgId) || (signedIn() && request.auth.uid == uid);
         // Bootstrap: the organization creator may add themselves as owner.
         allow create: if canManage(orgId)
           || (signedIn() && request.auth.uid == uid
@@ -37,28 +49,60 @@ service cloud.firestore {
       }
 
       match /settings/{docId} {
-        allow read: if isMember(orgId);
+        // Settings carry the price book, so they stay inside the supplier.
+        allow read: if isStaff(orgId);
         allow write: if canManage(orgId);
       }
 
       match /customers/{docId} {
-        allow read: if isMember(orgId);
+        // The customer list is the supplier's pipeline; an external account never reads it.
+        allow read: if isStaff(orgId);
         allow write: if canWrite(orgId) && staysInOrg(orgId);
       }
 
       match /projects/{docId} {
-        allow read: if isMember(orgId);
-        allow write: if canWrite(orgId) && staysInOrg(orgId);
+        allow read: if isStaff(orgId) || (isCustomer(orgId) && resource.data.ownerUid == request.auth.uid);
+        allow create: if staysInOrg(orgId)
+          && (canWrite(orgId) || (isCustomer(orgId) && ownsIncoming()));
+        allow update: if staysInOrg(orgId)
+          && (canWrite(orgId) || (isCustomer(orgId) && ownsExisting() && ownsIncoming()));
+        allow delete: if canWrite(orgId) || (isCustomer(orgId) && ownsExisting());
       }
 
       match /quotes/{docId} {
-        allow read: if isMember(orgId);
-        allow create, update: if canWrite(orgId) && staysInOrg(orgId);
-        allow delete: if canManage(orgId);
+        // A quotation carries a price, so reading one needs a verified address as well as the
+        // right to see the record at all.
+        allow read: if verified() && (isStaff(orgId) || (isCustomer(orgId) && ownsExisting()));
+
+        // A customer may raise their own indicative estimate and submit it. They may not write a
+        // formal quotation, approve anything, or record an approval.
+        allow create: if staysInOrg(orgId) && verified() && (
+          canWrite(orgId)
+          || (isCustomer(orgId) && ownsIncoming()
+              && request.resource.data.kind == 'indicative'
+              && request.resource.data.status == 'draft'
+              && request.resource.data.approvedByUid == null)
+        );
+
+        allow update: if staysInOrg(orgId) && verified() && (
+          // Releasing a quotation is the approver's alone, and is the only way `approved` is set.
+          (canApprove(orgId) && unchanged('ownerUid'))
+          || (canWrite(orgId) && unchanged('ownerUid')
+              && request.resource.data.status != 'approved'
+              && unchanged('approvedByUid'))
+          // The customer's own record: edit the draft, or submit it. Never beyond that.
+          || (isCustomer(orgId) && ownsExisting() && ownsIncoming()
+              && unchanged('approvedByUid')
+              && resource.data.kind == 'indicative'
+              && request.resource.data.kind == 'indicative'
+              && resource.data.status in ['draft']
+              && request.resource.data.status in ['draft', 'submitted'])
+        );
+        allow delete: if canManage(orgId) || (isCustomer(orgId) && ownsExisting() && resource.data.status == 'draft');
       }
 
       match /activities/{docId} {
-        allow read: if isMember(orgId);
+        allow read: if isStaff(orgId);
         // The audit trail is append-only: entries are never edited or removed from the client.
         allow create: if canWrite(orgId) && request.resource.data.actorUid == request.auth.uid;
         allow update, delete: if false;

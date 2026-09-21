@@ -12,7 +12,9 @@ import { sizeSystem, type SizingInput } from '../../sizing/engine';
 import { evaluateFinance } from '../../sizing/finance';
 import { useWorkspace } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
-import { can, quoteStatuses, type Quote, type QuoteStatus } from '../../platform/types';
+import { can, customerStatusLabels, isCustomerRole, quoteStatuses, type Quote, type QuoteStatus } from '../../platform/types';
+import { applyAction, availableActions, isEditable } from '../../quoting/lifecycle';
+import { Financial, useFinancialAccess } from '../components/Gate';
 import { quoteTotals, reviseQuote } from '../../quoting/quote';
 import { currencies, formatMoney, type Currency } from '../../catalog/pricing';
 
@@ -21,11 +23,15 @@ type Tab = 'commercial' | 'scope' | 'content' | 'offer' | 'proposal';
 export function QuoteDetail({ id: quoteId }: { id: string }) {
   const router = useRouter();
   const { quotes, projects, priceBook, saveQuote } = useWorkspace();
-  const { org, role } = useSession();
+  const { org, role, user } = useSession();
   const [tab, setTab] = useState<Tab>('commercial');
   const offerRef = useRef<HTMLDivElement>(null);
   const quote = quotes.find(q => q.id === quoteId);
-  const writable = can(role, 'quote.write');
+  const customerView = isCustomerRole(role);
+  const { allowed: showMoney } = useFinancialAccess();
+  // Editable means the figures underneath may still move. Once sales owns the record, the
+  // customer keeps sight of it but not the pen.
+  const writable = quote ? isEditable(role, quote) : false;
   const project = projects.find(p => p.id === quote?.projectId);
 
   // The document is built from the sizing the quotation was raised against, so a sent offer never
@@ -78,29 +84,54 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
     a.href = URL.createObjectURL(blob); a.download = `${quote.number}-r${quote.version}.json`; a.click();
   };
 
+  const move = async (action: Parameters<typeof applyAction>[1], reason?: string) => {
+    if (!user) return;
+    const next = applyAction(quote, action, { uid: user.uid, displayName: user.displayName }, reason);
+    await saveQuote(next, `${quote.number} — ${action.replace('-', ' ')}.`, 'status');
+  };
+
   return (
     <div className="grid" style={{ gap: 16 }}>
+      {quote.kind === 'indicative' && (
+        <div className="notice warning no-print">
+          <b>Indicative estimate</b>
+          <p>
+            Self-service pricing from the standard price book. It is illustrative, not an offer, and carries no
+            commitment on scope, delivery or price.{' '}
+            {quote.status === 'draft'
+              ? 'Submit it and our sales team will confirm the details and issue a formal quotation.'
+              : 'Our sales team has it and will be in touch to confirm the details.'}
+          </p>
+        </div>
+      )}
+      {quote.returnedReason && can(role, 'quote.prepare') && (
+        <div className="notice error no-print"><b>Returned by the approver</b><p>{quote.returnedReason}</p></div>
+      )}
       <div className="row no-print">
         <Link className="btn ghost sm" href={`/app/projects?id=${quote.projectId}`}><ArrowLeft size={15} /> {quote.projectName}</Link>
         <div className="spacer" />
-        {writable && quote.status === 'draft' && <button className="btn" onClick={() => setStatus('internal-review')}>Send for review</button>}
-        {writable && ['draft', 'internal-review'].includes(quote.status) && can(role, 'quote.approve') && <button className="btn accent" onClick={() => setStatus('sent')}><Send size={14} /> Mark as sent</button>}
-        {writable && quote.status === 'sent' && <>
-          <button className="btn accent" onClick={() => setStatus('won')}>Mark won</button>
-          <button className="btn danger" onClick={() => setStatus('lost')}>Mark lost</button>
-        </>}
-        {writable && <button className="btn" onClick={() => void revise()}><Copy size={14} /> New revision</button>}
-        <button className="btn" onClick={exportJson}><Download size={14} /> JSON</button>
-        <button className="btn" onClick={exportOfferHtml} disabled={!built}><FileCode2 size={14} /> Offer HTML</button>
-        <button className="btn primary" onClick={() => { setTab('offer'); setTimeout(() => window.print(), 120); }}>
+        {/* One lifecycle, taken from the shared state machine, so the interface cannot offer a
+            step the rules would refuse. */}
+        {availableActions(role, quote).map(t => (
+          <button key={t.action}
+            className={t.action === 'approve' || t.action === 'submit' ? 'btn accent' : t.action === 'return' || t.action === 'lose' ? 'btn danger' : 'btn'}
+            title={t.describe}
+            onClick={() => void move(t.action, t.action === 'return' ? window.prompt('Why is this going back?') ?? undefined : undefined)}>
+            {t.action === 'submit' ? <Send size={14} /> : null}{t.label}
+          </button>
+        ))}
+        {!customerView && can(role, 'quote.prepare') && <button className="btn" onClick={() => void revise()}><Copy size={14} /> New revision</button>}
+        {!customerView && <button className="btn" onClick={exportJson}><Download size={14} /> JSON</button>}
+        {showMoney && <button className="btn" onClick={exportOfferHtml} disabled={!built}><FileCode2 size={14} /> Offer HTML</button>}
+        {showMoney && <button className="btn primary" onClick={() => { setTab('offer'); setTimeout(() => window.print(), 120); }}>
           <Printer size={14} /> Print offer / PDF
-        </button>
+        </button>}
       </div>
 
       <div className="grid cols-4 no-print">
-        <div className="stat"><div className="label">Quotation</div><p className="value" style={{ fontSize: 21 }}>{quote.number}<small>r{quote.version}</small></p><div className="foot"><Badge tone={quoteTone[quote.status]}>{quote.status}</Badge></div></div>
+        <div className="stat"><div className="label">{quote.kind === 'indicative' ? 'Indicative estimate' : 'Quotation'}</div><p className="value" style={{ fontSize: 21 }}>{quote.number}<small>r{quote.version}</small></p><div className="foot"><Badge tone={quoteTone[quote.status] ?? 'neutral'}>{customerView ? (customerStatusLabels[quote.status] ?? quote.status) : quote.status}</Badge></div></div>
         <div className="stat"><div className="label">Customer</div><p className="value" style={{ fontSize: 17 }}>{quote.customerName}</p><div className="foot">{quote.projectName}</div></div>
-        <div className="stat"><div className="label">Total</div><p className="value">{money(quote.total)}</p><div className="foot">{currencies[quote.currency].name}</div></div>
+        <div className="stat"><div className="label">Total</div><p className="value"><Financial inline>{money(quote.total)}</Financial></p><div className="foot">{currencies[quote.currency].name}</div></div>
         <div className="stat"><div className="label">Valid until</div><p className="value" style={{ fontSize: 19 }}>{date(quote.validUntil)}</p><div className="foot">Prepared by {quote.preparedBy}</div></div>
       </div>
 
