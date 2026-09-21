@@ -1,3 +1,4 @@
+'use client';
 import { useEffect, useState } from 'react';
 import { Card, Tabs, TextInput, NumberInput, SelectInput, Slider, Badge, KV, Field } from '../components/ui';
 import { useSession } from '../../platform/auth';

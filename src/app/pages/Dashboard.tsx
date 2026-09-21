@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom';
+'use client';
+import Link from 'next/link';
 import { ArrowUpRight, Plus } from 'lucide-react';
 import { Card, Stat, Badge, Empty, stageTone, quoteTone, date } from '../components/ui';
 import { CompositionBar, Funnel, BarChart, series } from '../components/viz';
@@ -40,7 +41,7 @@ export function Dashboard() {
   if (loading) return <p className="muted">Loading workspace…</p>;
   if (!customers.length) return (
     <Card><Empty title="Your workspace is empty" message="Add the first customer to start sizing and quoting. Every customer, project and quotation is stored against this organization."
-      action={<Link className="btn accent" to="/customers"><Plus size={15} /> Add a customer</Link>} /></Card>
+      action={<Link className="btn accent" href="/app/customers"><Plus size={15} /> Add a customer</Link>} /></Card>
   );
 
   return (
@@ -73,12 +74,12 @@ export function Dashboard() {
       </div>
 
       <div className="grid cols-2">
-        <Card title="Recent quotations" actions={<Link className="btn sm" to="/quotes">All quotes <ArrowUpRight size={13} /></Link>} tight>
+        <Card title="Recent quotations" actions={<Link className="btn sm" href="/app/quotes">All quotes <ArrowUpRight size={13} /></Link>} tight>
           {quotes.length ? (
             <table className="data">
               <thead><tr><th>Number</th><th>Customer</th><th>Status</th><th className="num">Value</th></tr></thead>
               <tbody>{quotes.slice(0, 6).map(q => (
-                <tr key={q.id}><td><Link to={`/quotes/${q.id}`}><b>{q.number}</b> r{q.version}</Link></td>
+                <tr key={q.id}><td><Link href={`/app/quotes?id=${q.id}`}><b>{q.number}</b> r{q.version}</Link></td>
                   <td>{q.customerName}</td><td><Badge tone={quoteTone[q.status]}>{q.status}</Badge></td>
                   <td className="num">{formatMoney(q.total, q.currency, true)}</td></tr>
               ))}</tbody>
@@ -98,12 +99,12 @@ export function Dashboard() {
         </Card>
       </div>
 
-      <Card title="Customers" actions={<Link className="btn sm" to="/customers">Manage <ArrowUpRight size={13} /></Link>} tight>
+      <Card title="Customers" actions={<Link className="btn sm" href="/app/customers">Manage <ArrowUpRight size={13} /></Link>} tight>
         <table className="data">
           <thead><tr><th>Customer</th><th>Segment</th><th>Location</th><th>Stage</th><th className="num">Projects</th><th className="num">Quoted</th></tr></thead>
           <tbody>{customers.slice(0, 8).map(c => {
             const value = quotes.filter(q => q.customerId === c.id).reduce((s, q) => s + q.total, 0);
-            return <tr key={c.id}><td><Link to={`/customers/${c.id}`}><b>{c.name}</b></Link></td>
+            return <tr key={c.id}><td><Link href={`/app/customers?id=${c.id}`}><b>{c.name}</b></Link></td>
               <td style={{ textTransform: 'capitalize' }}>{c.segment.replace(/-/g, ' ')}</td><td>{[c.city, c.country].filter(Boolean).join(', ')}</td>
               <td><Badge tone={stageTone[c.stage]}>{c.stage}</Badge></td>
               <td className="num">{projects.filter(p => p.customerId === c.id).length}</td>

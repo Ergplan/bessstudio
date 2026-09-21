@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { brand, defaultBranding } from '../../brand/brand';
 import { useSession } from '../../platform/auth';

@@ -1,3 +1,4 @@
+'use client';
 import {create} from 'zustand';
 import {configSchema,defaults,parseConfig,source,type Config} from '../config/schema';
 let initial=structuredClone(defaults),initialError='';try{const saved=localStorage.getItem('solarworld-bess-v1');if(saved)initial=parseConfig(saved);}catch{initialError='Saved configuration could not be read. Baseline restored.';}

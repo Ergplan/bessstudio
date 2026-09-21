@@ -1,3 +1,8 @@
+/**
+ * Offer document styling. Held as a module rather than a stylesheet so the rendered page and the
+ * standalone HTML export are guaranteed to carry exactly the same rules.
+ */
+export const offerCss = String.raw`
 /* Offer document. Four A4 pages that print to PDF from the browser, laid out to the issued
    Solarworld proposal: navy header band, green accent rule, navy table headers, zebra rows. */
 .offer{--o-navy:#22415B;--o-navy-deep:#153956;--o-accent:#93BE49;--o-ink:#1D293B;--o-slate:#4A5A6E;
@@ -133,3 +138,4 @@ table.offer-table tr.total td.num,table.offer-table tr.subtotal td.num{font-vari
 .offer-overflow{position:absolute;right:6mm;bottom:20mm;background:#C4614C;color:#fff;font-size:6.6pt;
   font-weight:600;padding:1.2mm 2mm;border-radius:1mm;max-width:80mm;line-height:1.35}
 @media print{.offer-overflow{display:none}}
+`;

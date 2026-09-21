@@ -1,3 +1,4 @@
+'use client';
 import {
   collection, doc, deleteDoc, getDoc, getDocs, limit, onSnapshot, orderBy,
   query, setDoc, type Firestore,

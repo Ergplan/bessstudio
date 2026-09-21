@@ -43,13 +43,13 @@ values only the console can give you:
 
 | Variable | Where it comes from |
 |---|---|
-| `VITE_FIREBASE_API_KEY` | `apiKey` in the web app config |
-| `VITE_FIREBASE_APP_ID` | `appId`, of the form `1:123456789:web:abc123` |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | `messagingSenderId`; optional, only used by push |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | `apiKey` in the web app config |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | `appId`, of the form `1:123456789:web:abc123` |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | `messagingSenderId`; optional, only used by push |
 
 `.env` is git-ignored. These `VITE_` variables are compiled into the client bundle and are not
 secrets — a Firebase web API key identifies the project; the Firestore rules are what protect the
-data. Until `VITE_FIREBASE_API_KEY` is set the application runs as a local demo workspace and the
+data. Until `NEXT_PUBLIC_FIREBASE_API_KEY` is set the application runs as a local demo workspace and the
 topbar reads **Demo** rather than **Cloud**.
 
 ## 3. Deploy
@@ -69,14 +69,15 @@ It needs three repository secrets:
 | Secret | Value |
 |---|---|
 | `FIREBASE_SERVICE_ACCOUNT` | The whole JSON key. Generate it with `firebase init hosting:github`, which creates the service account and adds the secret, or by hand from **Project settings → Service accounts → Generate new private key**. |
-| `VITE_FIREBASE_API_KEY` | Same value as in `.env`. |
-| `VITE_FIREBASE_APP_ID` | Same value as in `.env`. |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Same value as in `.env`. |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | Same value as in `.env`. |
 
 Without `FIREBASE_SERVICE_ACCOUNT` the deploy step fails while the build and test steps still run,
 so the workflow is safe to merge before the secret exists.
 
-Hosting serves `dist/` with a single-page rewrite, immutable caching on hashed assets and
-`no-cache` on `index.html`, so a deploy is picked up on the next page load.
+Hosting serves the Next.js static export from `out/`: directory-style URLs, immutable caching on
+the fingerprinted `/_next/static` bundles, `no-cache` on every HTML file so a deploy is picked up on
+the next page load, and a catch-all rewrite to the landing page for anything unrecognised.
 
 ## 4. First user and first organization
 
@@ -98,18 +99,21 @@ After that, roles are managed in **Settings → Team & roles**.
 
 ```bash
 # .env
-VITE_FIREBASE_EMULATORS=true
+NEXT_PUBLIC_FIREBASE_EMULATORS=true
 
 npm run emulators        # auth 9099, firestore 8080, UI 4000
-npm run dev
+npm run dev              # http://127.0.0.1:5178
 ```
 
-The client connects to the emulators when `VITE_FIREBASE_EMULATORS=true` and the Firebase
+Next's dev server keeps the app on the same port as before. To check what will actually be
+deployed, `npm run build && npm run preview` serves the static export itself.
+
+The client connects to the emulators when `NEXT_PUBLIC_FIREBASE_EMULATORS=true` and the Firebase
 configuration is present. Emulator data is discarded on exit unless you pass `--export-on-exit`.
 
 ## Running without Firebase
 
-Leave `VITE_FIREBASE_API_KEY` empty. The application runs as a local demo workspace backed by
+Leave `NEXT_PUBLIC_FIREBASE_API_KEY` empty. The application runs as a local demo workspace backed by
 browser storage, seeded with a reference pipeline. Use this for demonstrations, for offline work,
 and for evaluating the studio before provisioning a project. The topbar shows **Demo** rather than
 **Cloud** so nobody mistakes which mode they are in.

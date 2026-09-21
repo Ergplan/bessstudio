@@ -1,5 +1,7 @@
+'use client';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Plus, Trash2, ArrowLeft, Building2 } from 'lucide-react';
 import { Card, Badge, Empty, Modal, TextInput, SelectInput, Field, stageTone, quoteTone, date, KV } from '../components/ui';
 import { useWorkspace, projectsOf, quotesOf } from '../../platform/workspace';
@@ -75,7 +77,7 @@ export function Customers() {
               const value = quotesOf(quotes, 'customerId', c.id).reduce((s, q) => s + q.total, 0);
               return (
                 <tr key={c.id}>
-                  <td><Link to={`/customers/${c.id}`}><b>{c.name}</b></Link></td>
+                  <td><Link href={`/app/customers?id=${c.id}`}><b>{c.name}</b></Link></td>
                   <td style={{ textTransform: 'capitalize' }}>{c.segment.replace(/-/g, ' ')}</td>
                   <td>{[c.city, c.country].filter(Boolean).join(', ') || '—'}</td>
                   <td><Badge tone={stageTone[c.stage]}>{c.stage}</Badge></td>
@@ -103,9 +105,8 @@ export function Customers() {
   );
 }
 
-export function CustomerDetail() {
-  const { customerId = '' } = useParams();
-  const navigate = useNavigate();
+export function CustomerDetail({ id: customerId }: { id: string }) {
+  const router = useRouter();
   const { customers, projects, quotes, activities, saveCustomer, saveProject, removeRecord } = useWorkspace();
   const { org, user, role } = useSession();
   const customer = customers.find(c => c.id === customerId);
@@ -113,7 +114,7 @@ export function CustomerDetail() {
   const [newProject, setNewProject] = useState('');
   const writable = can(role, 'customer.write');
 
-  if (!customer) return <Card><Empty title="Customer not found" message="This record may have been deleted or belongs to another organization." action={<Link className="btn" to="/customers">Back to customers</Link>} /></Card>;
+  if (!customer) return <Card><Empty title="Customer not found" message="This record may have been deleted or belongs to another organization." action={<Link className="btn" href="/app/customers">Back to customers</Link>} /></Card>;
 
   const mine = projectsOf(projects, customer.id), theirQuotes = quotesOf(quotes, 'customerId', customer.id);
   const createProject = async () => {
@@ -126,16 +127,16 @@ export function CustomerDetail() {
       sizing: defaultSizingInput(), studioConfig: null, notes: '', createdAt: nowIso(), updatedAt: nowIso(), updatedBy: user!.displayName,
     }, `Project ${name} created for ${customer.name}.`);
     setNewProject('');
-    navigate(`/projects/${id}`);
+    router.push(`/app/projects?id=${id}`);
   };
 
   return (
     <div className="grid" style={{ gap: 16 }}>
       <div className="row">
-        <Link className="btn ghost sm" to="/customers"><ArrowLeft size={15} /> Customers</Link>
+        <Link className="btn ghost sm" href="/app/customers"><ArrowLeft size={15} /> Customers</Link>
         <div className="spacer" />
         {writable && <button className="btn" onClick={() => setEdit(customer)}>Edit</button>}
-        {can(role, 'org.manage') && <button className="btn danger" onClick={() => { if (confirm(`Delete ${customer.name} and keep its projects? This cannot be undone.`)) { void removeRecord('customers', customer.id); navigate('/customers'); } }}><Trash2 size={14} /> Delete</button>}
+        {can(role, 'org.manage') && <button className="btn danger" onClick={() => { if (confirm(`Delete ${customer.name} and keep its projects? This cannot be undone.`)) { void removeRecord('customers', customer.id); router.push('/app/customers'); } }}><Trash2 size={14} /> Delete</button>}
       </div>
 
       <div className="grid cols-3">
@@ -169,7 +170,7 @@ export function CustomerDetail() {
               <table className="data">
                 <thead><tr><th>Project</th><th>Reference</th><th>Application</th><th>Status</th><th>Updated</th></tr></thead>
                 <tbody>{mine.map(p => (
-                  <tr key={p.id}><td><Link to={`/projects/${p.id}`}><b>{p.name}</b></Link></td><td className="mono">{p.reference}</td>
+                  <tr key={p.id}><td><Link href={`/app/projects?id=${p.id}`}><b>{p.name}</b></Link></td><td className="mono">{p.reference}</td>
                     <td style={{ textTransform: 'capitalize' }}>{p.sizing.applicationId.replace(/-/g, ' ')}</td>
                     <td><Badge tone={p.status === 'awarded' ? 'good' : p.status === 'quoted' ? 'info' : 'neutral'}>{p.status}</Badge></td>
                     <td className="muted">{date(p.updatedAt)}</td></tr>
@@ -183,7 +184,7 @@ export function CustomerDetail() {
               <table className="data">
                 <thead><tr><th>Number</th><th>Project</th><th>Status</th><th>Valid until</th><th className="num">Value</th></tr></thead>
                 <tbody>{theirQuotes.map(q => (
-                  <tr key={q.id}><td><Link to={`/quotes/${q.id}`}><b>{q.number}</b> r{q.version}</Link></td><td>{q.projectName}</td>
+                  <tr key={q.id}><td><Link href={`/app/quotes?id=${q.id}`}><b>{q.number}</b> r{q.version}</Link></td><td>{q.projectName}</td>
                     <td><Badge tone={quoteTone[q.status]}>{q.status}</Badge></td><td className="muted">{date(q.validUntil)}</td>
                     <td className="num">{formatMoney(q.total, q.currency, true)}</td></tr>
                 ))}</tbody>

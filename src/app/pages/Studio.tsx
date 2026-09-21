@@ -1,5 +1,7 @@
+'use client';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Camera, Save } from 'lucide-react';
 import { brand } from '../../brand/brand';
 import { useSession } from '../../platform/auth';
@@ -22,7 +24,7 @@ const captureCanvas = (root: HTMLElement | null) => new Promise<string | null>(r
 });
 
 export function Studio() {
-  const [params] = useSearchParams();
+  const params = useSearchParams();
   const { org } = useSession();
   const { projects, saveProject } = useWorkspace();
   const project = projects.find(p => p.id === params.get('project'));
@@ -77,7 +79,7 @@ export function Studio() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 18px', background: '#153956', color: '#fff', fontSize: 12.5 }}>
-        <Link to={project ? `/projects/${project.id}` : '/'} style={{ color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
+        <Link href={project ? `/app/projects?id=${project.id}` : '/app'} style={{ color: '#fff', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
           <ArrowLeft size={15} /> Back to {project ? 'project' : 'workspace'}
         </Link>
         <span style={{ opacity: .55 }}>|</span>

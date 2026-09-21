@@ -1,3 +1,4 @@
+'use client';
 import { useEffect, useState, type ReactNode } from 'react';
 
 export const Card = ({ title, subtitle, actions, children, tight }: { title?: string; subtitle?: string; actions?: ReactNode; children: ReactNode; tight?: boolean }) => (

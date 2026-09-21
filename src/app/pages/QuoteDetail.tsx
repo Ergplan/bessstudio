@@ -1,5 +1,7 @@
+'use client';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Printer, Copy, Send, Download, FileCode2, RotateCcw } from 'lucide-react';
 import { Card, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, Field, quoteTone, date } from '../components/ui';
 import { Proposal } from '../components/Proposal';
@@ -16,9 +18,8 @@ import { currencies, formatMoney, type Currency } from '../../catalog/pricing';
 
 type Tab = 'commercial' | 'scope' | 'content' | 'offer' | 'proposal';
 
-export function QuoteDetail() {
-  const { quoteId = '' } = useParams();
-  const navigate = useNavigate();
+export function QuoteDetail({ id: quoteId }: { id: string }) {
+  const router = useRouter();
   const { quotes, projects, priceBook, saveQuote } = useWorkspace();
   const { org, role } = useSession();
   const [tab, setTab] = useState<Tab>('commercial');
@@ -45,7 +46,7 @@ export function QuoteDetail() {
     } catch { return null; }
   }, [quote, org, project, priceBook]);
 
-  if (!quote || !org) return <Card><Empty title="Quotation not found" message="It may have been deleted." action={<Link className="btn" to="/quotes">Back to quotations</Link>} /></Card>;
+  if (!quote || !org) return <Card><Empty title="Quotation not found" message="It may have been deleted." action={<Link className="btn" href="/app/quotes">Back to quotations</Link>} /></Card>;
 
   const money = (n: number) => formatMoney(n, quote.currency);
   const patch = (changes: Partial<Quote>, note?: string) => {
@@ -58,7 +59,7 @@ export function QuoteDetail() {
   };
   const setStatus = (status: QuoteStatus) => patch({ status, sentAt: status === 'sent' ? new Date().toISOString() : quote.sentAt },
     `Quotation ${quote.number} moved to ${status}.`);
-  const revise = async () => { const next = reviseQuote(quote); await saveQuote(next, `Revision ${next.version} of ${quote.number} created.`, 'created'); navigate(`/quotes/${next.id}`); };
+  const revise = async () => { const next = reviseQuote(quote); await saveQuote(next, `Revision ${next.version} of ${quote.number} created.`, 'created'); router.push(`/app/quotes?id=${next.id}`); };
 
   const setOffer = (patch: Partial<OfferContent>) =>
     patch && quote && void saveQuote({ ...quote, offer: { ...(quote.offer ?? {}), ...patch } });
@@ -80,7 +81,7 @@ export function QuoteDetail() {
   return (
     <div className="grid" style={{ gap: 16 }}>
       <div className="row no-print">
-        <Link className="btn ghost sm" to={`/projects/${quote.projectId}`}><ArrowLeft size={15} /> {quote.projectName}</Link>
+        <Link className="btn ghost sm" href={`/app/projects?id=${quote.projectId}`}><ArrowLeft size={15} /> {quote.projectName}</Link>
         <div className="spacer" />
         {writable && quote.status === 'draft' && <button className="btn" onClick={() => setStatus('internal-review')}>Send for review</button>}
         {writable && ['draft', 'internal-review'].includes(quote.status) && can(role, 'quote.approve') && <button className="btn accent" onClick={() => setStatus('sent')}><Send size={14} /> Mark as sent</button>}
@@ -207,7 +208,7 @@ export function QuoteDetail() {
             </Field>
             <p className="muted">
               {project
-                ? <>Open the <Link to={`/studio?project=${project.id}`}>3D studio</Link> and use “Capture for offer” to place a rendered cut-away on the cover. With no image the document draws a vector cut-away from the sizing.</>
+                ? <>Open the <Link href={`/studio?project=${project.id}`}>3D studio</Link> and use “Capture for offer” to place a rendered cut-away on the cover. With no image the document draws a vector cut-away from the sizing.</>
                 : 'With no image the document draws a vector cut-away from the sizing.'}
             </p>
             <button className="btn sm" disabled={!writable} onClick={() => quote && void saveQuote({ ...quote, offer: {} }, 'Offer content reset to the generated defaults.')}>

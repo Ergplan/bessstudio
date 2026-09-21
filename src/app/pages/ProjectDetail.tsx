@@ -1,5 +1,7 @@
+'use client';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Box, FileText, RotateCcw } from 'lucide-react';
 import { Card, Stat, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, Field, Slider, pct, date } from '../components/ui';
 import { LineChart, BarChart, CompositionBar, series, status } from '../components/viz';
@@ -20,9 +22,8 @@ import type { ApplicationId } from '../../sizing/applications';
 
 type Tab = 'requirements' | 'losses' | 'design' | 'performance' | 'economics';
 
-export function ProjectDetail() {
-  const { projectId = '' } = useParams();
-  const navigate = useNavigate();
+export function ProjectDetail({ id: projectId }: { id: string }) {
+  const router = useRouter();
   const { projects, quotes, priceBook, saveProject, saveQuote } = useWorkspace();
   const { org, user, role } = useSession();
   const [tab, setTab] = useState<Tab>('requirements');
@@ -36,7 +37,7 @@ export function ProjectDetail() {
     catch (e) { return { error: e instanceof Error ? e.message : 'Sizing failed.' } as const; }
   }, [project, priceBook]);
 
-  if (!project) return <Card><Empty title="Project not found" message="This project may have been deleted." action={<Link className="btn" to="/projects">Back to projects</Link>} /></Card>;
+  if (!project) return <Card><Empty title="Project not found" message="This project may have been deleted." action={<Link className="btn" href="/app/projects">Back to projects</Link>} /></Card>;
   if (!computed || 'error' in computed) return <Card><Empty title="Sizing could not run" message={('error' in (computed ?? {}) ? computed!.error : '') || 'Check the catalogue selection.'} /></Card>;
 
   const { sizing, finance } = computed;
@@ -61,15 +62,15 @@ export function ProjectDetail() {
     });
     await saveQuote(quote, `Quotation ${quote.number} raised for ${project.name}.`, 'created');
     await saveProject({ ...project, status: 'quoted' });
-    navigate(`/quotes/${quote.id}`);
+    router.push(`/app/quotes?id=${quote.id}`);
   };
 
   return (
     <div className="grid" style={{ gap: 16 }}>
       <div className="row">
-        <Link className="btn ghost sm" to={`/customers/${project.customerId}`}><ArrowLeft size={15} /> {project.customerName}</Link>
+        <Link className="btn ghost sm" href={`/app/customers?id=${project.customerId}`}><ArrowLeft size={15} /> {project.customerName}</Link>
         <div className="spacer" />
-        <Link className="btn" to={`/studio?project=${project.id}`}><Box size={15} /> Open 3D studio</Link>
+        <Link className="btn" href={`/studio?project=${project.id}`}><Box size={15} /> Open 3D studio</Link>
         {can(role, 'quote.write') && <button className="btn accent" onClick={() => void issueQuote()}><FileText size={15} /> Create quotation</button>}
       </div>
 
@@ -373,7 +374,7 @@ export function ProjectDetail() {
           <table className="data">
             <thead><tr><th>Number</th><th>Status</th><th>Prepared by</th><th>Valid until</th><th className="num">Value</th></tr></thead>
             <tbody>{quotesOf(quotes, 'projectId', project.id).map(q => (
-              <tr key={q.id}><td><Link to={`/quotes/${q.id}`}><b>{q.number}</b> r{q.version}</Link></td>
+              <tr key={q.id}><td><Link href={`/app/quotes?id=${q.id}`}><b>{q.number}</b> r{q.version}</Link></td>
                 <td><Badge tone={q.status === 'won' ? 'good' : q.status === 'lost' ? 'bad' : 'info'}>{quoteStatuses.includes(q.status) ? q.status : 'draft'}</Badge></td>
                 <td className="muted">{q.preparedBy}</td><td className="muted">{date(q.validUntil)}</td>
                 <td className="num">{formatMoney(q.total, q.currency, true)}</td></tr>

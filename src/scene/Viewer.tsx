@@ -1,3 +1,4 @@
+'use client';
 import {Component,forwardRef,useEffect,useImperativeHandle,useLayoutEffect,useMemo,useRef,useState,type ReactNode} from 'react';
 import {Canvas,useFrame,useThree,type ThreeEvent} from '@react-three/fiber';
 import {OrbitControls,Html,ContactShadows} from '@react-three/drei';

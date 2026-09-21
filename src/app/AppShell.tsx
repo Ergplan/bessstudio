@@ -1,28 +1,31 @@
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+'use client';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { LayoutDashboard, Users, FolderKanban, FileText, Box, Settings, LogOut, Boxes, Cloud, HardDrive } from 'lucide-react';
 import { brand } from '../brand/brand';
 import { useSession } from '../platform/auth';
 import { useWorkspace } from '../platform/workspace';
 
-type Link = { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean };
-const links: Link[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/customers', label: 'Customers', icon: Users },
-  { to: '/projects', label: 'Projects', icon: FolderKanban },
-  { to: '/quotes', label: 'Quotes', icon: FileText },
+type Link_ = { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean };
+const links: Link_[] = [
+  { to: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/app/customers', label: 'Customers', icon: Users },
+  { to: '/app/projects', label: 'Projects', icon: FolderKanban },
+  { to: '/app/quotes', label: 'Quotes', icon: FileText },
 ];
-const tools: Link[] = [
+const tools: Link_[] = [
   { to: '/studio', label: '3D Studio', icon: Box },
-  { to: '/catalog', label: 'Catalogue', icon: Boxes },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/app/catalog', label: 'Catalogue', icon: Boxes },
+  { to: '/app/settings', label: 'Settings', icon: Settings },
 ];
 
-export function AppShell() {
+export function AppShell({ children }: { children: React.ReactNode }) {
   const { org, user, role, organizations, switchOrg, signOutUser, mode } = useSession();
   const { toast } = useWorkspace();
-  const { pathname } = useLocation();
+  const pathname = usePathname();
   const branding = org?.branding;
   const title = [...links, ...tools].find(l => (l.end ? pathname === l.to : pathname.startsWith(l.to)))?.label ?? 'Workspace';
+  const active = (l: Link_) => (l.end ? pathname === l.to : pathname.startsWith(l.to));
   const initials = (user?.displayName ?? 'U').split(' ').map(p => p[0]).slice(0, 2).join('').toUpperCase();
 
   return (
@@ -43,9 +46,9 @@ export function AppShell() {
         )}
         <nav className="nav">
           <h5>Pipeline</h5>
-          {links.map(l => <NavLink key={l.to} to={l.to} end={l.end} className={({ isActive }) => (isActive ? 'active' : '')}><l.icon size={16} />{l.label}</NavLink>)}
+          {links.map(l => <Link key={l.to} href={l.to} className={active(l) ? 'active' : ''}><l.icon size={16} />{l.label}</Link>)}
           <h5>Engineering</h5>
-          {tools.map(l => <NavLink key={l.to} to={l.to} className={({ isActive }) => (isActive ? 'active' : '')}><l.icon size={16} />{l.label}</NavLink>)}
+          {tools.map(l => <Link key={l.to} href={l.to} className={active(l) ? 'active' : ''}><l.icon size={16} />{l.label}</Link>)}
         </nav>
         <div className="sidebar-foot">
           <img src={brand.wordmarkLight} alt={brand.vendor} />
@@ -65,7 +68,7 @@ export function AppShell() {
           <div className="avatar" title={`${user?.displayName} · ${user?.email}`}>{initials}</div>
           <button className="btn ghost sm" onClick={() => void signOutUser()} title="Sign out"><LogOut size={15} /></button>
         </header>
-        <div className="page"><Outlet /></div>
+        <div className="page">{children}</div>
         <div className="platform-credit no-print">
           <img src={brand.mark} alt="" />
           {brand.creditLong} · {brand.copyright()}

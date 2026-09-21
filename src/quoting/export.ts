@@ -1,4 +1,5 @@
-import offerCss from '../app/offer.css?raw';
+'use client';
+import { offerCss } from '../app/offerStyles';
 import { brand } from '../brand/brand';
 
 /**

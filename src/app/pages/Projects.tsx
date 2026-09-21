@@ -1,5 +1,6 @@
+'use client';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Card, Badge, Empty, date } from '../components/ui';
 import { useWorkspace } from '../../platform/workspace';
 import { sizeSystem } from '../../sizing/engine';
@@ -36,8 +37,8 @@ export function Projects() {
               const warns = s?.warnings.filter(w => w.level === 'warning').length ?? 0;
               return (
                 <tr key={p.id}>
-                  <td><Link to={`/projects/${p.id}`}><b>{p.name}</b></Link><div className="mono" style={{ color: 'var(--slate-light)' }}>{p.reference}</div></td>
-                  <td><Link to={`/customers/${p.customerId}`}>{p.customerName}</Link></td>
+                  <td><Link href={`/app/projects?id=${p.id}`}><b>{p.name}</b></Link><div className="mono" style={{ color: 'var(--slate-light)' }}>{p.reference}</div></td>
+                  <td><Link href={`/app/customers?id=${p.customerId}`}>{p.customerName}</Link></td>
                   <td style={{ textTransform: 'capitalize' }}>{p.sizing.applicationId.replace(/-/g, ' ')}</td>
                   <td className="num">{s ? `${s.ratedPowerMW.toFixed(2)} MW` : '—'}</td>
                   <td className="num">{s ? `${s.requiredUsableMWh.toFixed(1)} MWh` : '—'}</td>
@@ -49,7 +50,7 @@ export function Projects() {
               );
             })}</tbody>
           </table>
-        ) : <Empty title="No projects" message="Open a customer and add a project to start sizing." action={<Link className="btn accent" to="/customers">Go to customers</Link>} />}
+        ) : <Empty title="No projects" message="Open a customer and add a project to start sizing." action={<Link className="btn accent" href="/app/customers">Go to customers</Link>} />}
       </Card>
     </div>
   );

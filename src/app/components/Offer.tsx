@@ -1,3 +1,4 @@
+'use client';
 import { useEffect, useRef, useState } from 'react';
 import { brand } from '../../brand/brand';
 import { formatMoney, landedCost, localRate, type Currency } from '../../catalog/pricing';
@@ -10,7 +11,7 @@ import type { PriceBook } from '../../catalog/pricing';
 import type { Organization, Quote } from '../../platform/types';
 import { EnclosureDiagram } from './EnclosureDiagram';
 import { date } from './ui';
-import '../offer.css';
+import { offerCss } from '../offerStyles';
 
 export type OfferProps = { quote: Quote; org: Organization; sizing: SizingResult; finance: FinanceResult; content: OfferContent; priceBook: PriceBook };
 
@@ -129,6 +130,7 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
 
   return (
     <div className="offer" style={{ ['--o-navy' as string]: b.primary, ['--o-accent' as string]: b.accent }}>
+      <style>{offerCss}</style>
 
       {/* ---------------------------------------------------------------- cover */}
       <Page n={1} org={org} content={content} title="Technical & Commercial Proposal">

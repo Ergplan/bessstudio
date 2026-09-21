@@ -4,25 +4,26 @@
   "version": "2.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview --host 127.0.0.1",
+    "dev": "next dev -p 5178",
+    "build": "next build",
+    "preview": "npx serve out -l 5178",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "test:watch": "vitest",
-    "emulators": "firebase emulators:start",
     "deploy": "npm run build && firebase deploy",
     "deploy:hosting": "npm run build && firebase deploy --only hosting",
-    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes"
+    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes",
+    "start": "npx serve out -l 5178",
+    "emulators": "firebase emulators:start"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",
     "@react-three/fiber": "9.7.0",
     "firebase": "^12.19.0",
     "lucide-react": "^0.468.0",
+    "next": "^16.3.5",
     "react": "~19.2.0",
     "react-dom": "~19.2.0",
-    "react-router-dom": "^7.18.4",
     "three": "^0.183.2",
     "zod": "^4.0.0",
     "zustand": "^5.0.0"

@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { Card, Badge, Tabs, KV } from '../components/ui';
 import { cells, enclosures, packSpecs, pcsUnits, transformers, cellOf, packOf, packEnergyKWh, enclosureStrings } from '../../catalog/products';

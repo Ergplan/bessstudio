@@ -1,3 +1,4 @@
+'use client';
 import {useEffect,useState,type RefObject} from 'react';
 import {Download,Upload,RotateCcw,Maximize} from 'lucide-react';
 import type {Model} from '../domain/model';

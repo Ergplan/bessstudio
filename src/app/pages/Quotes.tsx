@@ -1,5 +1,6 @@
+'use client';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Card, Badge, Empty, quoteTone, date } from '../components/ui';
 import { useWorkspace } from '../../platform/workspace';
 import { formatMoney } from '../../catalog/pricing';
@@ -32,9 +33,9 @@ export function Quotes() {
             <thead><tr><th>Number</th><th>Customer</th><th>Project</th><th>Status</th><th>Prepared</th><th>Valid until</th><th className="num">Value</th></tr></thead>
             <tbody>{rows.map(q => (
               <tr key={q.id}>
-                <td><Link to={`/quotes/${q.id}`}><b>{q.number}</b></Link> <span className="muted">r{q.version}</span></td>
-                <td><Link to={`/customers/${q.customerId}`}>{q.customerName}</Link></td>
-                <td><Link to={`/projects/${q.projectId}`}>{q.projectName}</Link></td>
+                <td><Link href={`/app/quotes?id=${q.id}`}><b>{q.number}</b></Link> <span className="muted">r{q.version}</span></td>
+                <td><Link href={`/app/customers?id=${q.customerId}`}>{q.customerName}</Link></td>
+                <td><Link href={`/app/projects?id=${q.projectId}`}>{q.projectName}</Link></td>
                 <td><Badge tone={quoteTone[q.status]}>{q.status}</Badge></td>
                 <td className="muted">{q.preparedBy}<div style={{ fontSize: 11 }}>{date(q.createdAt)}</div></td>
                 <td className="muted">{date(q.validUntil)}</td>
@@ -42,7 +43,7 @@ export function Quotes() {
               </tr>
             ))}</tbody>
           </table>
-        ) : <Empty title="No quotations" message="Size a project, then raise a quotation from the sizing workbench." action={<Link className="btn accent" to="/projects">Go to projects</Link>} />}
+        ) : <Empty title="No quotations" message="Size a project, then raise a quotation from the sizing workbench." action={<Link className="btn accent" href="/app/projects">Go to projects</Link>} />}
       </Card>
     </div>
   );

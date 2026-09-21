@@ -17,14 +17,20 @@ against one customer record.
 | **Economics** | Itemised cost stack, year-by-year cash flow, LCOS, NPV, IRR and payback, with charging energy priced separately from gross revenue and open-access wheeling losses carried through. |
 | **Quotations** | Sell-price build-up, editable line items, scope and terms, discount and tax, versioned revisions, and a one-page summary. |
 | **Offers** | A four-page A4 technical and commercial proposal generated from the project: cover with a cut-away of the quoted enclosure, plant configuration and specifications, the year-by-year energy schedule, and the landed price build-up with the order value. Prints to PDF or exports as a standalone HTML file. |
+| **Landing** | A dark, technical opening page where the enclosure assembles itself from cells and wiring on a 2D canvas, then recedes as the wordmark is revealed. No three.js: the 3D bundle is not fetched until somebody opens the studio. |
 | **3D studio** | The original parametric container assembly — racks, packs, 4 992 cells, busbars, HV, coolant loops and BMS routing — for the engineering conversation. |
 | **Catalogue** | Cells, packs, enclosures, power conversion and transformers, each carrying its provenance. |
+
+Built with **Next.js** (App Router) and exported as a static site, so the whole studio runs in the
+browser against Firebase with nothing to operate on a server.
 
 ## Running it
 
 ```bash
 npm install
 npm run dev          # http://127.0.0.1:5178
+npm run build        # static export to out/
+npm run preview      # serve the export exactly as Firebase Hosting will
 ```
 
 With no Firebase project configured the studio opens a **local demo workspace** stored in the
@@ -44,7 +50,7 @@ https://bessstudio-e55e1.web.app.
 
 1. In the console, enable **Authentication** (Email/Password, and Google for single sign-on) and
    **Cloud Firestore**.
-2. Copy `.env.example` to `.env` and fill in `VITE_FIREBASE_API_KEY` and `VITE_FIREBASE_APP_ID`
+2. Copy `.env.example` to `.env` and fill in `NEXT_PUBLIC_FIREBASE_API_KEY` and `NEXT_PUBLIC_FIREBASE_APP_ID`
    from **Project settings → Your apps → Web app**. Everything else is already filled in.
 3. `npm run deploy` — builds, publishes hosting, and pushes the Firestore rules and indexes.
 
@@ -136,15 +142,25 @@ mechanical design, grid compliance and usable AC performance require validation 
 ## Layout
 
 ```
+app/                        Next.js App Router
+  page.tsx                  landing
+  sign-in/  studio/         full-screen routes
+  app/                      the workspace, behind the auth gate
 src/
   brand/        platform identity and white-label tenant branding
   catalog/      equipment catalogue and price book
   sizing/       application presets, degradation and augmentation engine, financial model
-  quoting/      sell-price build-up, numbering, versioning, scope and terms
+  quoting/      sell-price build-up, numbering, versioning, scope, terms, offer document
   platform/     types, permissions, Firebase, repository adapters, session, workspace, seed
-  app/          shell, routing, pages, chart and UI primitives, proposal document
+  app/          shell, pages, landing, chart and UI primitives, offer and proposal documents
   domain/ geometry/ scene/ connectivity/ export/ config/   the 3D studio engine
 ```
+
+### Routing
+
+A static export cannot pre-render a route for an identifier that will not exist until a customer is
+created, so record pages carry theirs in the query string — `/app/projects?id=prj_1` rather than
+`/app/projects/prj_1`. List and detail share one route and switch on the parameter.
 
 ## Where it goes next
 

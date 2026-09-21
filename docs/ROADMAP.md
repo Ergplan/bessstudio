@@ -24,6 +24,7 @@ rather than a rewrite.
 | Equipment catalogue and per-organization price book in six currencies | `src/catalog` |
 | Parametric 3D container assembly with electrical and coolant routing | `src/domain`, `src/scene` |
 | Offline demo workspace so a demonstration never depends on the network | `src/platform/repo.ts` |
+| Landing page with the enclosure assembling from cells and wiring on a 2D canvas | `src/app/landing` |
 
 ---
 

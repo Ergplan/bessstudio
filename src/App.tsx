@@ -1,3 +1,4 @@
+'use client';
 import {useMemo,useRef,useState} from 'react';
 import {Box,Layers3,SlidersHorizontal,Download,ChevronRight,RotateCcw,Maximize,Settings2,Eye,TriangleAlert,PanelLeft,Upload,ArrowUpRight,BatteryCharging,Network,X,Info} from 'lucide-react';
 import {buildModel} from './domain/model';

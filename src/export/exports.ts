@@ -1,3 +1,4 @@
+'use client';
 import * as THREE from 'three';
 import {source,qualification,parseConfig,type Config} from '../config/schema';
 import {type Model,buildModel} from '../domain/model';
