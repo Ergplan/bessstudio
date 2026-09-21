@@ -10,11 +10,12 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "test:watch": "vitest",
-    "deploy": "npm run build && firebase deploy",
-    "deploy:hosting": "npm run build && firebase deploy --only hosting",
-    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes",
+    "deploy": "npm run build && npx -y firebase-tools@latest deploy",
+    "deploy:hosting": "npm run build && npx -y firebase-tools@latest deploy --only hosting",
+    "deploy:rules": "npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes",
     "start": "npx serve out -l 5178",
-    "emulators": "firebase emulators:start"
+    "emulators": "npx -y firebase-tools@latest emulators:start",
+    "login": "npx -y firebase-tools@latest login"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",

@@ -652,3 +652,46 @@ describe('offer document', () => {
     expect(plain.qualifications.join(' ')).toContain('assume no augmentation');
   });
 });
+
+describe('charge window', () => {
+  const base = (patch: Partial<SizingInput> = {}) => sizeSystem({ ...defaultSizingInput('solar-shifting'), powerMW: 5, durationH: 4, chargeDurationH: 4, ...patch });
+
+  it('sizes the fleet and the converters on whichever direction asks for more power', () => {
+    const symmetric = base();
+    expect(symmetric.chargePowerMW).toBeCloseTo(symmetric.ratedPowerMW, 6);
+
+    // Half the window to put the same energy back means twice the power on the charge side.
+    const fast = base({ chargeDurationH: 2 });
+    expect(fast.chargePowerMW).toBeCloseTo(symmetric.requiredUsableMWh / 2, 6);
+    expect(fast.pcsCount).toBeGreaterThan(symmetric.pcsCount);
+    expect(fast.units).toBeGreaterThanOrEqual(symmetric.units);
+    expect(fast.warnings.some(w => w.code === 'charge-limited')).toBe(true);
+
+    // A longer window never shrinks the plant below what discharging already needs.
+    const slow = base({ chargeDurationH: 12 });
+    expect(slow.pcsCount).toBe(symmetric.pcsCount);
+    expect(slow.warnings.some(w => w.code === 'charge-limited')).toBe(false);
+  });
+
+  it('keeps the charge rate inside the pack rating by sizing for it, and says what it cost', () => {
+    // A half-hour window on a four-hour plant is eight times the discharge power, which is what
+    // finally forces units beyond what the energy alone needs.
+    const fast = base({ chargeDurationH: 0.5 });
+    // The fleet grows until charging is achievable, so the design is never infeasible.
+    expect(fast.chargeCRate).toBeLessThanOrEqual(fast.packCRate + 1e-9);
+    expect(fast.warnings.some(w => w.code === 'charge-rate')).toBe(false);
+    // And the extra units bought purely to charge faster are named, with the window that avoids them.
+    const oversize = fast.warnings.find(w => w.code === 'charge-oversize');
+    expect(oversize).toBeDefined();
+    expect(oversize!.text).toMatch(/Allowing [\d.]+ h to charge/);
+    const relaxed = Number(oversize!.text.match(/Allowing ([\d.]+) h/)![1]);
+    expect(base({ chargeDurationH: relaxed }).units).toBeLessThan(fast.units);
+  });
+
+  it('defaults the charge window to the discharge duration and survives a record without one', () => {
+    expect(defaultSizingInput('solar-shifting').chargeDurationH).toBe(defaultSizingInput('solar-shifting').durationH);
+    const legacy = { ...defaultSizingInput(), chargeDurationH: undefined } as unknown as SizingInput;
+    expect(normaliseSizingInput(legacy).chargeDurationH).toBe(legacy.durationH);
+    expect(() => sizeSystem(legacy)).not.toThrow();
+  });
+});

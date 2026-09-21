@@ -39,6 +39,8 @@ export const defaultDegradation = (): DegradationInput => ({ mode: 'table', rete
 export type SizingInput = {
   applicationId: ApplicationId; mode: SizingMode;
   powerMW: number; durationH: number; usableEnergyMWh: number;
+  /** Hours allowed to put the contracted energy back in. Sets the charge rate the plant must sustain. */
+  chargeDurationH: number;
   cyclesPerDay: number; daysPerYear: number; projectYears: number;
   dod: number; availability: number;
   ambientC: number; altitudeM: number;
@@ -58,7 +60,7 @@ export type Cohort = { year: number; dcMWh: number; units: number };
 export type SizingResult = {
   input: SizingInput;
   enclosure: EnclosureSpec; pcs: PcsSpec; transformer: TransformerSpec | null;
-  requiredUsableMWh: number; ratedPowerMW: number; effectiveDurationH: number;
+  requiredUsableMWh: number; ratedPowerMW: number; effectiveDurationH: number; chargePowerMW: number; chargeCRate: number;
   units: number; totalUnits: number; installedDcMWh: number; day1UsableMWh: number;
   packs: number; cells: number; racks: number; strings: number;
   footprintM2: number; massTonnes: number;
@@ -75,6 +77,7 @@ export const defaultSizingInput = (applicationId: ApplicationId = 'peak-shaving'
   const a = application(applicationId);
   return {
     applicationId, mode: 'power-duration', powerMW: 2.5, durationH: a.durationH, usableEnergyMWh: 2.5 * a.durationH,
+    chargeDurationH: a.durationH,
     cyclesPerDay: a.cyclesPerDay, daysPerYear: a.daysPerYear, projectYears: 20, dod: a.dod, availability: a.availability,
     ambientC: 35, altitudeM: 100, enclosureId: 'enc-5mwh-20ft', pcsId: 'pcs-2507', transformerId: 'tx-3150',
     augmentation: a.cyclesPerDay * a.dod > 1 ? 'periodic' : 'oversize-day1',
@@ -125,6 +128,7 @@ export function normaliseSizingInput(input: SizingInput): SizingInput {
     (id && list.some(x => x.id === id) ? id : fallback);
   return {
     ...input,
+    chargeDurationH: input.chargeDurationH && input.chargeDurationH > 0 ? input.chargeDurationH : (input.durationH || 2),
     enclosureId: known(enclosures, input.enclosureId, 'enc-5mwh-20ft'),
     pcsId: known(pcsUnits, input.pcsId, 'pcs-2507'),
     transformerId: input.transformerId === null ? null : known(transformers, input.transformerId, 'tx-3150'),
@@ -173,7 +177,11 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   const designRetention = retention(designYear);
   const perUnitAtDesign = usableAc(1, designRetention);
   const unitsForEnergy = perUnitAtDesign > 0 ? ceil(requiredUsableMWh / perUnitAtDesign) : Number.POSITIVE_INFINITY;
-  const unitsForPower = ceil(ratedPowerMW * 1000 / enclosure.ratedKW);
+  // Putting the energy back in over a shorter window than it comes out is the more demanding
+  // constraint, so the fleet and the converters are sized on whichever direction asks for more.
+  const chargePowerMW = requiredUsableMWh / Math.max(input.chargeDurationH, 0.01);
+  const designPowerMW = Math.max(ratedPowerMW, chargePowerMW);
+  const unitsForPower = ceil(designPowerMW * 1000 / enclosure.ratedKW);
   const units = Math.max(1, Math.min(unitsForEnergy, 5000), unitsForPower);
 
   // Year-by-year roll-forward with per-vintage cohorts, so augmented capacity ages from its own year.
@@ -225,17 +233,31 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   const totalUnits = cohorts.reduce((s, c) => s + c.units, 0);
   const installedDcMWh = units * unitDcMWh;
   const day1UsableMWh = usableAc(units, 1);
-  const pcsCount = Math.max(1, ceil(ratedPowerMW * 1000 / pcs.ratedKW));
-  const transformerCount = transformer ? Math.max(1, ceil(ratedPowerMW * 1000 / input.powerFactor / transformer.ratedKVA)) : 0;
+  const pcsCount = Math.max(1, ceil(designPowerMW * 1000 / pcs.ratedKW));
+  const transformerCount = transformer ? Math.max(1, ceil(designPowerMW * 1000 / input.powerFactor / transformer.ratedKVA)) : 0;
   const auxMWhPerDay = (auxChargePerUnit + auxDischargePerUnit) * units;
   const rteAc = L.chargeEfficiencyDc * L.dischargeEfficiencyDc * wiring ** 2 * (L.idtOnDischarge ? idt : 1) * idt;
-  const systemCRate = ratedPowerMW * 1000 / Math.max(installedDcMWh * 1000, 1e-6);
+  const systemCRate = ratedPowerMW / Math.max(installedDcMWh, 1e-6);
+  const chargeCRate = chargePowerMW / Math.max(installedDcMWh, 1e-6);
   const packCRate = enclosureCRate(enclosure);
   const lifetimeThroughputMWh = years.reduce((s, y) => s + y.deliveredMWh, 0);
   const warrantyThroughputMWh = totalUnits * unitDcMWh * cell.cycleLife * input.dod;
 
   if (systemCRate > packCRate + 1e-9) warnings.push({ code: 'c-rate', level: 'error', text: `System discharge rate ${systemCRate.toFixed(2)} C exceeds the ${packCRate.toFixed(2)} C the ${pack.model} pack sustains at ${pack.continuousA} A. Add units or reduce rated power.` });
   else if (systemCRate > packCRate * 0.9) warnings.push({ code: 'c-rate-margin', level: 'warning', text: `System operates at ${(systemCRate / packCRate * 100).toFixed(0)}% of the pack continuous rating. Thermal review recommended.` });
+  // The fleet is sized so the charge rate is achievable, so this only fires if the unit count hit
+  // its ceiling — a catalogue or requirement that cannot be built from this product.
+  if (chargeCRate > packCRate + 1e-9) warnings.push({ code: 'charge-rate', level: 'error', text: `Returning ${requiredUsableMWh.toFixed(1)} MWh in ${input.chargeDurationH} h needs ${chargeCRate.toFixed(2)} C, above the ${packCRate.toFixed(2)} C the ${pack.model} pack sustains at ${pack.continuousA} A. Allow a longer charge window.` });
+  else if (chargeCRate > packCRate * 0.9) warnings.push({ code: 'charge-rate-margin', level: 'warning', text: `Charging runs at ${(chargeCRate / packCRate * 100).toFixed(0)}% of the pack continuous rating. Thermal review recommended.` });
+  if (chargePowerMW > ratedPowerMW * 1.001) warnings.push({ code: 'charge-limited', level: 'info', text: `The ${input.chargeDurationH} h charge window asks for ${chargePowerMW.toFixed(2)} MW against ${ratedPowerMW.toFixed(2)} MW on discharge, so the converters and the fleet are sized on charging.` });
+  if (unitsForPower > unitsForEnergy && chargePowerMW > ratedPowerMW * 1.001) {
+    // The shortest window the energy-sized fleet could already deliver.
+    const relaxedH = requiredUsableMWh / (unitsForEnergy * enclosure.ratedKW / 1000);
+    warnings.push({
+      code: 'charge-oversize', level: 'warning',
+      text: `The ${input.chargeDurationH} h charge window needs ${unitsForPower} enclosures against ${unitsForEnergy} for the energy alone. Allowing ${relaxedH.toFixed(1)} h to charge would remove the difference.`,
+    });
+  }
   if (enclosure.dcMaxV > pcs.dcMaxV) {
     const ceiling = pcs.dcMaxV / (packOf(enclosure).maxV * enclosure.packsInSeries);
     warnings.push({
@@ -262,7 +284,7 @@ export function sizeSystem(raw: SizingInput): SizingResult {
 
   return {
     input, enclosure, pcs, transformer, requiredUsableMWh, ratedPowerMW,
-    effectiveDurationH: requiredUsableMWh / Math.max(ratedPowerMW, 1e-6),
+    effectiveDurationH: requiredUsableMWh / Math.max(ratedPowerMW, 1e-6), chargePowerMW, chargeCRate,
     units, totalUnits, installedDcMWh, day1UsableMWh,
     packs: units * enclosure.racks * enclosure.packsPerRack, cells: units * enclosureCellCount(enclosure),
     racks: units * enclosure.racks, strings: units * enclosureStrings(enclosure),

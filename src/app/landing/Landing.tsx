@@ -1,4 +1,5 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowRight, Boxes, FileText, Gauge, LineChart, Layers3, ShieldCheck } from 'lucide-react';
 import { brand, defaultBranding } from '../../brand/brand';
@@ -6,6 +7,7 @@ import { applications } from '../../sizing/applications';
 import { enclosures, enclosureEnergyKWh, enclosureCellCount, byId } from '../../catalog/products';
 import { suppliedRetention } from '../../sizing/engine';
 import { BessWireframe } from './BessWireframe';
+import { BuildQuestion } from './BuildQuestion';
 import './landing.css';
 
 const reference = byId(enclosures, 'enc-5mwh-20ft');
@@ -28,6 +30,7 @@ const steps = [
 
 export function Landing() {
   const energyMWh = enclosureEnergyKWh(reference) / 1000;
+  const [asking, setAsking] = useState(false);
   return (
     <div className="landing">
       <nav className="l-nav">
@@ -38,20 +41,21 @@ export function Landing() {
           <a href="#workflow">Workflow</a>
           <a href={brand.vendorUrl} target="_blank" rel="noreferrer">jouleWise</a>
         </div>
-        <Link className="l-btn" href="/sign-in">Sign in</Link>
+        <Link className="l-btn" href="/sign-in/">Sign in</Link>
       </nav>
 
       <header className="l-hero">
         <BessWireframe className="l-canvas" />
         <div className="l-scrim" aria-hidden="true" />
-        <div className="l-hero-inner">
+        <div className={`l-hero-inner${asking ? ' asking' : ''}`}>
           <div className="l-eyebrow l-label">{defaultBranding.displayName} · Battery Energy Storage</div>
           <h1 className="l-title">BESS <span className="thin">Studio</span></h1>
           <p className="l-tagline">Your BESS design studio is here.</p>
           <div className="l-cta">
-            <Link className="l-btn primary" href="/sign-in">Open the studio <ArrowRight size={14} /></Link>
+            <button className="l-btn primary" onClick={() => setAsking(true)}>Start building <ArrowRight size={14} /></button>
             <a className="l-btn" href="#capabilities">See what it does</a>
           </div>
+          {asking && <BuildQuestion onClose={() => setAsking(false)} />}
         </div>
         <div className="l-readout">
           {[
@@ -99,7 +103,7 @@ export function Landing() {
           ))}
         </div>
         <div className="l-cta" style={{ justifyContent: 'flex-start', marginTop: 44, animation: 'none', opacity: 1, transform: 'none' }}>
-          <Link className="l-btn primary" href="/sign-in">Open the demo workspace <ArrowRight size={14} /></Link>
+          <Link className="l-btn primary" href="/sign-in/">Open the demo workspace <ArrowRight size={14} /></Link>
         </div>
         <p className="lede" style={{ marginTop: 18, fontSize: 13 }}>
           The demonstration workspace runs entirely in your browser, seeded with a reference pipeline.

@@ -18,6 +18,7 @@ against one customer record.
 | **Quotations** | Sell-price build-up, editable line items, scope and terms, discount and tax, versioned revisions, and a one-page summary. |
 | **Offers** | A four-page A4 technical and commercial proposal generated from the project: cover with a cut-away of the quoted enclosure, plant configuration and specifications, the year-by-year energy schedule, and the landed price build-up with the order value. Prints to PDF or exports as a standalone HTML file. |
 | **Landing** | A dark, technical opening page where the enclosure assembles itself from cells and wiring on a 2D canvas, then recedes as the wordmark is revealed. No three.js: the 3D bundle is not fetched until somebody opens the studio. |
+| **Opening question** | “What are we building today?” — power in MW or kW, hours of discharge, hours of charge and the application, read back live against the real sizing engine. Answering it creates the project and opens the workbench on it. |
 | **3D studio** | The original parametric container assembly — racks, packs, 4 992 cells, busbars, HV, coolant loops and BMS routing — for the engineering conversation. |
 | **Catalogue** | Cells, packs, enclosures, power conversion and transformers, each carrying its provenance. |
 
@@ -104,7 +105,9 @@ and charging energy, and the landed build-up to the rupee. Both are locked by te
 - **Availability is a time metric**: it limits throughput and revenue, not the energy a healthy
   system delivers in one discharge.
 - **Fleet size** is the greater of the energy requirement in the design year and the unit count
-  needed to keep rated power inside the system's nameplate rating.
+  needed to keep power inside the system's nameplate rating — on whichever of charge or discharge
+  asks for more. A short charge window is often the binding constraint, and the studio says how
+  many enclosures it costs and what window would remove them.
 - **Charging energy follows delivered energy** back through the discharge and charge paths. A plant
   with capacity to spare cycles only what it has contracted rather than assuming a full cycle;
   where nothing is spare the two are identical, which is what the supplied sheet computes.

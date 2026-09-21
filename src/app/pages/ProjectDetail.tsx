@@ -75,7 +75,8 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
       </div>
 
       <div className="grid cols-4">
-        <Stat label="Rated power" value={sizing.ratedPowerMW.toFixed(2)} unit="MW" foot={`${sizing.pcsCount} × ${sizing.pcs.model}`} />
+        <Stat label="Rated power" value={sizing.ratedPowerMW.toFixed(2)} unit="MW"
+          foot={`${sizing.pcsCount} × ${sizing.pcs.model}${sizing.chargePowerMW > sizing.ratedPowerMW * 1.001 ? ` · sized on ${sizing.chargePowerMW.toFixed(1)} MW charging` : ''}`} />
         <Stat label="Contracted usable" value={sizing.requiredUsableMWh.toFixed(1)} unit="MWh" foot={`${sizing.effectiveDurationH.toFixed(2)} h duration`} />
         <Stat label="Installed DC" value={sizing.installedDcMWh.toFixed(2)} unit="MWh" foot={`${sizing.units} × ${sizing.enclosure.model}${sizing.augmentations.length ? ` + ${sizing.totalUnits - sizing.units} augmentation` : ''}`} />
         <Stat label={priceBook.supplyScope === 'turnkey' ? 'Turnkey price' : 'Delivered equipment price'}
@@ -114,6 +115,9 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
                   <Slider label="Duration at rated power" value={project.sizing.durationH} min={0.25} max={12} step={0.25} decimals={2} unit="h" onChange={durationH => set({ durationH })} /></>
               : <><Slider label="Usable energy" value={project.sizing.usableEnergyMWh} min={0.1} max={1000} step={0.1} decimals={1} unit="MWh" onChange={usableEnergyMWh => set({ usableEnergyMWh })} />
                   <Slider label="Discharge duration" value={project.sizing.durationH} min={0.25} max={12} step={0.25} decimals={2} unit="h" onChange={durationH => set({ durationH })} /></>}
+            <Slider label="Hours allowed to charge" value={normaliseSizingInput(project.sizing).chargeDurationH} min={0.25} max={24} step={0.25} decimals={2} unit="h"
+              onChange={chargeDurationH => set({ chargeDurationH })}
+              hint={`Returning the contracted energy in this window asks ${sizing.chargePowerMW.toFixed(2)} MW at ${sizing.chargeCRate.toFixed(2)} C.`} />
             <Slider label="Cycles per day" value={project.sizing.cyclesPerDay} min={0.05} max={12} step={0.05} decimals={2} unit="/day" onChange={cyclesPerDay => set({ cyclesPerDay })} />
             <Slider label="Operating days per year" value={project.sizing.daysPerYear} min={30} max={366} step={1} unit="days" onChange={daysPerYear => set({ daysPerYear })} />
             <Slider label="Depth of discharge" value={project.sizing.dod} scale={100} min={20} max={100} step={1} unit="%" onChange={dod => set({ dod })} />
@@ -256,7 +260,8 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
                   <KV label="Battery packs">{sizing.packs.toLocaleString()}</KV>
                   <KV label="Cells">{sizing.cells.toLocaleString()}</KV>
                   <KV label="DC voltage window">{sizing.dcVoltageWindow[0]}–{sizing.dcVoltageWindow[1]} V</KV>
-                  <KV label="System C-rate">{sizing.systemCRate.toFixed(3)} C</KV>
+                  <KV label="Discharge / charge rate">{sizing.systemCRate.toFixed(3)} / {sizing.chargeCRate.toFixed(3)} C</KV>
+                  <KV label="Charge power">{sizing.chargePowerMW.toFixed(2)} MW over {normaliseSizingInput(project.sizing).chargeDurationH} h</KV>
                 </div>
                 <div>
                   <KV label="Footprint">{sizing.footprintM2.toFixed(1)} m²</KV>
