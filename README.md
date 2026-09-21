@@ -29,7 +29,7 @@ browser against Firebase with nothing to operate on a server.
 
 ```bash
 npm install
-npm run dev          # http://127.0.0.1:5178
+npm run dev          # http://127.0.0.1:3400
 npm run build        # static export to out/
 npm run preview      # serve the export exactly as Firebase Hosting will
 ```

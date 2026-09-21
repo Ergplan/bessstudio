@@ -138,7 +138,7 @@ the browser console for `resource-exhausted` rather than assuming the app is bro
 NEXT_PUBLIC_FIREBASE_EMULATORS=true
 
 npm run emulators        # auth 9099, firestore 8080, UI 4000
-npm run dev              # http://127.0.0.1:5178
+npm run dev              # http://127.0.0.1:3400
 ```
 
 Next's dev server keeps the app on the same port as before. To check what will actually be
