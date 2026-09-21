@@ -39,5 +39,5 @@
     "vite": "^7.3.0",
     "vitest": "^4.1.11"
   },
-  "description": "BESS Design Studio \u2014 sizing, engineering visualisation and quotation for battery energy storage. Developed and managed by jouleWise Technologies."
+  "description": "BESS Studio \u2014 sizing, engineering visualisation and quotation for battery energy storage. Developed and managed by jouleWise Technologies."
 }

@@ -1,4 +1,4 @@
-# BESS Design Studio
+# BESS Studio
 
 Sizing, engineering visualisation and quotation for battery energy storage, in one application and
 against one customer record.

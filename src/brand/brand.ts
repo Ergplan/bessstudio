@@ -1,7 +1,7 @@
 // Platform identity. jouleWise Technologies builds and operates the studio; each organization on
 // the platform carries its own white-label branding on customer-facing output.
 export const brand = Object.freeze({
-  platform: 'BESS Design Studio',
+  platform: 'BESS Studio',
   tagline: 'Sizing, engineering visualisation and quotation for battery energy storage',
   vendor: 'jouleWise Technologies',
   vendorShort: 'jouleWise',
