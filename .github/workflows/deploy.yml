@@ -25,14 +25,10 @@ jobs:
       - run: npm test
       - name: Build
         env:
-          # The web app configuration is compiled into the bundle. It identifies the project
-          # rather than authorising anything; the Firestore rules do the authorising.
+          # The rest of the web app configuration is committed in src/platform/firebaseConfig.ts.
+          # The key identifies the project rather than authorising anything, but it is kept out of
+          # the repository so a build can be pointed at another project.
           NEXT_PUBLIC_FIREBASE_API_KEY: ${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
-          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: bessstudio-e55e1.firebaseapp.com
-          NEXT_PUBLIC_FIREBASE_PROJECT_ID: bessstudio-e55e1
-          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: bessstudio-e55e1.firebasestorage.app
-          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
-          NEXT_PUBLIC_FIREBASE_APP_ID: ${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
         run: npm run build
       - name: Deploy hosting, rules and indexes
         uses: FirebaseExtended/action-hosting-deploy@v0

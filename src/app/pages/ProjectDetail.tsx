@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { ArrowLeft, Box, FileText, RotateCcw } from 'lucide-react';
-import { Card, Stat, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, Field, Slider, pct, date } from '../components/ui';
+import { Card, Stat, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, TextArea, Field, Slider, pct, date } from '../components/ui';
 import { LineChart, BarChart, CompositionBar, series, status } from '../components/viz';
 import { useWorkspace, quotesOf } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
@@ -388,7 +388,7 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
         ) : <p className="muted" style={{ padding: 14 }}>No quotation raised yet.</p>}
       </Card>
 
-      <Field label="Project notes"><textarea rows={3} value={project.notes} disabled={!writable} onChange={e => void saveProject({ ...project, notes: e.target.value })} /></Field>
+      <TextArea label="Project notes" rows={3} value={project.notes} disabled={!writable} onChange={notes => void saveProject({ ...project, notes })} />
     </div>
   );
 }

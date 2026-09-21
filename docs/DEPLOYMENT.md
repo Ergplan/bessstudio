@@ -38,14 +38,15 @@ In the [Firebase console](https://console.firebase.google.com/project/bessstudio
 cp .env.example .env
 ```
 
-`.env.example` already carries the project id, auth domain and storage bucket. Fill in the two
-values only the console can give you:
+The project id, auth domain, storage bucket, sender id and app id are committed in
+`src/platform/firebaseConfig.ts`, so there is exactly one value to supply:
 
 | Variable | Where it comes from |
 |---|---|
 | `NEXT_PUBLIC_FIREBASE_API_KEY` | `apiKey` in the web app config |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | `appId`, of the form `1:123456789:web:abc123` |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | `messagingSenderId`; optional, only used by push |
+
+Every other value can be overridden by its own `NEXT_PUBLIC_FIREBASE_*` variable, which is how a
+build is pointed at a staging project or a customer's own tenant.
 
 `.env` is git-ignored. These `VITE_` variables are compiled into the client bundle and are not
 secrets — a Firebase web API key identifies the project; the Firestore rules are what protect the
@@ -64,13 +65,12 @@ npm run deploy:rules     # rules and indexes only
 ### Deploying from CI
 
 `.github/workflows/deploy.yml` builds, typechecks, tests and publishes on every push to `main`.
-It needs three repository secrets:
+It needs two repository secrets:
 
 | Secret | Value |
 |---|---|
 | `FIREBASE_SERVICE_ACCOUNT` | The whole JSON key. Generate it with `firebase init hosting:github`, which creates the service account and adds the secret, or by hand from **Project settings → Service accounts → Generate new private key**. |
 | `NEXT_PUBLIC_FIREBASE_API_KEY` | Same value as in `.env`. |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | Same value as in `.env`. |
 
 Without `FIREBASE_SERVICE_ACCOUNT` the deploy step fails while the build and test steps still run,
 so the workflow is safe to merge before the secret exists.
@@ -94,6 +94,42 @@ To add a colleague while the invitation flow is still on the roadmap:
 3. Add the organization id to their `users/{uid}.orgIds` array.
 
 After that, roles are managed in **Settings → Team & roles**.
+
+## The Spark plan
+
+Everything the studio uses runs on the free Spark plan. Nothing in the application calls a service
+that requires Blaze.
+
+| Service | Used for | Spark allowance |
+|---|---|---|
+| Hosting | The static export | 10 GB stored, 360 MB/day transferred |
+| Authentication | Email/password and Google sign-in | Unlimited for these providers |
+| Cloud Firestore | Every customer, project, quotation and activity entry | 1 GiB stored; 50 000 reads, 20 000 writes and 20 000 deletes a day |
+
+Two things the application does deliberately to stay inside those daily quotas:
+
+- **Text fields commit once, not once per keystroke.** A field wired straight to the database
+  writes a document per character, which is enough to spend a day's write quota on a single
+  paragraph. Editing is held locally and persisted when the typing stops, on blur, and on unmount —
+  around thirty characters of a site address cost one write rather than thirty.
+- **Collections are read only as deep as the interface shows them.** Reads are metered per document
+  returned, so the append-only activity trail is fetched 120 entries deep rather than 500.
+
+A working session is a few hundred reads and a few dozen writes, so the daily allowance covers a
+small team comfortably. What would push the project to Blaze:
+
+- **Cloud Functions**, needed for server-side quote numbering, scheduled quotation expiry, emailing
+  a proposal or rendering the offer PDF server-side. All of these are roadmap items, not current
+  behaviour.
+- **Cloud Storage**, needed to keep generated PDFs, customer attachments or uploaded logos. New
+  projects need Blaze before a default bucket can be created. The studio keeps logos as URLs and
+  the captured assembly view inside the project document, so it never touches Storage.
+- **Firebase App Hosting**, which would be needed only to serve the record pages on path URLs
+  rather than query strings.
+
+Firestore's daily free quota resets at midnight Pacific time. If a day's allowance runs out the
+application keeps rendering and the writes fail; the topbar badge still reads **Cloud**, so watch
+the browser console for `resource-exhausted` rather than assuming the app is broken.
 
 ## Local emulator workflow
 

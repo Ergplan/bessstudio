@@ -51,11 +51,18 @@ https://bessstudio-e55e1.web.app.
 
 1. In the console, enable **Authentication** (Email/Password, and Google for single sign-on) and
    **Cloud Firestore**.
-2. Copy `.env.example` to `.env` and fill in `NEXT_PUBLIC_FIREBASE_API_KEY` and `NEXT_PUBLIC_FIREBASE_APP_ID`
-   from **Project settings → Your apps → Web app**. Everything else is already filled in.
+2. Copy `.env.example` to `.env` and fill in `NEXT_PUBLIC_FIREBASE_API_KEY` from
+   **Project settings → Your apps → Web app → Config**. Everything else is committed in
+   `src/platform/firebaseConfig.ts`.
 3. `npm run deploy` — builds, publishes hosting, and pushes the Firestore rules and indexes.
 
 Pushes to `main` deploy automatically once the `FIREBASE_SERVICE_ACCOUNT` repository secret exists.
+
+Everything the studio uses — Hosting, Authentication and Cloud Firestore — runs on the free **Spark**
+plan; nothing calls a service that requires Blaze. Text editing commits once the typing stops rather
+than once per keystroke, and collections are read only as deep as the interface shows them, so a
+working session stays well inside the daily free quotas. See
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md#the-spark-plan) for what would eventually need Blaze.
 
 See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the emulator workflow and the first-user setup.
 

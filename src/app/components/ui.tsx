@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 
 export const Card = ({ title, subtitle, actions, children, tight }: { title?: string; subtitle?: string; actions?: ReactNode; children: ReactNode; tight?: boolean }) => (
   <section className="card">
@@ -19,8 +19,60 @@ export function Field({ label, hint, error, children }: { label: string; hint?: 
   return <label className="field"><span>{label}</span>{children}{error ? <div className="err">{error}</div> : hint ? <div className="hint">{hint}</div> : null}</label>;
 }
 
-export function TextInput({ label, value, onChange, placeholder, hint, error, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; hint?: string; error?: string; type?: string }) {
-  return <Field label={label} hint={hint} error={error}><input type={type} value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)} /></Field>;
+/**
+ * Text editing that types locally and persists occasionally.
+ *
+ * A record field wired straight to `onChange` writes on every keystroke, which is one database
+ * write per character — enough to burn a day's free-tier write quota on a single paragraph. The
+ * draft lives here and is committed once the typing stops, on blur, and on unmount so navigating
+ * away never drops the last few characters.
+ */
+export function useDeferredCommit(value: string, onChange: (v: string) => void, delay = 700) {
+  const [draft, setDraft] = useState(value);
+  const draftRef = useRef(value), committedRef = useRef(value), onChangeRef = useRef(onChange);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  onChangeRef.current = onChange;
+
+  // Adopt a change made elsewhere — a reset button, a record reloading — but never clobber typing.
+  useEffect(() => {
+    if (value === committedRef.current) return;
+    committedRef.current = value; draftRef.current = value; setDraft(value);
+  }, [value]);
+
+  const flush = useCallback(() => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null; }
+    if (draftRef.current === committedRef.current) return;
+    committedRef.current = draftRef.current;
+    onChangeRef.current(draftRef.current);
+  }, []);
+
+  const edit = useCallback((next: string) => {
+    draftRef.current = next; setDraft(next);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(flush, delay);
+  }, [delay, flush]);
+
+  useEffect(() => flush, [flush]);   // commit whatever is outstanding when the field goes away
+  return { draft, edit, flush };
+}
+
+export function TextInput({ label, value, onChange, placeholder, hint, error, type = 'text', disabled }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; hint?: string; error?: string; type?: string; disabled?: boolean }) {
+  const { draft, edit, flush } = useDeferredCommit(value, onChange);
+  return (
+    <Field label={label} hint={hint} error={error}>
+      <input type={type} value={draft} placeholder={placeholder} disabled={disabled}
+        onChange={e => edit(e.target.value)} onBlur={flush} />
+    </Field>
+  );
+}
+
+export function TextArea({ label, value, onChange, rows = 3, hint, disabled }: { label: string; value: string; onChange: (v: string) => void; rows?: number; hint?: string; disabled?: boolean }) {
+  const { draft, edit, flush } = useDeferredCommit(value, onChange);
+  return (
+    <Field label={label} hint={hint}>
+      <textarea rows={rows} value={draft} disabled={disabled} onChange={e => edit(e.target.value)} onBlur={flush} />
+    </Field>
+  );
 }
 
 export function SelectInput<T extends string>({ label, value, options, onChange, hint }: { label: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void; hint?: string }) {

@@ -42,6 +42,9 @@ export interface Repository {
 }
 
 const sortKey = (name: CollectionName) => (name === 'activities' ? 'at' : 'updatedAt');
+// Firestore meters reads per document returned, so each collection is fetched only as deep as the
+// interface shows it. The audit trail is append-only and unbounded; the screens show a handful.
+const pageSize = (name: CollectionName) => (name === 'activities' ? 120 : 500);
 const stripUndefined = <T>(value: T): T => JSON.parse(JSON.stringify(value ?? null));
 
 class FirestoreRepository implements Repository {
@@ -65,7 +68,7 @@ class FirestoreRepository implements Repository {
   async removeMember(orgId: string, uid: string) { await deleteDoc(doc(this.db, 'organizations', orgId, 'members', uid)); }
 
   async list<K extends CollectionName>(orgId: string, name: K) {
-    const snap = await getDocs(query(this.path(orgId, name), orderBy(sortKey(name), 'desc'), limit(500)));
+    const snap = await getDocs(query(this.path(orgId, name), orderBy(sortKey(name), 'desc'), limit(pageSize(name))));
     return snap.docs.map(d => ({ id: d.id, ...d.data() }) as Collections[K]);
   }
   async get<K extends CollectionName>(orgId: string, name: K, id: string) {
@@ -77,7 +80,7 @@ class FirestoreRepository implements Repository {
   }
   async remove(orgId: string, name: CollectionName, id: string) { await deleteDoc(doc(this.db, 'organizations', orgId, name, id)); }
   watch<K extends CollectionName>(orgId: string, name: K, onChange: (rows: Collections[K][]) => void) {
-    return onSnapshot(query(this.path(orgId, name), orderBy(sortKey(name), 'desc'), limit(500)),
+    return onSnapshot(query(this.path(orgId, name), orderBy(sortKey(name), 'desc'), limit(pageSize(name))),
       snap => onChange(snap.docs.map(d => ({ id: d.id, ...d.data() }) as Collections[K])), () => onChange([]));
   }
   async getSettings(orgId: string) {

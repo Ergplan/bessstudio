@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Printer, Copy, Send, Download, FileCode2, RotateCcw } from 'lucide-react';
-import { Card, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, Field, quoteTone, date } from '../components/ui';
+import { Card, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, TextArea, Field, quoteTone, date } from '../components/ui';
 import { Proposal } from '../components/Proposal';
 import { Offer } from '../components/Offer';
 import { defaultOfferContent, offerOf, type OfferContent } from '../../quoting/offer';
@@ -161,18 +161,18 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
       {tab === 'scope' && (
         <div className="grid cols-2 no-print">
           <Card title="Delivery terms">
-            <Field label="Incoterms"><input value={quote.incoterms} disabled={!writable} onChange={e => patch({ incoterms: e.target.value })} /></Field>
-            <Field label="Payment terms"><textarea rows={2} value={quote.paymentTerms} disabled={!writable} onChange={e => patch({ paymentTerms: e.target.value })} /></Field>
+            <TextInput label="Incoterms" value={quote.incoterms} disabled={!writable} onChange={incoterms => patch({ incoterms })} />
+            <TextArea label="Payment terms" rows={2} value={quote.paymentTerms} disabled={!writable} onChange={paymentTerms => patch({ paymentTerms })} />
             <div className="grid cols-2" style={{ gap: 0, columnGap: 12 }}>
               <NumberInput label="Delivery" value={quote.deliveryWeeks} unit="weeks" min={1} max={104} onChange={deliveryWeeks => patch({ deliveryWeeks })} />
               <NumberInput label="Warranty" value={quote.warrantyYears} unit="years" min={1} max={20} onChange={warrantyYears => patch({ warrantyYears })} />
             </div>
-            <Field label="Valid until"><input type="date" value={quote.validUntil} disabled={!writable} onChange={e => patch({ validUntil: e.target.value })} /></Field>
+            <TextInput label="Valid until" type="date" value={quote.validUntil} disabled={!writable} onChange={validUntil => patch({ validUntil })} />
           </Card>
           <Card title="Scope statements" subtitle="One item per line; these print on the proposal">
-            <Field label="Included"><textarea rows={6} value={quote.scopeIncluded.join('\n')} disabled={!writable} onChange={e => patch({ scopeIncluded: e.target.value.split('\n').filter(Boolean) })} /></Field>
-            <Field label="Excluded"><textarea rows={5} value={quote.scopeExcluded.join('\n')} disabled={!writable} onChange={e => patch({ scopeExcluded: e.target.value.split('\n').filter(Boolean) })} /></Field>
-            <Field label="Basis of quotation"><textarea rows={5} value={quote.assumptions.join('\n')} disabled={!writable} onChange={e => patch({ assumptions: e.target.value.split('\n').filter(Boolean) })} /></Field>
+            <TextArea label="Included" rows={6} value={quote.scopeIncluded.join('\n')} disabled={!writable} onChange={v => patch({ scopeIncluded: v.split('\n').filter(Boolean) })} />
+            <TextArea label="Excluded" rows={5} value={quote.scopeExcluded.join('\n')} disabled={!writable} onChange={v => patch({ scopeExcluded: v.split('\n').filter(Boolean) })} />
+            <TextArea label="Basis of quotation" rows={5} value={quote.assumptions.join('\n')} disabled={!writable} onChange={v => patch({ assumptions: v.split('\n').filter(Boolean) })} />
           </Card>
         </div>
       )}
@@ -202,10 +202,9 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
                 onChange={e => setOffer({ confidential: e.target.checked })} />
               <span style={{ margin: 0 }}>Mark the footer private &amp; confidential</span>
             </label>
-            <Field label="Cover image">
-              <input value={built.content.coverImage ?? ''} placeholder="Capture one from the 3D studio, or paste a URL"
-                disabled={!writable} onChange={e => setOffer({ coverImage: e.target.value || null })} />
-            </Field>
+            <TextInput label="Cover image" value={built.content.coverImage ?? ''} disabled={!writable}
+              placeholder="Capture one from the 3D studio, or paste a URL"
+              onChange={v => setOffer({ coverImage: v || null })} />
             <p className="muted">
               {project
                 ? <>Open the <Link href={`/studio?project=${project.id}`}>3D studio</Link> and use “Capture for offer” to place a rendered cut-away on the cover. With no image the document draws a vector cut-away from the sizing.</>
@@ -217,22 +216,17 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
           </Card>
 
           <Card title="Narrative" subtitle="One item per line">
-            <Field label="Why us — heading and body separated by a colon">
-              <textarea rows={5} disabled={!writable}
-                value={built.content.highlights.map(h => `${h.title}: ${h.body}`).join('\n')}
-                onChange={e => setOffer({ highlights: e.target.value.split('\n').filter(Boolean).map(line => {
-                  const i = line.indexOf(':');
-                  return i < 0 ? { title: line.trim(), body: '' } : { title: line.slice(0, i).trim(), body: line.slice(i + 1).trim() };
-                }) })} />
-            </Field>
-            <Field label="Basis and qualifications">
-              <textarea rows={7} disabled={!writable} value={built.content.qualifications.join('\n')}
-                onChange={e => setOffer({ qualifications: e.target.value.split('\n').filter(Boolean) })} />
-            </Field>
-            <Field label="Acceptance note">
-              <textarea rows={3} disabled={!writable} value={built.content.acceptanceNote}
-                onChange={e => setOffer({ acceptanceNote: e.target.value })} />
-            </Field>
+            <TextArea label="Why us — heading and body separated by a colon" rows={5} disabled={!writable}
+              value={built.content.highlights.map(h => `${h.title}: ${h.body}`).join('\n')}
+              onChange={v => setOffer({ highlights: v.split('\n').filter(Boolean).map(line => {
+                const i = line.indexOf(':');
+                return i < 0 ? { title: line.trim(), body: '' } : { title: line.slice(0, i).trim(), body: line.slice(i + 1).trim() };
+              }) })} />
+            <TextArea label="Basis and qualifications" rows={7} disabled={!writable}
+              value={built.content.qualifications.join('\n')}
+              onChange={v => setOffer({ qualifications: v.split('\n').filter(Boolean) })} />
+            <TextArea label="Acceptance note" rows={3} disabled={!writable} value={built.content.acceptanceNote}
+              onChange={acceptanceNote => setOffer({ acceptanceNote })} />
           </Card>
         </div>
       ) : <Card><Empty title="No sizing behind this quotation" message="The project this quotation was raised against is no longer available, so the offer cannot be built." /></Card>)}
