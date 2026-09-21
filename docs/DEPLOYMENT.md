@@ -9,42 +9,80 @@ npm install -g firebase-tools
 firebase login
 ```
 
-## 1. Create the Firebase project
+## The project
 
-1. Create a project in the [Firebase console](https://console.firebase.google.com).
-2. **Build → Authentication → Get started.** Enable **Email/Password**. Enable **Google** if you
+This repository is bound to **`bessstudio-e55e1`** in `.firebaserc`, which serves at:
+
+- https://bessstudio-e55e1.web.app
+- https://bessstudio-e55e1.firebaseapp.com
+
+Both are automatically in Authentication's authorised-domains list, so email and Google sign-in
+work on them without further configuration. A custom domain needs adding there as well as in
+**Hosting → Add custom domain**.
+
+## 1. Enable the services
+
+In the [Firebase console](https://console.firebase.google.com/project/bessstudio-e55e1):
+
+1. **Build → Authentication → Get started.** Enable **Email/Password**. Enable **Google** if you
    want single sign-on.
-3. **Build → Firestore Database → Create database.** Start in production mode; the rules in this
-   repository replace the defaults on first deploy. Pick the region closest to your sales team —
+2. **Build → Firestore Database → Create database.** Start in production mode; the rules in this
+   repository replace the defaults on the first deploy. Pick the region closest to your sales team —
    it cannot be changed later.
-4. **Project settings → Your apps → Web.** Register an app and copy the configuration object.
+3. **Project settings → General → Your apps.** Register a **Web** app if there is not one already,
+   and open **SDK setup and configuration → Config**.
 
 ## 2. Configure the repository
 
 ```bash
 cp .env.example .env
-cp .firebaserc.example .firebaserc
 ```
 
-Fill `.env` with the web app configuration and set your project id in `.firebaserc`. Both files are
-git-ignored. `VITE_` variables are compiled into the client bundle and are not secrets — a Firebase
-web API key identifies the project; the Firestore rules are what protect the data.
+`.env.example` already carries the project id, auth domain and storage bucket. Fill in the two
+values only the console can give you:
+
+| Variable | Where it comes from |
+|---|---|
+| `VITE_FIREBASE_API_KEY` | `apiKey` in the web app config |
+| `VITE_FIREBASE_APP_ID` | `appId`, of the form `1:123456789:web:abc123` |
+| `VITE_FIREBASE_MESSAGING_SENDER_ID` | `messagingSenderId`; optional, only used by push |
+
+`.env` is git-ignored. These `VITE_` variables are compiled into the client bundle and are not
+secrets — a Firebase web API key identifies the project; the Firestore rules are what protect the
+data. Until `VITE_FIREBASE_API_KEY` is set the application runs as a local demo workspace and the
+topbar reads **Demo** rather than **Cloud**.
 
 ## 3. Deploy
 
 ```bash
+firebase login           # once per machine
 npm run deploy           # hosting, rules and indexes
 npm run deploy:hosting   # hosting only
 npm run deploy:rules     # rules and indexes only
 ```
+
+### Deploying from CI
+
+`.github/workflows/deploy.yml` builds, typechecks, tests and publishes on every push to `main`.
+It needs three repository secrets:
+
+| Secret | Value |
+|---|---|
+| `FIREBASE_SERVICE_ACCOUNT` | The whole JSON key. Generate it with `firebase init hosting:github`, which creates the service account and adds the secret, or by hand from **Project settings → Service accounts → Generate new private key**. |
+| `VITE_FIREBASE_API_KEY` | Same value as in `.env`. |
+| `VITE_FIREBASE_APP_ID` | Same value as in `.env`. |
+
+Without `FIREBASE_SERVICE_ACCOUNT` the deploy step fails while the build and test steps still run,
+so the workflow is safe to merge before the secret exists.
 
 Hosting serves `dist/` with a single-page rewrite, immutable caching on hashed assets and
 `no-cache` on `index.html`, so a deploy is picked up on the next page load.
 
 ## 4. First user and first organization
 
-Sign up through the application. The first account to sign up creates an organization, adds itself
-as `owner`, writes the default price book and seeds a reference pipeline you can delete. The rules
+Open https://bessstudio-e55e1.web.app and sign up. The first account to sign up creates an
+organization, adds itself as `owner`, writes the default price book and seeds a reference pipeline
+you can delete. The rules
 permit that bootstrap only for the account recorded in the organization's `createdBy` field.
 
 To add a colleague while the invitation flow is still on the roadmap:

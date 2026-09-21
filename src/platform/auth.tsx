@@ -4,8 +4,8 @@ import {
   signInWithPopup, signOut, updateProfile,
 } from 'firebase/auth';
 import { doc, setDoc, arrayUnion } from 'firebase/firestore';
-import { firebase, firebaseEnabled } from './firebase';
-import { repository } from './repo';
+import { firebase } from './firebase';
+import { repository, demoModeActive, setDemoMode } from './repo';
 import { defaultBranding } from '../brand/brand';
 import { defaultPriceBook } from '../catalog/pricing';
 import { nowIso, type Member, type Organization, type Role } from './types';
@@ -59,7 +59,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    const fb = firebase();
+    const fb = demoModeActive() ? null : firebase();
     if (!fb) {
       const raw = globalThis.localStorage?.getItem(LOCAL_USER);
       if (raw) { const account = JSON.parse(raw) as SessionUser; setUser(account); loadOrgs(account, true).finally(() => setReady(true)); }
@@ -94,13 +94,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo<Session>(() => ({
-    ready, user, org, role, organizations, error, mode: firebaseEnabled ? 'firestore' : 'local',
+    ready, user, org, role, organizations, error, mode: repository().kind,
     async signIn(email, password) {
+      setDemoMode(false);
       const fb = firebase();
       if (!fb) return this.signInAsDemo();
       await signInWithEmailAndPassword(fb.auth, email, password);
     },
     async signUp(email, password, displayName, orgName) {
+      setDemoMode(false);
       const fb = firebase();
       if (!fb) return this.signInAsDemo();
       const credential = await createUserWithEmailAndPassword(fb.auth, email, password);
@@ -110,11 +112,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       globalThis.localStorage?.setItem(LAST_ORG, created.id);
     },
     async signInWithGoogle() {
+      setDemoMode(false);
       const fb = firebase();
       if (!fb) return this.signInAsDemo();
       await signInWithPopup(fb.auth, new GoogleAuthProvider());
     },
     async signInAsDemo() {
+      setDemoMode(true);
       const account: SessionUser = { uid: 'demo-user', email: 'demo@joulewise.com', displayName: 'Demo Engineer', photoURL: null };
       globalThis.localStorage?.setItem(LOCAL_USER, JSON.stringify(account));
       setUser(account);
@@ -124,6 +128,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     async signOutUser() {
       const fb = firebase();
       globalThis.localStorage?.removeItem(LOCAL_USER);
+      setDemoMode(false);
       if (fb) await signOut(fb.auth);
       setUser(null); setOrg(null); setOrganizations([]); setRole(null);
     },

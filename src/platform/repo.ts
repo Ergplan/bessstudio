@@ -140,15 +140,40 @@ export class LocalRepository implements Repository {
   async saveSettings(orgId: string, settings: OrgSettings) { const s = this.read(); s.settings[orgId] = settings; this.write(s); }
 }
 
-let instance: Repository | null = null;
+/**
+ * The demonstration workspace always runs against browser storage, even on a deployment that has
+ * Firestore configured. Without this, opening the demo on the live site would send every write to
+ * Firestore as an unauthenticated caller, where the rules correctly refuse it, and the workspace
+ * would simply appear broken.
+ */
+const DEMO_FLAG = 'bess-studio-demo-mode';
+const storedDemoFlag = () => {
+  try { return globalThis.localStorage?.getItem(DEMO_FLAG) === 'true'; } catch { return false; }
+};
+
+let instance: Repository | null = null, instanceKind: 'firestore' | 'local' | null = null;
+// Held in memory as well as in storage, so the switch still works where storage is unavailable.
+let forcedLocal = storedDemoFlag();
+
+export const demoModeActive = () => forcedLocal;
+export function setDemoMode(on: boolean) {
+  try { if (on) globalThis.localStorage?.setItem(DEMO_FLAG, 'true'); else globalThis.localStorage?.removeItem(DEMO_FLAG); }
+  catch { /* private mode or full quota: the in-memory flag still switches the repository */ }
+  forcedLocal = on;
+  instance = null;
+}
+
 export function repository(): Repository {
-  if (!instance) {
-    const fb = firebase();
+  const wanted: 'firestore' | 'local' = !forcedLocal && firebaseEnabled ? 'firestore' : 'local';
+  if (!instance || instanceKind !== wanted) {
+    const fb = wanted === 'firestore' ? firebase() : null;
     instance = fb ? new FirestoreRepository(fb.db) : new LocalRepository();
+    instanceKind = wanted;
   }
   return instance;
 }
-export const usingFirestore = () => firebaseEnabled;
+/** Whether reads and writes are actually going to Firestore right now, not merely configured to. */
+export const usingFirestore = () => repository().kind === 'firestore';
 
 /** Append an audit trail entry. Failures never block the write the user asked for. */
 export async function logActivity(orgId: string, entry: Omit<Activity, 'id' | 'orgId' | 'at'>) {

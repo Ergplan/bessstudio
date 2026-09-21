@@ -39,11 +39,16 @@ npm run build
 
 ## Connecting Firebase
 
-1. Create a Firebase project, enable **Authentication** (Email/Password and Google) and
+The repository is bound to the Firebase project **`bessstudio-e55e1`**, which serves at
+https://bessstudio-e55e1.web.app.
+
+1. In the console, enable **Authentication** (Email/Password, and Google for single sign-on) and
    **Cloud Firestore**.
-2. Copy `.env.example` to `.env` and fill in the web app configuration.
-3. Copy `.firebaserc.example` to `.firebaserc` and set your project id.
-4. `npm run deploy` — builds, publishes hosting, and pushes the Firestore rules and indexes.
+2. Copy `.env.example` to `.env` and fill in `VITE_FIREBASE_API_KEY` and `VITE_FIREBASE_APP_ID`
+   from **Project settings → Your apps → Web app**. Everything else is already filled in.
+3. `npm run deploy` — builds, publishes hosting, and pushes the Firestore rules and indexes.
+
+Pushes to `main` deploy automatically once the `FIREBASE_SERVICE_ACCOUNT` repository secret exists.
 
 See [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) for the emulator workflow and the first-user setup.
 

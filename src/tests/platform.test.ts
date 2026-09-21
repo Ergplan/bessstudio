@@ -10,7 +10,8 @@ import { evaluateFinance, annualBenefitUsd, chargingEnergyMWh } from '../sizing/
 import { buildQuoteLines, createQuote, nextQuoteNumber, quoteTotals, reviseQuote, uplift } from '../quoting/quote';
 import { defaultOfferContent, energySchedule, offerOf, offerTotals, plantConfiguration } from '../quoting/offer';
 import { defaultBranding } from '../brand/brand';
-import { LocalRepository } from '../platform/repo';
+import { LocalRepository, demoModeActive, repository, setDemoMode, usingFirestore } from '../platform/repo';
+import { firebaseEnabled } from '../platform/firebase';
 import { can, roles, type Customer, type Organization, type Project, type Quote } from '../platform/types';
 
 const input = (patch: Partial<ReturnType<typeof defaultSizingInput>> = {}) => ({ ...defaultSizingInput(), ...patch });
@@ -305,6 +306,25 @@ describe('permissions and the offline repository', () => {
     await repo.remove('org_a', 'customers', 'c1');
     expect(await repo.list('org_a', 'customers')).toEqual([]);
     expect(seen.at(-1)).toHaveLength(1); // the stopped watcher received nothing further
+  });
+
+  it('keeps the demonstration workspace in browser storage even when Firestore is configured', async () => {
+    // Without this, the demo button on a deployed site would write to Firestore unauthenticated,
+    // the rules would correctly refuse every write, and the workspace would look broken.
+    setDemoMode(true);
+    expect(demoModeActive()).toBe(true);
+    expect(repository().kind).toBe('local');
+    expect(usingFirestore()).toBe(false);
+
+    const customer = { id: 'd1', orgId: 'demo', name: 'Demo customer', updatedAt: '2026-01-01' } as Customer;
+    await repository().save('demo', 'customers', customer);
+    expect((await repository().list('demo', 'customers')).map(c => c.name)).toEqual(['Demo customer']);
+
+    // Leaving demo mode hands the repository back to whatever the environment is configured for.
+    setDemoMode(false);
+    expect(demoModeActive()).toBe(false);
+    expect(repository().kind).toBe(firebaseEnabled ? 'firestore' : 'local');
+    expect(usingFirestore()).toBe(firebaseEnabled);
   });
 
   it('sorts each collection by its own recency key', async () => {
