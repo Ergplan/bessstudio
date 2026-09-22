@@ -161,6 +161,23 @@ describe('what a customer can reach', () => {
   });
 });
 
+describe('notification read state', () => {
+  it('lets a member mark their own notifications seen', async () => {
+    await assertSucceeds(updateDoc(doc(as('sales', 'sales@example.com'), orgPath('members', 'sales')),
+      { notificationsSeenAt: new Date().toISOString() }));
+  });
+
+  it('refuses marking somebody else’s seen', async () => {
+    await assertFails(updateDoc(doc(as('sales', 'sales@example.com'), orgPath('members', 'cust')),
+      { notificationsSeenAt: new Date().toISOString() }));
+  });
+
+  it('still refuses a member promoting themselves while touching it', async () => {
+    await assertFails(updateDoc(doc(as('cust', 'cust@example.com'), orgPath('members', 'cust')),
+      { notificationsSeenAt: new Date().toISOString(), role: 'owner' }));
+  });
+});
+
 describe('single-level release', () => {
   it('lets sales issue directly, without claiming an approval nobody gave', async () => {
     const db = as('sales', 'sales@example.com');

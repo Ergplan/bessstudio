@@ -2,7 +2,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   GoogleAuthProvider, createUserWithEmailAndPassword, onAuthStateChanged, sendEmailVerification,
-  signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile,
+  sendPasswordResetEmail, signInWithEmailAndPassword, signInWithPopup, signOut, updateProfile,
 } from 'firebase/auth';
 import { doc, setDoc, arrayUnion } from 'firebase/firestore';
 import { firebase } from './firebase';
@@ -25,6 +25,13 @@ export type Session = {
   sendVerification(): Promise<string>;
   /** Re-read the account from Firebase, to pick up a verification completed in another tab. */
   refreshVerification(): Promise<boolean>;
+  /**
+   * Send a password reset. Resolves to the message to show.
+   *
+   * The reply is the same whether or not an account exists, deliberately: a reset form that says
+   * "no account exists for that address" is a way of testing which addresses are registered.
+   */
+  resetPassword(email: string): Promise<string>;
   signIn(email: string, password: string): Promise<void>;
   signUp(email: string, password: string, displayName: string, orgName: string): Promise<void>;
   /**
@@ -201,6 +208,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (displayName) await updateProfile(credential.user, { displayName });
       try { await sendEmailVerification(credential.user); } catch { /* the banner offers it again */ }
       return { uid: credential.user.uid, email, displayName: displayName || email.split('@')[0], photoURL: null, emailVerified: false };
+    },
+    async resetPassword(email) {
+      const fb = firebase();
+      const trimmed = email.trim();
+      if (!trimmed.includes('@')) return 'That does not look like an email address.';
+      const same = `If an account exists for ${trimmed}, a reset link is on its way. Check the spam folder too.`;
+      if (!fb) return 'Password reset needs a configured Firebase project. The demo workspace has no password.';
+      try {
+        await sendPasswordResetEmail(fb.auth, trimmed);
+        return same;
+      } catch (e) {
+        // An unknown address must not be distinguishable from a known one.
+        const code = (e as { code?: string })?.code;
+        if (code === 'auth/user-not-found' || code === 'auth/invalid-email') return same;
+        return describeAuthError(e);
+      }
     },
     async signInWithGoogle() {
       setDemoMode(false);

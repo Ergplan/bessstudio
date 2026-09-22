@@ -3,9 +3,9 @@
 The live record of the build defined in [`docs/SITE.md` §17](./SITE.md#17-how-this-gets-built).
 `SITE.md` is the contract; this file is what actually happened.
 
-> **S0 is complete and ready for acceptance.** S1 onward are `PLANNED` — not built, not tested.
-> No simulation fixture (F01–F08) has been run; writing a check into this file is not evidence that
-> it passed.
+> **S0 and S1 are complete and ready for acceptance.** S2 onward are `PLANNED` — not built, not
+> tested. No simulation fixture (F01–F08) has been run; writing a check into this file is not
+> evidence that it passed.
 
 **Delivery states:** PLANNED → BUILDING → TESTING → READY FOR ACCEPTANCE → ACCEPTED, and **BLOCKED**
 when a prerequisite or a mandatory check fails.
@@ -19,8 +19,8 @@ when a prerequisite or a mandatory check fails.
 | Stage | Goal | Depends on | State | Accepted | Evidence |
 | --- | --- | --- | --- | --- | --- |
 | **S0** | Baseline and acceptance contract | — | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s0--baseline-and-acceptance-contract) |
-| **S1** | Finish the quoting tool | S0 | `PLANNED` | — | — |
-| **S2** | Model contracts and evidence | S1 | `PLANNED` | — | — |
+| **S1** | Finish the quoting tool | S0 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s1--finish-the-quoting-tool) |
+| **S2** | Model contracts and evidence | S1 | **`BLOCKED`** — Terraform location unknown | — | — |
 | **S3** | First charge/discharge lesson | S2 | `PLANNED` | — | — |
 | **S4** | PCS and BMS behaviour | S3 | `PLANNED` | — | — |
 | **S5** | jouleWise ergOS EMS | S4 | `PLANNED` | — | — |
@@ -57,6 +57,8 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | Single-level release never writes the approval fields | `src/quoting/lifecycle.ts`, `firestore.rules` | unit + rules tests |
 | Under `two-step`, sales cannot approve its own quotation | `src/quoting/lifecycle.ts`, `firestore.rules` | unit + rules tests |
 | The offer fits four A4 pages for every quotation | `src/app/offerStyles.ts` | S0 fit sweep |
+| A customer is never notified about another customer's record | `src/platform/notifications.ts` | unit tests |
+| The sales queue is exactly the roles holding `quote.prepare` | `src/platform/notifications.ts` | unit tests |
 | A customer sees only their own records | `src/platform/workspace.tsx`, `firestore.rules` | rules tests |
 | Pricing requires a verified email | `src/platform/types.ts`, `firestore.rules` | rules tests |
 | A role cannot be minted — invitation names it, or it is `customer` | `firestore.rules` | rules tests |
@@ -66,8 +68,8 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 Baseline commands:
 
 ```bash
-npm run test        # 110 unit tests
-npm run test:rules  # 38 Firestore rules tests, against the emulator
+npm run test        # 130 unit tests
+npm run test:rules  # 41 Firestore rules tests, against the emulator
 npm run build       # static export
 ```
 
@@ -138,6 +140,89 @@ organizations and reads as `single`.
 
 > **S2 is blocked on information, not code:** the GCloud Terraform environment is not in this
 > repository and I have no record of it. Repository, path and VM shape needed before S2 is planned.
+
+---
+
+## S1 — Finish the quoting tool
+
+**State:** READY FOR ACCEPTANCE — review pending
+**Revision:** see the commit carrying this file
+**Depends on:** S0 (READY FOR ACCEPTANCE)
+
+### 1. Scope
+
+Delivered — R01: the sales queue, notifications, password reset.
+
+- **Sales queue** at `/app/queue`, in the staff navigation. Waiting enquiries **oldest first**, so
+  the first of the day is not the last seen, with how long each has waited. Work in hand listed
+  separately. Two tiles: waiting, in hand.
+- **Notifications** — a bell with an unread count, and a panel. Items are **derived** from the
+  quotations already being watched rather than stored: no new collection, no extra Firestore reads,
+  and nothing that can go stale. Only a single `notificationsSeenAt` timestamp is written, and only
+  when the panel is opened.
+- **Password reset** on the sign-in form, via Firebase.
+
+Deferred: email notification (needs a mail sender; see §10 of `SITE.md`). Assignment and SLA on the
+queue — not in R01.
+
+### 2. Environment
+
+As S0. No new runtime dependencies.
+
+### 3. Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **130 passed** (+20) | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | **41 passed** (+3) | **PASS** |
+| Build | `npm run build` | `/app/queue` present | 15 routes incl. `/app/queue` | **PASS** |
+| Customer submits → queue | browser | 1 waiting, tiles 1/0 | 1 waiting, tiles 1/0 | **PASS** |
+| Queue shows waiting time | browser | a duration | `0 min` | **PASS** |
+| Bell counts, opens, clears | browser | 1 → item listed → 0 after opening | 1 → *New enquiry · JW-Q-2026-0001* → 0 | **PASS** |
+| Pick up moves it | browser | tiles 0/1 | tiles 0/1 | **PASS** |
+| Customer cannot reach the queue | browser | blocked, no nav link | *"Not your queue"*, 0 nav links | **PASS** |
+| Password reset offered | browser | present on sign-in | present | **PASS** |
+| Reset does not reveal whether an account exists | unit + code | same reply either way | same reply; `user-not-found` mapped to it | **PASS** |
+| **S0 regression** | browser | opening experience, build sequence, single-level release, offer fit | all unchanged, 0 overflow on every quote | **PASS** |
+
+**Negative cases covered by unit tests:** a customer is not told about their own submission; a
+customer never sees another customer's record; no customer name leaks into a customer's own
+notification; only an approver is told something awaits approval; a draft generates nothing; the
+exact last-seen instant reads as seen, not unread; a future-skewed clock never reads negative.
+
+### 4. Browser walkthrough
+
+`scratchpad/s1.mjs` — the full customer → queue → bell → pick-up path, plus the customer being
+refused the queue. `scratchpad/s0.mjs` and `scratchpad/fitall.mjs` re-run as regression. No page or
+console errors in any run.
+
+**One result worth explaining, because it looks wrong and is not:** on submitting, the customer's
+bell showed **1**. That is a *Quotation issued* notification for a different quotation the demo seed
+already gives them in `sent`. It is their own record. The unit tests assert separately that a
+customer is never notified of their own submission and never sees another customer's record.
+
+### 5. Defects
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D4 | The notification test helper dropped its overrides, so twelve tests exercised an empty fixture and failed | minor — in the test, not the code | **fixed** |
+| D5 | A test asserted every non-viewer staff role gets a queue; `engineer` deliberately has no `quote.prepare` | minor — wrong premise in the test | **fixed**; the test now asserts the queue set *equals* the permission set, so the two cannot drift |
+
+No defects in shipped behaviour. Baseline defects from S0 unchanged.
+
+### 6. Demonstration and rollback
+
+Demo: sign in → **Queue** in the sidebar. As a customer, submit a design; as sales, watch it arrive,
+open the bell, pick it up, and see it move to *In hand*.
+Rollback: `git revert` the S1 commit. No migrations; `notificationsSeenAt` is absent on existing
+members and reads as "nothing seen".
+
+### 7. Decision
+
+**READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S2 — model contracts and
+evidence**, currently **BLOCKED**: the GCloud Terraform environment is not in this repository and I
+have no record of it. Repository, path and VM shape needed before S2 can be planned.
 
 ---
 

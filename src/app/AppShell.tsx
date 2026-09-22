@@ -1,12 +1,13 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, FolderKanban, FileText, Box, Settings, LogOut, Boxes, Cloud, HardDrive, Sparkles } from 'lucide-react';
+import { LayoutDashboard, Users, FolderKanban, FileText, Box, Settings, LogOut, Boxes, Cloud, HardDrive, Sparkles, Inbox } from 'lucide-react';
 import { brand } from '../brand/brand';
 import { useSession } from '../platform/auth';
 import { useWorkspace } from '../platform/workspace';
 import { isCustomerRole, roleLabels } from '../platform/types';
 import { VerifyBanner } from './components/Gate';
+import { Notifications } from './components/Notifications';
 
 type Link_ = { to: string; label: string; icon: typeof LayoutDashboard; end?: boolean };
 /**
@@ -16,6 +17,7 @@ type Link_ = { to: string; label: string; icon: typeof LayoutDashboard; end?: bo
  */
 const staffLinks: Link_[] = [
   { to: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/app/queue', label: 'Queue', icon: Inbox },
   { to: '/app/customers', label: 'Customers', icon: Users },
   { to: '/app/projects', label: 'Projects', icon: FolderKanban },
   { to: '/app/quotes', label: 'Quotes', icon: FileText },
@@ -86,6 +88,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link className="btn sm" href="/?build=1" title="Answer the opening question again and size a new plant">
             <Sparkles size={14} /> New design
           </Link>
+          <Notifications />
           <span className="badge neutral" title={mode === 'firestore' ? 'Connected to Firestore' : 'Offline demo workspace stored in this browser'}>
             {mode === 'firestore' ? <Cloud size={12} /> : <HardDrive size={12} />}{mode === 'firestore' ? 'Cloud' : 'Demo'}
           </span>

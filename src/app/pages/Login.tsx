@@ -7,11 +7,12 @@ import { publicOrgId } from '../../platform/joining';
 import Link from 'next/link';
 
 export function Login() {
-  const { signIn, signUp, signInWithGoogle, signInAsDemo } = useSession();
+  const { signIn, signUp, signInWithGoogle, signInAsDemo, resetPassword } = useSession();
   const [mode, setMode] = useState<'in' | 'up'>('in');
   const [email, setEmail] = useState(''), [password, setPassword] = useState('');
   const [name, setName] = useState(''), [orgName, setOrgName] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [note, setNote] = useState('');
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true); setError('');
@@ -85,6 +86,15 @@ export function Login() {
             <p className="muted" style={{ textAlign: 'center', marginTop: 4, fontSize: 12 }}>
               Invited by a colleague? Follow the link in your invitation.
             </p>
+            {mode === 'in' && firebaseEnabled && (
+              <p className="muted" style={{ textAlign: 'center', marginTop: 4, fontSize: 12 }}>
+                <button className="btn ghost sm" style={{ padding: 0, color: 'var(--blue)' }} disabled={busy}
+                  onClick={() => void run(async () => { setNote(await resetPassword(email)); })}>
+                  Forgotten your password?
+                </button>
+              </p>
+            )}
+            {note && <div className="notice info" style={{ marginTop: 12 }}><p>{note}</p></div>}
           </div>
         </div>
       </div>

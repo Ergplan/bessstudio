@@ -78,6 +78,11 @@ export type Member = {
   uid: string; email: string; displayName: string; role: Role; addedAt: string;
   /** The invitation this membership was created from, which is what authorised its role. */
   inviteToken?: string | null;
+  /**
+   * When this person last looked at their notifications. One timestamp rather than a read flag per
+   * item, because the items are derived rather than stored — there is nothing to mark.
+   */
+  notificationsSeenAt?: string | null;
 };
 export type Organization = {
   id: string; name: string; branding: Branding; currency: Currency;

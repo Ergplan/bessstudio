@@ -402,6 +402,23 @@ state — pending, accepted, revoked, expired — and revoke it. Plus the switch
 workspace to public customer registration, off by default, with the registration link to publish
 and the environment variable to set.
 
+### 4.13 Queue and notifications — `/app/queue` `LIVE`
+
+**Queue.** Staff only, and only roles holding `quote.prepare` — sales, approver, admin, owner. An
+engineer sizes and does not price, so they get no queue, which is the role model working rather than
+an omission. Two tiles (waiting, in hand), then **New enquiries** oldest first with how long each has
+waited, then **In hand**.
+
+**Notifications.** A bell in the top bar with an unread count. Items are *derived* from the
+quotations already being watched, not stored — no extra collection, no extra reads, nothing that can
+go stale. Only `notificationsSeenAt` on the member document is written, and only when the panel is
+opened.
+
+Staff are told: an enquiry was submitted; something awaits their approval (approvers only); an
+approver returned something, with the reason. A customer is told only that their own formal
+quotation was issued — never about their own submission, and never anything carrying another
+customer's name.
+
 ### 4.6 Dashboard — `/app` `LIVE`
 
 Staff only; customers get a reduced *Overview*.
@@ -660,9 +677,10 @@ Ordered by how much they block the workflow above.
 1. **Invitations are sent by hand** `PARTIAL` — no mail server on the Spark plan, so the link is
    copied to the clipboard for the inviter to send. Automatic mail needs Cloud Functions, which
    needs the Blaze plan.
-3. **No notifications** `GAP` — submission, approval request and approval are all silent.
-4. **No sales queue** `GAP` — submitted enquiries are not separated from the quote list.
-5. **No password reset** `GAP`.
+3. **Notifications are in-app only** `PARTIAL` — a derived bell and unread count (§4.13). No email;
+   that needs a mail sender the free plan does not have.
+4. ~~No sales queue~~ `LIVE` — `/app/queue`, oldest first, with waiting time (§4.13).
+5. ~~No password reset~~ `LIVE` — on the sign-in form.
 6. **`NEXT_PUBLIC_PUBLIC_ORG_ID` must be set** before "Create an account" appears on the sign-in
    page. Until then a customer needs an explicit `?org=` link, which Settings provides.
 7. **Offer document is single-template** `PARTIAL` — no per-tenant layout variation.
