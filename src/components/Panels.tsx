@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useState,type RefObject} from 'react';
 import {Download,Upload,RotateCcw,Maximize} from 'lucide-react';
-import type {Model} from '../domain/model';
+import {studioWarningTitle, type Model} from '../domain/model';
 import {source,type Config} from '../config/schema';
 import {brandSlug,useStudio} from '../state/store';
 import type {ViewerHandle} from '../scene/Viewer';
@@ -99,7 +99,7 @@ export function ReviewPanel({model}:{model:Model}){
     {model.warnings.map(w=>{
       const remedy=remedyFor(w.code),shown=open===w.code;
       return <div key={w.code} className={`notice ${w.level}`}>
-        <b>{w.code.replaceAll('-',' ')}</b><p>{w.text}</p>
+        <b>{studioWarningTitle(w.code)}</b><p>{w.text}</p>
         {remedy&&<>
           <button className="notice-more" aria-expanded={shown} onClick={()=>setOpen(shown?'':w.code)}>
             {shown?'Hide the explanation':'What does this mean?'}

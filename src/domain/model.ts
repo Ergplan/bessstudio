@@ -6,6 +6,30 @@ export type Port={id:string,node:string,kind:'positive'|'negative'|'supply'|'ret
 export type Edge={id:string,from:string,to:string,kind:'busbar'|'hv'|'coolantSupply'|'coolantReturn'|'coldPlate'|'earth'|'bms',points:Vec[]};
 export type Graph={ports:Record<string,Port>,edges:Edge[]};
 export type Warning={code:string,level:'error'|'warning'|'info',text:string};
+/**
+ * What each studio check is called where it is shown. Prettifying the code gave "Ac Current" and
+ * "Pcs Review": the terms of art misspelt, in the panel an engineer opens to check the design.
+ */
+export const studioWarningTitles:Record<string,string>={
+ 'source-energy':'Pack label against the calculated energy',
+ 'pcs-review':'Converter compatibility unverified',
+ 'voltage-unknown':'Equipment voltage limit not set',
+ overvoltage:'String voltage above the equipment limit',
+ undervoltage:'String voltage below the equipment minimum',
+ 'pcs-current':'Aggregate current above the equipment rating',
+ 'constant-current':'Constant DC demand at minimum voltage',
+ 'ac-current':'AC target and auxiliaries at minimum voltage',
+ 'fit-length':'Racks do not fit the enclosure length',
+ 'fit-height':'Racks do not fit the enclosure height',
+ 'fit-width':'Racks do not fit the enclosure width',
+ aisle:'Service aisle below the required width',
+ connector:'Connector allowance below the bend radius',
+ 'rack-collision':'Rack gap below the routing clearance',
+ 'service-interference':'Service bay interferes with ancillaries',
+ 'route-intersection':'Routes pass through cell bodies',
+};
+/** The check's own name where it has one, and a readable form of its code where it does not. */
+export const studioWarningTitle=(code:string)=>studioWarningTitles[code]??code.replaceAll('-',' ');
 export const m=(mm:number)=>mm/1000;
 export const add=(a:Vec,b:Vec):Vec=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]];
 export function worldPort(node:Node|undefined,local:Vec):Vec{return node?add(node.position,[local[0],local[1],local[2]*(node.bank===1?-1:1)]):local;}

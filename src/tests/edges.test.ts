@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { studioWarningTitle, studioWarningTitles } from '../domain/model';
 import { defaultSizingInput, sizeSystem, normaliseSizingInput, defaultLossChain, type SizingInput } from '../sizing/engine';
 import { evaluateFinance } from '../sizing/finance';
 import { defaultPriceBook } from '../catalog/pricing';
@@ -171,5 +173,26 @@ describe('normalising what a person typed', () => {
     expect(wild.daysPerYear).toBeLessThanOrEqual(366);
     expect(wild.powerFactor).toBeLessThanOrEqual(1);
     expect(wild.projectYears).toBeGreaterThan(0);
+  });
+});
+
+describe('what each studio check is called', () => {
+  it('names every check the studio model can raise', () => {
+    const source = readFileSync(new URL('../domain/model.ts', import.meta.url), 'utf8');
+    const codes = [...source.matchAll(/code:'([a-z-]+)'/g)].map(m => m[1])
+      // The enclosure fit checks build their code from the axis they failed on.
+      .concat(['fit-length', 'fit-height', 'fit-width']);
+    expect(codes.length).toBeGreaterThan(12);
+    for (const code of new Set(codes)) {
+      expect(studioWarningTitles[code], `${code} has no name`).toBeTruthy();
+      expect(studioWarningTitle(code), code).not.toBe(code.replaceAll('-', ' '));
+    }
+  });
+
+  it('writes the terms of art the way an engineer writes them', () => {
+    for (const [code, title] of Object.entries(studioWarningTitles)) {
+      expect(title, code).not.toMatch(/\bDc\b|\bPcs\b|\bAc\b|\bBms\b|\bSoc\b/);
+      expect(title[0], `${code} starts lower case`).toBe(title[0].toUpperCase());
+    }
   });
 });
