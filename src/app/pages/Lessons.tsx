@@ -331,6 +331,60 @@ function Sizing({ card, values, onHold, onResize }: {
         </Card>
       )}
 
+      <Card title="Lead-acid or lithium, for the same service"
+        subtitle="Each sized against its own discharge curves for the same protected load and the same autonomy" tight>
+        <table className="data">
+          <thead>
+            <tr><th /><th>{s.chemistry.options[0].label}</th><th>{s.chemistry.options[1].label}</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Configuration</td>{s.chemistry.options.map(o => <td key={o.chemistry}>{o.feasible ? o.units : 'Not offered'}</td>)}</tr>
+            <tr><td>Installed energy</td>{s.chemistry.options.map(o => <td key={o.chemistry} className="mono">{o.feasible ? `${o.installedEnergyKWh.toFixed(0)} kWh` : '—'}</td>)}</tr>
+            <tr><td>Mass</td>{s.chemistry.options.map(o => <td key={o.chemistry} className="mono">{o.feasible ? `${(o.massKg / 1000).toFixed(1)} t` : '—'}</td>)}</tr>
+            <tr><td>Floor area, with clearance</td>{s.chemistry.options.map(o => <td key={o.chemistry} className="mono">{o.feasible ? `${o.footprintM2.toFixed(1)} m²` : '—'}</td>)}</tr>
+            <tr><td>DC bus</td>{s.chemistry.options.map(o => <td key={o.chemistry} className="mono">{o.feasible ? `${o.dcVolts.toFixed(0)} V` : '—'}</td>)}</tr>
+            <tr><td>Recharge to full</td>{s.chemistry.options.map(o => <td key={o.chemistry} className="mono">{o.rechargeMinutesToFull == null ? '—' : `${(o.rechargeMinutesToFull / 60).toFixed(1)} h`}</td>)}</tr>
+            <tr><td>Service life at 25 °C</td>{s.chemistry.options.map(o => <td key={o.chemistry} className="mono">{o.serviceLifeYears == null ? 'data required' : `${o.serviceLifeYears.toFixed(1)} yr`}</td>)}</tr>
+          </tbody>
+        </table>
+
+        <h4 style={{ margin: '14px 0 6px', fontSize: 12.5 }}>Three fifteen-minute outages in one day, an hour apart</h4>
+        <table className="data">
+          <thead><tr><th /><th>First</th><th>Second</th><th>Third</th></tr></thead>
+          <tbody>
+            {s.repeated.map(r => (
+              <tr key={r.chemistry}>
+                <td>{r.chemistry}</td>
+                {r.events.map(e => (
+                  <td key={e.atMinutes} className="mono">
+                    {e.carriedMinutes.toFixed(0)} of {e.askedMinutes} min
+                    <span className="muted"> · from {(e.socBefore * 100).toFixed(0)}%</span>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="muted" style={{ marginTop: 8 }}>
+          The schedule is independent of the backup duration chosen above. Each outage starts at the
+          charge the last one left, on whatever the charger could put back in between.
+        </p>
+
+        <div className="notice info" style={{ marginTop: 12 }}>
+          <b>What differs between them, which is never nothing</b>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+            {s.chemistry.differences.map(d => <li key={d}>{d}</li>)}
+          </ul>
+        </div>
+        <details className="ergos-why">
+          <summary>What this comparison does and does not claim</summary>
+          <ul className="muted" style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.8 }}>
+            {s.chemistry.disclosures.map(d => <li key={d}>{d}</li>)}
+            {s.chemistry.options.flatMap(o => o.notes.map(n => <li key={`${o.chemistry}-${n}`}><b>{o.chemistry}:</b> {n}</li>))}
+          </ul>
+        </details>
+      </Card>
+
       {s.options.length > 0 && (
         <div className={`grid cols-${Math.min(3, s.options.length)}`}>
           {s.options.map(o => (

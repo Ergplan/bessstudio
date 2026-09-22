@@ -13,6 +13,7 @@ import {
   type HeldSystem, type UpsAssumptions, type UpsOption, type UpsRequirement,
 } from './ups';
 import { byId, enclosures, packSpecs, pcsUnits } from '../catalog/products';
+import { compareChemistries, repeatedOutages, type ChemistryComparison, type RepeatedOutages } from './chemistry';
 
 /**
  * The lesson catalogue.
@@ -102,6 +103,12 @@ export type LessonCard = {
     /** Set while a system is being tested rather than resized, with whatever it fails to meet. */
     held: { option: UpsOption; shortfalls: string[] } | null;
     continuity: string;
+    /**
+     * The second step of this lesson, per §15.4: the same service from lead-acid and from lithium,
+     * each sized against its own curves, with a day of repeated outages put to both.
+     */
+    chemistry: ChemistryComparison;
+    repeated: { chemistry: 'VRLA' | 'LFP'; events: RepeatedOutages['events'] }[];
   };
 };
 
@@ -789,11 +796,27 @@ export const upsSizing: LessonCard = {
     const shown: UpsOption[] = held && option
       ? [{ ...option, role: 'under-test' }, ...(options[0] ? [{ ...options[0], role: 'would-need' as const }] : [])]
       : options;
+    // §15.4's day of interruptions: three fifteen-minute outages an hour apart, which is the
+    // schedule the "repeated interruptions" preset is built on. It is deliberately independent of
+    // the backup duration the learner chose — selecting two hours of design autonomy must not turn
+    // every outage into a two-hour event.
+    const events = [{ atMinutes: 600, minutes: 15 }, { atMinutes: 660, minutes: 15 }, { atMinutes: 720, minutes: 15 }];
+    const chemistry = compareChemistries({ protectedKW: requirement.protectedKW, autonomyMinutes: minutes, tempC: 30 });
+    const lfpEnergy = chemistry.options.find(o => o.chemistry === 'LFP')?.installedEnergyKWh ?? 0;
+    const vrlaBlocks = chemistry.options.find(o => o.chemistry === 'VRLA')?.blocks;
     return {
       requirement, options: shown, problems, assumptions: a,
       readiness: readiness(option, requirement, a, minutes),
       held: held && option ? { option, shortfalls: shortfalls(option, requirement, a, minutes) } : null,
       continuity: 'Continuity not verified — an energy model cannot establish zero-break transfer, voltage quality or protection coordination.',
+      chemistry,
+      repeated: (['VRLA', 'LFP'] as const).map(c => ({
+        chemistry: c,
+        events: repeatedOutages({
+          chemistry: c, protectedKW: requirement.protectedKW, tempC: 30, events, dayMinutes: 1440,
+          assumptions: a, chargerCPerHour: 0.1, installedKWh: lfpEnergy, blocks: vrlaBlocks,
+        }).events,
+      })),
     };
   },
   readout: r => {
