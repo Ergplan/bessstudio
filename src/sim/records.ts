@@ -212,6 +212,14 @@ export const scenarioSchema = z.object({
   /** Where the plant starts. */
   initialSoc: z.number().min(0).max(1),
   initialCellTempC: z.number().min(-40).max(80),
+  /**
+   * The ambient the scenario runs in, where it differs from the plant's own design ambient.
+   *
+   * §12.1 and §12.2 both list ambient conditions as an input to the run rather than a property of
+   * the equipment, and they are right: the same plant on a hot day is the same plant. Null means
+   * the plant's design ambient stands.
+   */
+  ambientC: z.number().min(-40).max(70).nullable().default(null),
   /** How long the scenario runs, and how finely. */
   durationSeconds: z.number().positive(),
   stepSeconds: z.number().positive(),
@@ -221,6 +229,37 @@ export const scenarioSchema = z.object({
   price: profileSchema.nullable(),
   /** A declared grid outage, as a half-open window in seconds from the start. §15 lesson 4. */
   outage: z.object({ fromSeconds: z.number().min(0), toSeconds: z.number().min(0) }).strict().nullable(),
+  /**
+   * Conditions injected into the scenario.
+   *
+   * §12.4 is explicit that educational fault injection is **a simulated input**, not a claim to
+   * model every fault mechanism. So these live on the scenario, where a reader can see that they
+   * were asked for, rather than emerging from a model that does not have the physics for them.
+   */
+  injected: z.object({
+    /**
+     * One cell weaker than the rest: less capacity, more resistance, starting lower, running
+     * warmer. A spread deliberately placed, not a distribution claimed.
+     */
+    weakCell: z.object({
+      capacityFraction: z.number().min(0.1).max(1),
+      resistanceMultiple: z.number().min(1).max(20),
+      socOffset: z.number().min(-0.5).max(0.5),
+      tempOffsetC: z.number().min(-20).max(40),
+    }).strict().nullable().default(null),
+    /**
+     * The coolant stops moving at this second. §12.5: what follows is the modelled temperature
+     * rise and the derating response to it, and nothing about propagation.
+     */
+    coolingFailsAtSeconds: z.number().min(0).nullable().default(null),
+    /** The plant stops hearing from the battery management system at this second. */
+    communicationLostAtSeconds: z.number().min(0).nullable().default(null),
+  }).strict().default({ weakCell: null, coolingFailsAtSeconds: null, communicationLostAtSeconds: null }),
+  /**
+   * Reactive power commanded at the connection, in vars, positive when the plant supplies them.
+   * It takes its share of the converter's apparent power before any active power is available.
+   */
+  reactiveVar: z.number().default(0),
   /** What the learner is allowed to change. §15.1 caps this at three. */
   controls: z.array(z.string()).max(3).default([]),
   configHash: z.string().length(32),
@@ -365,14 +404,23 @@ export const timeSeriesResultSchema = z.object({
   packVoltageV: z.array(z.number()),
   packCurrentA: z.array(z.number()),
   cellVoltageV: z.array(z.number()),
+  /** Extrema across the cells, which is what the protections read. Equal where no spread is injected. */
+  cellVoltageMaxV: z.array(z.number()),
+  cellVoltageMinV: z.array(z.number()),
   soc: z.array(z.number()),
+  /** What the management system believes, against `soc` which is what the model knows. */
+  countedSoc: z.array(z.number()),
   cellTempC: z.array(z.number()),
+  cellTempMaxC: z.array(z.number()),
   /** Losses, split so each is counted exactly once. §14.1 matched-boundary accounting. */
   converterLossW: z.array(z.number()),
   batteryLossW: z.array(z.number()),
   auxiliaryW: z.array(z.number()),
   /** Which subsystem set the achieved power at each step, by name. Empty string where nothing did. */
   bindingConstraint: z.array(z.string()),
+  /** The converter's state and the management system's, one per sample. §12.3 and §12.4. */
+  pcsState: z.array(z.string()),
+  bmsState: z.array(z.string()),
   /** Load the plant could not serve, where a load was asked of it. */
   unservedLoadW: z.array(z.number()),
 }).strict().superRefine((r, ctx) => {

@@ -32,6 +32,16 @@ export type EmsRequest = {
   explanation: string;
   /** The values the explanation is built from, recorded so it can be checked rather than believed. */
   observed: Record<string, number>;
+  /**
+   * Why the policy is asking for nothing although something was asked of it, in the same words the
+   * limit chain uses for its own ceilings. Null whenever the policy is relaying a request, or when
+   * nothing was asked in the first place — a plant nobody has asked anything of is idle, not held.
+   *
+   * §11.3 requires the decision to be visible. A policy that quietly returns zero is the one thing
+   * a learner cannot see, so the engine takes this name as the binding constraint for the step and
+   * logs it against the EMS, which is who actually decided.
+   */
+  hold: string | null;
 };
 
 /** Policies that have not been built yet say so, rather than quietly doing nothing. */
@@ -68,6 +78,7 @@ export function decide(policy: EmsPolicy, o: EmsObservation): EmsRequest {
       requestedW: 0,
       explanation: `The ${policy.policy} policy is not built yet. ${policyAvailability[policy.policy]} Until then it asks for nothing rather than pretending to dispatch.`,
       observed,
+      hold: 'Policy not built yet',
     };
   }
 
@@ -77,14 +88,16 @@ export function decide(policy: EmsPolicy, o: EmsObservation): EmsRequest {
       requestedW: 0,
       explanation: `Holding: the charge is at ${(o.soc * 100).toFixed(1)}%, which is ${o.islanded ? 'the emergency floor' : 'the reserve'} of ${(floor * 100).toFixed(0)}%. ${o.islanded ? 'Even in an outage there is a floor below which the battery is not taken.' : 'Discharging past the reserve is what an outage is for.'}`,
       observed,
+      hold: 'Reserve held back',
     };
   }
   if (wanted === 0) {
-    return { requestedW: 0, explanation: 'Idle: nothing has been asked of the plant.', observed };
+    return { requestedW: 0, explanation: 'Idle: nothing has been asked of the plant.', observed, hold: null };
   }
   return {
     requestedW: wanted,
     explanation: `Relaying the request for ${Math.abs(wanted / 1e3).toFixed(0)} kW ${wanted > 0 ? 'out of' : 'into'} the battery. The converter and the battery management system decide what of it is possible.`,
     observed,
+    hold: null,
   };
 }

@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { accounting, defaultSolver, problemsWith, simulate } from '../sim/engine';
 import { fixturePlant, fixturePolicy, fixtureScenario, flatCellParameters } from '../sim/fixtures';
 import { lfpParameterSet, manualPolicy, teachingPlant } from '../sim/presets';
-import { seal, type Scenario } from '../sim/records';
+import { scenarioSchema, sealWith, type Scenario } from '../sim/records';
 import { plantShape } from '../sim/limits';
+import { emsPolicySchema } from '../sim/records';
 import { ocv, socAtVoltage } from '../sim/battery';
 
 /**
@@ -15,13 +16,13 @@ import { ocv, socAtVoltage } from '../sim/battery';
  * that a failure is reported as a failure.
  */
 
-const teaching = (over: Partial<Scenario> = {}): Scenario => seal({
+const teaching = (over: Partial<Scenario> = {}): Scenario => sealWith(scenarioSchema, {
   id: 'sc-teaching', label: 'Teaching scenario', kind: 'Scenario',
   plantId: teachingPlant.id, policyId: manualPolicy.id,
   initialSoc: 0.5, initialCellTempC: 25, durationSeconds: 3600, stepSeconds: 60,
   siteLoad: null, generation: null, price: null, outage: null, controls: ['power'],
   ...over,
-} as never) as Scenario;
+});
 
 const run = (over: { scenario?: Scenario; manualRequestW: number; solver?: Partial<ReturnType<typeof defaultSolver>>; plant?: typeof teachingPlant; policy?: typeof manualPolicy }) =>
   simulate({
@@ -45,7 +46,7 @@ describe('what the plant actually does when asked', () => {
     expect(out.series.bindingConstraint[0]).toMatch(/Converter|BMS|current/i);
     expect(out.events.events.length, 'a limit that bound is an event').toBeGreaterThan(0);
     expect(out.events.events[0].owner === 'PCS' || out.events.events[0].owner === 'BMS').toBe(true);
-    expect(out.events.events[0].message).toMatch(/held the discharge back/);
+    expect(out.events.events[0].message).toMatch(/the discharge is held below what was asked/);
   });
 
   it('never takes a cell past its own voltage limits, in either direction', () => {
@@ -195,7 +196,7 @@ describe('when it cannot do what was asked', () => {
   });
 
   it('says a policy that is not built yet is not built, rather than dispatching nothing quietly', () => {
-    const later = seal({ ...manualPolicy, policy: 'peak-shaving', peakTargetW: 500_000 } as never) as typeof manualPolicy;
+    const later = sealWith(emsPolicySchema, { ...manualPolicy, policy: 'peak-shaving', peakTargetW: 500_000 });
     const out = run({ policy: later, manualRequestW: 1_000_000 });
     expect(out.series.achievedPowerW.every(p => p === 0)).toBe(true);
     expect(out.decisions.decisions[0].explanation).toMatch(/not built yet.*lesson 2/is);

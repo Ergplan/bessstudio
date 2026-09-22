@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { accounting, defaultSolver, roundTrip, simulate } from '../sim/engine';
-import { fixturePlant, fixturePolicy, fixtureScenario, flatCellParameters } from '../sim/fixtures';
+import { fixturePlant, fixturePolicy, fixtureScenario, flatCellParameters, headroomConverter } from '../sim/fixtures';
+import { activePowerBounds, activePowerCeiling } from '../sim/pcs';
 
 /**
  * The acceptance fixtures from §18.
@@ -155,5 +156,65 @@ describe('F02 — converter balance', () => {
     const rt = roundTrip(partial.series);
     expect(rt.value, 'a partial discharge has no round-trip efficiency to report').toBeNull();
     expect(rt.why).toMatch(/would not mean anything/);
+  });
+});
+
+describe('F03 — apparent-power headroom, and the bound that beats it', () => {
+  /**
+   * A hundred kVA of capability with sixty kvar commanded leaves eighty kilowatts of active power,
+   * because a converter's rating is apparent power and reactive power takes its share first. Then
+   * the second half, which is the half that matters: §12.3 says the capability circle alone is
+   * insufficient, so a stricter current limit has to take precedence over it.
+   *
+   * Tolerance: 1e-9 relative. Both bounds are closed-form — a Pythagorean subtraction and a
+   * multiplication — with nothing iterative between the inputs and the answer.
+   */
+  const dcVoltageV = 320, tempC = 25;
+
+  it('leaves 80 kW of active power at 60 kvar out of 100 kVA', () => {
+    const { ceiling } = activePowerCeiling(headroomConverter(), { reactiveVar: 60_000, dcVoltageV, tempC, direction: 'discharge' });
+    expect(ceiling.name).toBe('Apparent power capability');
+    expect(ceiling.activeW / 1000, 'kW of active power left').toBeCloseTo(80, 9);
+  });
+
+  it('is the full rating when nothing reactive is commanded', () => {
+    const { ceiling } = activePowerCeiling(headroomConverter(), { reactiveVar: 0, dcVoltageV, tempC, direction: 'discharge' });
+    expect(ceiling.activeW / 1000).toBeCloseTo(100, 9);
+  });
+
+  it('follows the circle across its whole quarter', () => {
+    // Derived from P² + Q² = S², independently of the function under test.
+    for (const kvar of [0, 20, 40, 60, 80, 100]) {
+      const expected = Math.sqrt(100_000 ** 2 - (kvar * 1000) ** 2) / 1000;
+      const bound = activePowerBounds(headroomConverter(), { reactiveVar: kvar * 1000, dcVoltageV, tempC, direction: 'discharge' })
+        .find(b => b.name === 'Apparent power capability')!;
+      expect(bound.activeW / 1000, `${kvar} kvar`).toBeCloseTo(expected, 9);
+    }
+  });
+
+  it('lets a stricter current limit win, which is the half the circle cannot answer', () => {
+    // 200 A at 320 V is 64 kW on the DC side — below the 80 kW the circle allows.
+    const tight = headroomConverter({ dcMaxA: 200 });
+    const { ceiling, ordered } = activePowerCeiling(tight, { reactiveVar: 60_000, dcVoltageV, tempC, direction: 'discharge' });
+    expect(ceiling.name, 'the tighter bound is the one reported').toBe('Converter DC current limit');
+    expect(ceiling.activeW / 1000).toBeCloseTo(64, 9);
+    expect(ordered[1].name, 'and the circle is right behind it').toBe('Apparent power capability');
+    expect(ordered[1].activeW / 1000).toBeCloseTo(80, 9);
+  });
+
+  it('tightens as the DC voltage falls, which is when a real converter is current-bound', () => {
+    const tight = headroomConverter({ dcMaxA: 300 });
+    const at = (v: number) => activePowerCeiling(tight, { reactiveVar: 0, dcVoltageV: v, tempC, direction: 'discharge' });
+    // At 400 V, 300 A is 120 kW and the rating binds. At 250 V it is 75 kW and the current binds.
+    expect(at(400).ceiling.name).toBe('Converter rating');
+    expect(at(250).ceiling.name).toBe('Converter DC current limit');
+    expect(at(250).ceiling.activeW / 1000).toBeCloseTo(75, 9);
+  });
+
+  it('gives nothing at all outside the DC window, rather than something smaller', () => {
+    const { ceiling } = activePowerCeiling(headroomConverter(), { reactiveVar: 0, dcVoltageV: 150, tempC, direction: 'discharge' });
+    expect(ceiling.name).toBe('Converter DC window');
+    expect(ceiling.activeW).toBe(0);
+    expect(ceiling.reason).toContain('200–400 V');
   });
 });

@@ -71,6 +71,16 @@ export type LimitInput = {
   shape: PlantShape;
   soc: number;
   tempC: number;
+  /**
+   * The cell that binds first, where it is not the representative one.
+   *
+   * §12.4's point about a healthy average not overriding one limiting cell has to hold in the
+   * limit chain as well as in the protections, or the chain lets a step take the weak cell
+   * somewhere the protections would then have to catch it — which is the overshoot §13.1 warns
+   * about, arriving by a different door. The voltage and charge ceilings are read from this cell;
+   * the current and power ceilings are properties of the string and stay with the representative.
+   */
+  limiting?: { cell: CellParameters; soc: number; tempC: number };
   stepSeconds: number;
   /** Where the EMS will not go below under the policy in force. */
   reserveSoc: number;
@@ -104,17 +114,37 @@ export function limitsFor(input: LimitInput, direction: 'charge' | 'discharge'):
   });
 
   // 2. The cell voltage cutoff, and the converter's DC window, which are the same kind of bound
-  //    read from two different numbers: whichever is the tighter is the one that binds.
-  const v0 = ocv(cell, soc), r = resistanceAt(cell, tempC);
+  //    read from two different numbers: whichever is the tighter is the one that binds. Read from
+  //    the limiting cell, because that is the one that reaches a cutoff first.
+  const lim = input.limiting ?? { cell, soc, tempC };
+  const v0 = ocv(lim.cell, lim.soc), r = resistanceAt(lim.cell, lim.tempC);
   const windowCellV = discharging ? c.dcMinV / shape.seriesCells : c.dcMaxV / shape.seriesCells;
-  const cellCutoffV = discharging ? cell.minV : cell.maxV;
+  const cellCutoffV = discharging ? lim.cell.minV : lim.cell.maxV;
   const bindingV = discharging ? Math.max(cellCutoffV, windowCellV) : Math.min(cellCutoffV, windowCellV);
   const windowBinds = discharging ? windowCellV > cellCutoffV : windowCellV < cellCutoffV;
+  const coulombic = discharging || idealised ? 1 : lim.cell.coulombicEfficiency;
   if (r > 0) {
+    /**
+     * The cutoff has to hold where the step **ends**, not only where it starts.
+     *
+     * On the steep part of an LFP curve the open-circuit voltage can move further inside one step
+     * than the entire margin the limit was computed from, and a current set from the starting
+     * voltage then carries the cell straight through its cutoff — the overshoot §13.1 warns
+     * about, arriving through the one limit that looked safest. Three passes of the obvious fixed
+     * point are enough: each lowers the current, so the sequence converges from above and cannot
+     * land on the wrong side.
+     */
+    let iVoltage = Math.max(0, discharging ? (v0 - bindingV) / r : (bindingV - v0) / r);
+    for (let pass = 0; pass < 3; pass++) {
+      const moved = iVoltage * stepSeconds / 3600 / lim.cell.capacityAh;
+      const socEnd = Math.min(1, Math.max(0, discharging ? lim.soc - moved : lim.soc + moved * coulombic));
+      const vEnd = ocv(lim.cell, socEnd);
+      iVoltage = Math.min(iVoltage, Math.max(0, discharging ? (vEnd - bindingV) / r : (bindingV - vEnd) / r));
+    }
     out.push({
       by: windowBinds ? 'PCS' : 'BMS',
       name: windowBinds ? (discharging ? 'Converter DC window, lower' : 'Converter DC window, upper') : (discharging ? 'Cell minimum voltage' : 'Cell maximum voltage'),
-      cellCurrentA: Math.max(0, discharging ? (v0 - bindingV) / r : (bindingV - v0) / r),
+      cellCurrentA: iVoltage,
       reason: windowBinds
         ? `The converter stops operating outside ${c.dcMinV}–${c.dcMaxV} V across the string, which is ${(windowCellV).toFixed(3)} V a cell.`
         : `A cell may not be taken ${discharging ? 'below' : 'above'} ${cellCutoffV} V; it is at ${v0.toFixed(3)} V before any current flows.`,
@@ -166,21 +196,21 @@ export function limitsFor(input: LimitInput, direction: 'charge' | 'discharge'):
   // Both are evaluated here rather than only where the policy decides, because a floor checked
   // once per reporting step is a floor a long step walks straight through, and the reporting step
   // is the learner's choice of chart resolution rather than a statement about the physics.
-  const efficiency = discharging || idealised ? 1 : cell.coulombicEfficiency;
-  const currentForRoom = (room: number) => Math.max(0, room) * cell.capacityAh * 3600 / (stepSeconds * efficiency);
+  const currentForRoom = (room: number, capacityAh: number) =>
+    Math.max(0, room) * capacityAh * 3600 / (stepSeconds * coulombic);
 
   out.push({
     by: 'BMS', name: discharging ? 'State of charge floor' : 'State of charge ceiling',
-    cellCurrentA: currentForRoom(discharging ? soc - socFloor : socCeiling - soc),
+    cellCurrentA: currentForRoom(discharging ? lim.soc - socFloor : socCeiling - lim.soc, lim.cell.capacityAh),
     reason: discharging
-      ? `${(soc * 100).toFixed(1)}% charge remains above the ${(socFloor * 100).toFixed(0)}% floor.`
-      : `${((socCeiling - soc) * 100).toFixed(1)}% of the window remains below the ${(socCeiling * 100).toFixed(0)}% ceiling.`,
+      ? `${(lim.soc * 100).toFixed(1)}% charge remains in the emptiest cell, above the ${(socFloor * 100).toFixed(0)}% floor.`
+      : `${((socCeiling - lim.soc) * 100).toFixed(1)}% of the window remains in the fullest cell, below the ${(socCeiling * 100).toFixed(0)}% ceiling.`,
   });
 
   if (discharging && input.reserveSoc > socFloor) {
     out.push({
       by: 'EMS', name: 'Reserve held back',
-      cellCurrentA: currentForRoom(soc - input.reserveSoc),
+      cellCurrentA: currentForRoom(soc - input.reserveSoc, cell.capacityAh),
       reason: `The policy keeps ${(input.reserveSoc * 100).toFixed(0)}% of the battery in hand; the charge is at ${(soc * 100).toFixed(1)}%.`,
     });
   }

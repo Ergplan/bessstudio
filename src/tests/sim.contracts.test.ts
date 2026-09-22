@@ -314,9 +314,11 @@ describe('the records, and what they refuse', () => {
     const series = {
       id: 's', label: 'r', kind: 'TimeSeriesResult' as const, runId: 'r', stepSeconds: 60,
       timeSeconds: [0, 60, 120], requestedPowerW: arr(), achievedPowerW: arr(), gridPowerW: arr(),
-      dcPowerW: arr(), packVoltageV: arr(), packCurrentA: arr(), cellVoltageV: arr(), soc: arr(),
-      cellTempC: arr(), converterLossW: arr(), batteryLossW: arr(), auxiliaryW: arr(),
-      bindingConstraint: ['', '', ''], unservedLoadW: arr(), schemaVersion: 1,
+      dcPowerW: arr(), packVoltageV: arr(), packCurrentA: arr(), cellVoltageV: arr(),
+      cellVoltageMaxV: arr(), cellVoltageMinV: arr(), soc: arr(), countedSoc: arr(),
+      cellTempC: arr(), cellTempMaxC: arr(), converterLossW: arr(), batteryLossW: arr(), auxiliaryW: arr(),
+      bindingConstraint: ['', '', ''], pcsState: ['', '', ''], bmsState: ['', '', ''],
+      unservedLoadW: arr(), schemaVersion: 1,
     };
     expect(() => timeSeriesResultSchema.parse(series)).not.toThrow();
     expect(() => timeSeriesResultSchema.parse({ ...series, soc: [0, 0] })).toThrow(/2 samples against 3 timestamps/);
@@ -365,8 +367,11 @@ describe('persistence, and what survives it', () => {
       id: 's-1', label: 'Series', kind: 'TimeSeriesResult', schemaVersion: 1, runId: 'run-1', stepSeconds: 60,
       timeSeconds: [0, 60], requestedPowerW: [1000.123456789, 0], achievedPowerW: [999.987654321, 0],
       gridPowerW: [0, 0], dcPowerW: [0, 0], packVoltageV: [0, 0], packCurrentA: [0, 0],
-      cellVoltageV: [0, 0], soc: [0.5, 0.49], cellTempC: [25, 25], converterLossW: [0, 0],
-      batteryLossW: [0, 0], auxiliaryW: [0, 0], bindingConstraint: ['', ''], unservedLoadW: [0, 0],
+      cellVoltageV: [0, 0], cellVoltageMaxV: [0, 0], cellVoltageMinV: [0, 0],
+      soc: [0.5, 0.49], countedSoc: [0.5, 0.49], cellTempC: [25, 25], cellTempMaxC: [25, 25],
+      converterLossW: [0, 0], batteryLossW: [0, 0], auxiliaryW: [0, 0],
+      bindingConstraint: ['', ''], pcsState: ['standby', 'standby'], bmsState: ['normal', 'normal'],
+      unservedLoadW: [0, 0],
     } as never,
     decisions: { id: 'd-1', label: 'Decisions', kind: 'EMSDecisionLog', schemaVersion: 1, runId: 'run-1', decisions: [] } as never,
     events: { id: 'e-1', label: 'Events', kind: 'EventLog', schemaVersion: 1, runId: 'run-1', events: [] } as never,

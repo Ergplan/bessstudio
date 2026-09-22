@@ -3,13 +3,15 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Pause, Play, RotateCcw, Zap } from 'lucide-react';
-import { Card, Stat, Badge, Empty, Slider, KV } from '../components/ui';
+import { Card, Stat, Badge, Empty, Slider, KV, type Tone } from '../components/ui';
 import { LineChart, series as chartSeries } from '../components/viz';
 import { useWorkspace } from '../../platform/workspace';
 import { lessons, lessonById, defaultControls, requestFrom, withControls, type LessonCard } from '../../sim/lessons';
 import { manualPolicy, teachingPlant, lfpParameterSet } from '../../sim/presets';
 import { accounting, simulate } from '../../sim/engine';
 import { badgeLabels, badgeMeanings } from '../../sim/provenance';
+import { pcsStateMeaning, pcsStateOwner, type PcsState } from '../../sim/pcs';
+import { bmsStateMeaning, type BmsState } from '../../sim/bms';
 
 /**
  * The lesson catalogue, and the player.
@@ -104,10 +106,15 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
 
   const at = Math.min(cursor, steps - 1);
   const s = out.series;
-  // The closing sample carries the state the run ended in and no dispatch, so it has no decision
-  // of its own; the last one made still explains how it got there.
-  const decision = out.decisions.decisions[Math.min(at, out.decisions.decisions.length - 1)];
-  const constraint = s.bindingConstraint[at];
+  // Two indices, because the samples answer two different questions. `at` is the state the plant is
+  // in — a charge level, a temperature — and at rest that is the closing sample, which carries the
+  // state the run ended in. `act` is the last interval in which the plant was actually doing
+  // something, which is what the states, the explanation and the limiting subsystem describe: the
+  // closing sample dispatches nothing, and reading it there would tell every learner who opened a
+  // finished run that the converter is in standby for no reason anybody gave.
+  const act = Math.min(at, Math.max(0, steps - 2));
+  const decision = out.decisions.decisions[Math.min(act, out.decisions.decisions.length - 1)];
+  const constraint = s.bindingConstraint[act];
   const movedWh = requestFrom(values) > 0 ? totals.deliveredAcWh : totals.drawnAcWh;
   const lostWh = totals.converterLossWh + totals.batteryLossWh + totals.auxiliaryWh;
 
@@ -166,16 +173,16 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
 
       <div className="grid cols-2">
         <Card title="What the plant is doing, and who decided" tight>
-          <Stack constraint={constraint} discharging={s.achievedPowerW[at] > 0} />
+          <Stack constraint={constraint} discharging={s.achievedPowerW[act] > 0} />
           <p className="lesson-explain">{decision?.explanation}</p>
           {constraint && constraint !== 'Request met in full' && (
             <div className="notice warning"><b>{constraint}</b>
               <p>{decision?.appliedLimits.find(l => l.reason.startsWith(constraint))?.reason.split(': ').slice(1).join(': ')}</p></div>
           )}
           <div style={{ marginTop: 10 }}>
-            <KV label="Cell voltage">{s.cellVoltageV[at].toFixed(3)} V</KV>
-            <KV label="String voltage">{Math.round(s.packVoltageV[at]).toLocaleString()} V</KV>
-            <KV label="Battery current">{Math.round(s.packCurrentA[at]).toLocaleString()} A</KV>
+            <KV label="Cell voltage">{s.cellVoltageV[act].toFixed(3)} V</KV>
+            <KV label="String voltage">{Math.round(s.packVoltageV[act]).toLocaleString()} V</KV>
+            <KV label="Battery current">{Math.round(s.packCurrentA[act]).toLocaleString()} A</KV>
             <KV label="Cell temperature">{s.cellTempC[at].toFixed(1)} °C</KV>
           </div>
         </Card>
@@ -210,6 +217,31 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
         </Card>
       </div>
 
+      <div className="grid cols-2">
+        <Card title="What each subsystem is in" subtitle="The state the converter and the battery management system are in at this moment" tight>
+          <StateRow
+            title="Converter"
+            state={s.pcsState[act]}
+            owner={pcsStateOwner[s.pcsState[act] as PcsState] ?? 'PCS'}
+            meaning={pcsStateMeaning[s.pcsState[act] as PcsState] ?? ''}
+          />
+          <StateRow
+            title="Battery management"
+            state={s.bmsState[act]}
+            owner="BMS"
+            meaning={bmsStateMeaning[s.bmsState[at] as BmsState] ?? ''}
+          />
+          <p className="muted" style={{ margin: '10px 0 0' }}>
+            A state names who is deciding. The converter can be dispatching below what was asked; only
+            the battery management system can refuse outright, and it is the one that opens the contactors.
+          </p>
+        </Card>
+
+        <Card title="What happened, and when" subtitle="Every limit, alarm and trip in the order it occurred" tight>
+          <EventLog events={out.events.events.filter(e => e.atSeconds <= s.timeSeconds[at] + 0.001)} />
+        </Card>
+      </div>
+
       <Card title="What this model is, and is not" tight>
         <p className="muted" style={{ margin: 0 }}>
           <b>{badgeLabels[out.run.badge]}.</b> {badgeMeanings[out.run.badge]} {lfpParameterSet.provenance.source}
@@ -221,6 +253,50 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
         </ul>
       </Card>
     </div>
+  );
+}
+
+/** One subsystem's state, named, attributed and explained. §12.3 and §12.4 both require the owner. */
+function StateRow({ title, state, owner, meaning }: { title: string; state: string; owner: string; meaning: string }) {
+  const tone: Tone = /faulted|tripped|alarm/.test(state) ? 'bad' : /derated|derating|warning|recovery/.test(state) ? 'warn' : 'info';
+  return (
+    <div className="sim-state">
+      <div className="row" style={{ gap: 8 }}>
+        <b>{title}</b>
+        <Badge tone={tone}>{state}</Badge>
+        <div className="spacer" />
+        <span className="muted mono">{owner}</span>
+      </div>
+      <p className="muted" style={{ margin: '4px 0 0' }}>{meaning}</p>
+    </div>
+  );
+}
+
+/**
+ * The event log.
+ *
+ * §12.4 asks for the transitions themselves rather than a summary of them: what engaged, when, who
+ * owns it, and — when it latched — what would clear it. A learner who has just watched the power
+ * fall short should be able to read the reason here without inferring it from a chart.
+ */
+function EventLog({ events }: { events: { atSeconds: number; owner: string; severity: string; code: string; message: string; latched: boolean; clearsWhen: string }[] }) {
+  if (events.length === 0) {
+    return <p className="muted" style={{ margin: 0 }}>Nothing has engaged yet. Every signal is inside its band and the request is being met in full.</p>;
+  }
+  const tone = (s: string): Tone => (s === 'trip' || s === 'alarm' ? 'bad' : s === 'limit' ? 'warn' : 'neutral');
+  return (
+    <ul className="sim-events">
+      {events.map(e => (
+        <li key={`${e.code}-${e.atSeconds}-${String(e.latched)}`}>
+          <span className="mono">{Math.round(e.atSeconds / 60)} min</span>
+          <Badge tone={tone(e.severity)}>{e.owner}</Badge>
+          <div>
+            <b>{e.message}</b>
+            {e.latched && <p className="muted">Latched. {e.clearsWhen || 'Clears only on a deliberate reset.'}</p>}
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 

@@ -97,8 +97,12 @@ export function heatW(cell: CellParameters, soc: number, currentA: number, tempC
  * hottest and coldest cell in a real enclosure is a separately injected scenario, not something
  * this model produces.
  */
-export function tempAfter(cell: CellParameters, tempC: number, generatedW: number, coolantC: number, seconds: number): number {
-  const shed = (tempC - coolantC) / cell.thermalResistanceKPerW;
+export function tempAfter(
+  cell: CellParameters, tempC: number, generatedW: number, coolantC: number,
+  /** How much worse the path out of the cell is than nominal. One when the coolant is moving. */
+  resistanceMultiple: number, seconds: number,
+): number {
+  const shed = (tempC - coolantC) / (cell.thermalResistanceKPerW * Math.max(resistanceMultiple, 1e-6));
   const capacity = cell.massKg * cell.specificHeatJPerKgK;
   return tempC + (generatedW - shed) * seconds / capacity;
 }

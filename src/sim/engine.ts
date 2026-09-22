@@ -1,4 +1,9 @@
-import { idealise, ocv, resistanceAt, socAfter, tempAfter, heatW } from './battery';
+import { idealise, ocv, resistanceAt, socAfter, tempAfter, terminalVoltage, heatW } from './battery';
+import {
+  balance, countedSoc, defaultBalancing, defaultCountingError, defaultProtections,
+  evaluate as evaluateBms, newMemory, type BmsMemory, type PackSignals,
+} from './bms';
+import { activePowerCeiling, pcsState } from './pcs';
 import { decide, type EmsObservation } from './ems';
 import { binding, limitsFor, plantShape, type Limit } from './limits';
 import { signConvention } from './signs';
@@ -144,9 +149,17 @@ export function problemsWith(input: RunInput): string[] {
 
 export function simulate(input: RunInput): RunOutput {
   const solver: SolverSettings = { ...defaultSolver(), ...input.solver };
-  const { scenario, policy, parameters } = input;
   const invalid = problemsWith(input);
-  const plant = solver.idealised ? idealisePlant(input.plant) : input.plant;
+  // Run against the parsed records rather than whatever was handed in, so the defaults a schema
+  // fills in are the ones the engine sees. A scenario stored before a field existed reads back
+  // without it, and a model that then trips over `undefined` is a model that cannot be upgraded.
+  const scenario = invalid.length ? input.scenario : scenarioSchema.parse(input.scenario);
+  const policy = invalid.length ? input.policy : emsPolicySchema.parse(input.policy);
+  const parameters = invalid.length ? input.parameters : equipmentParameterSetSchema.parse(input.parameters);
+  const parsedPlant = invalid.length ? input.plant : plantConfigurationSchema.parse(input.plant);
+  // A scenario may put the same plant somewhere warmer or colder than it was designed for.
+  const sited = scenario?.ambientC == null ? parsedPlant : { ...parsedPlant, ambientC: scenario.ambientC };
+  const plant = solver.idealised ? idealisePlant(sited) : sited;
   const cell = solver.idealised ? idealise(parameters.cell) : parameters.cell;
   const shape = plantShape(plant);
   const steps = Math.round(scenario.durationSeconds / scenario.stepSeconds);
@@ -156,10 +169,22 @@ export function simulate(input: RunInput): RunOutput {
 
   const series: Record<string, number[]> = {
     timeSeconds: [], requestedPowerW: [], achievedPowerW: [], gridPowerW: [], dcPowerW: [],
-    packVoltageV: [], packCurrentA: [], cellVoltageV: [], soc: [], cellTempC: [],
+    packVoltageV: [], packCurrentA: [], cellVoltageV: [], cellVoltageMaxV: [], cellVoltageMinV: [],
+    soc: [], countedSoc: [], cellTempC: [], cellTempMaxC: [],
     converterLossW: [], batteryLossW: [], auxiliaryW: [], unservedLoadW: [],
   };
   const bindingConstraint: string[] = [];
+  const pcsStates: string[] = [];
+  const bmsStates: string[] = [];
+
+  // The battery management system, and the spread it is watching. §12.4 reads extrema rather than
+  // averages, which needs at least two cells to have extrema of.
+  const protections = defaultProtections(cell);
+  const balancing = defaultBalancing();
+  const counting = defaultCountingError();
+  const memory: BmsMemory = newMemory();
+  const weak = scenario.injected?.weakCell ?? null;
+  const weakCell = weak ? { ...cell, capacityAh: cell.capacityAh * weak.capacityFraction, resistanceOhm: cell.resistanceOhm * weak.resistanceMultiple } : null;
   const decisions: EmsDecision[] = [];
   const events: SimEvent[] = [];
   const seen = new Set<string>();
@@ -167,10 +192,81 @@ export function simulate(input: RunInput): RunOutput {
 
   let soc = scenario.initialSoc;
   let tempC = scenario.initialCellTempC;
+  let weakSoc = Math.min(1, Math.max(0, scenario.initialSoc + (weak?.socOffset ?? 0)));
+  let weakTempC = scenario.initialCellTempC + (weak?.tempOffsetC ?? 0);
+  let now = 0;
+
+  /**
+   * What the management system can see.
+   *
+   * Extrema across the cells, never averages — that is the whole point of §12.4's "why a healthy
+   * average state of charge does not override one limiting cell". With no spread injected the two
+   * cells are the same cell and the extrema coincide, which is the honest answer rather than a
+   * fabricated distribution.
+   */
+  const packSignals = (): PackSignals => {
+    // Terminal voltage, not open-circuit: a management system measures what is on the terminals,
+    // and under load that is where a weak cell shows itself. It reads the current that has just
+    // flowed rather than the one about to, which is both how a supervisory system works and what
+    // keeps this from depending on the decision it is about to inform.
+    const repV = terminalVoltage(cell, soc, lastCellCurrent, tempC);
+    const wV = weakCell ? terminalVoltage(weakCell, weakSoc, lastCellCurrent, weakTempC) : repV;
+    const wT = weakCell ? weakTempC : tempC;
+    const lost = scenario.injected?.communicationLostAtSeconds ?? null;
+    return {
+      cellVoltageMax: Math.max(repV, wV), cellVoltageMin: Math.min(repV, wV),
+      cellTempMax: Math.max(tempC, wT), cellTempMin: Math.min(tempC, wT),
+      cellCurrentA: lastCellCurrent,
+      communicationOk: lost === null || now < lost,
+      insulationOk: true, contactorOk: true,
+    };
+  };
+  let lastCellCurrent = 0;
+
+  /**
+   * The thermal resistance from a cell to its coolant.
+   *
+   * §12.5 asks a cooling failure to demonstrate the modelled temperature and derating response and
+   * nothing else. A stopped loop is exactly that: the path out of the cell gets much worse, the
+   * cell heats, the protections derate and then trip. No propagation is modelled and none is
+   * claimed.
+   */
+  const coolingFailed = (atSeconds: number) => {
+    const fails = scenario.injected?.coolingFailsAtSeconds ?? null;
+    return fails !== null && atSeconds >= fails;
+  };
+  /**
+   * What the cell sheds its heat to.
+   *
+   * While the loop is moving, the coolant. Once it has stopped there is nothing carrying heat out
+   * of the enclosure at all, so the cells warm their surroundings and then themselves: the
+   * coolant sits at the cell's own temperature and the cell heats adiabatically. That is also why
+   * the temperature does not come back down when the plant stops dispatching — a detail worth
+   * more than the rise itself.
+   */
+  const coolantFor = (atSeconds: number, cellTempC: number) => (coolingFailed(atSeconds) ? cellTempC : plant.ambientC);
+
+  /** The cell current that would move this much AC power, for comparing a converter ceiling. */
+  const cellCurrentForAcPower = (acW: number, direction: 'charge' | 'discharge') => {
+    const perCellW = dcForAc(direction === 'discharge' ? acW : -acW, plant) / shape.totalCells;
+    const v0 = ocv(cell, soc), r = resistanceAt(cell, tempC);
+    if (r <= 0) return perCellW / v0;
+    const d = v0 * v0 - 4 * r * perCellW;
+    return d < 0 ? Number.POSITIVE_INFINITY : (v0 - Math.sqrt(d)) / (2 * r);
+  };
+
+  /** Time passing with nothing dispatched: the cells still cool, or fail to. */
+  const advanceIdle = (seconds: number) => {
+    lastCellCurrent = 0;
+    if (solver.idealised) return;
+    tempC = tempAfter(cell, tempC, 0, coolantFor(now, tempC), 1, seconds);
+    if (weakCell) weakTempC = tempAfter(weakCell, weakTempC, 0, coolantFor(now, weakTempC), 1, seconds);
+  };
   let failure: string | null = invalid.length ? invalid.join(' ') : null;
 
   for (let step = 0; step < steps && failure === null; step++) {
     const t = step * scenario.stepSeconds;
+    now = t;
     const islanded = !!scenario.outage && t >= scenario.outage.fromSeconds && t < scenario.outage.toSeconds;
     const siteLoadW = at(scenario.siteLoad, step);
     const observation: EmsObservation = {
@@ -184,16 +280,49 @@ export function simulate(input: RunInput): RunOutput {
     const auxW = plant.auxiliaryW + plant.converter.standbyW;
 
     const startSoc = soc, startTemp = tempC, startVoltage = ocv(cell, soc);
+    const startWeakV = weakCell ? ocv(weakCell, weakSoc) : startVoltage;
+    const measured = packSignals();
+    const startWeakTemp = weakCell ? weakTempC : startTemp;
     let sumDc = 0, sumAc = 0, sumCellI = 0, sumCellV = 0, sumConvLoss = 0, sumBattLoss = 0;
     let appliedLimits: { by: string; limitW: number; reason: string }[] = [];
-    let bindName = asked.requestedW === 0 ? '' : 'Request met in full';
+    /** The tightest any ceiling held this step, across every piece of it. */
+    let worst: { name: string; ratio: number } | null = null;
+    // A policy that asks for nothing while the learner asked for something is itself the binding
+    // constraint, and the EMS is the one that decided it. Without this the plant sits in standby
+    // with no constraint named and no event logged, which is exactly the silence §11.3 forbids.
+    let bindName = asked.requestedW === 0 ? (asked.hold ?? '') : 'Request met in full';
+    if (asked.hold && (input.manualRequestW ?? 0) !== 0) {
+      note({
+        atSeconds: t, owner: 'EMS', severity: 'limit',
+        code: asked.hold.toLowerCase().replace(/[^a-z]+/g, '-'),
+        message: `${asked.hold}: the policy asked for nothing. ${asked.explanation}`,
+        latched: false, clearsWhen: 'The policy relays a request again.',
+      });
+    }
+    let bms = evaluateBms(protections, packSignals(), memory, 0, t);
+    const stepEvents: SimEvent[] = [];
 
     for (let piece = 0; piece < subSteps; piece++) {
       const direction = asked.requestedW > 0 ? 'discharge' : asked.requestedW < 0 ? 'charge' : null;
-      if (direction === null) { sumCellV += ocv(cell, soc); continue; }
+      // The management system is evaluated whether or not anything is being asked of the plant: a
+      // cell cooking on a stopped coolant loop is a fault at idle exactly as it is under load.
+      bms = evaluateBms(protections, packSignals(), memory, subSeconds, t);
+      stepEvents.push(...bms.events);
+      if (direction === null) {
+        sumCellV += ocv(cell, soc);
+        advanceIdle(subSeconds);
+        continue;
+      }
 
+      // Which cell binds depends on the direction: discharging, it is the emptiest; charging, the
+      // fullest. With no spread injected both are the representative cell and this is a no-op.
+      const limiting = weakCell
+        ? (direction === 'discharge'
+          ? (weakSoc <= soc ? { cell: weakCell, soc: weakSoc, tempC: weakTempC } : { cell, soc, tempC })
+          : (weakSoc >= soc ? { cell: weakCell, soc: weakSoc, tempC: weakTempC } : { cell, soc, tempC }))
+        : undefined;
       const limits = limitsFor({
-        plant, cell, shape, soc, tempC, stepSeconds: subSeconds,
+        plant, cell, shape, soc, tempC, limiting, stepSeconds: subSeconds,
         // An outage lowers the reserve the policy keeps in hand; it never lowers the hard floor.
         reserveSoc: islanded ? policy.emergencyReserveSoc : policy.reserveSoc,
         socFloor: 0, socCeiling: 1, islanded, idealised: solver.idealised,
@@ -209,9 +338,26 @@ export function simulate(input: RunInput): RunOutput {
         ? (disc < 0 ? Number.POSITIVE_INFINITY : (v0 - Math.sqrt(disc)) / (2 * r))
         : perCellW / v0;
 
-      const allowed = Math.min(Math.abs(wantedCellI), limit.cellCurrentA);
+      // The converter's own ceiling, which the capability circle alone cannot answer. §12.3.
+      const dcVoltageNow = (v0 - 0) * shape.seriesCells;
+      const pcsCeiling = activePowerCeiling(plant.converter, {
+        reactiveVar: scenario.reactiveVar ?? 0, dcVoltageV: dcVoltageNow, tempC, direction,
+      }).ceiling;
+      const pcsCellI = Math.abs(cellCurrentForAcPower(pcsCeiling.activeW, direction));
+
+      // And the management system's veto, which multiplies whatever survived everything else.
+      const bmsFactor = direction === 'discharge' ? bms.dischargeFactor : bms.chargeFactor;
+
+      const ceilings: { name: string; value: number }[] = [
+        { name: limit.name, value: limit.cellCurrentA },
+        { name: pcsCeiling.name, value: pcsCellI },
+        { name: bms.binding ? bms.binding.label : 'Battery management system', value: limit.cellCurrentA * bmsFactor },
+      ];
+      const tightest = ceilings.reduce((a, b) => (b.value < a.value ? b : a));
+      const allowed = Math.min(Math.abs(wantedCellI), tightest.value);
       if (!Number.isFinite(allowed)) { failure = `The requested power is beyond what this battery can deliver at ${(soc * 100).toFixed(0)}% charge, at any current.`; break; }
       const cellI = direction === 'discharge' ? allowed : -allowed;
+      lastCellCurrent = cellI;
 
       const vCell = v0 - cellI * r;
       const cellW = vCell * cellI;
@@ -230,16 +376,30 @@ export function simulate(input: RunInput): RunOutput {
           const dc = i * (v0 - i * r) * shape.totalCells * (direction === 'discharge' ? 1 : -1);
           return { by: l.by, limitW: Math.abs(acForDc(dc, plant)), reason: `${l.name}: ${l.reason}` };
         });
-        if (allowed < Math.abs(wantedCellI) - 1e-9) {
-          bindName = limit.name;
-          recordLimitEvent(note, limit, t, direction);
-        }
+      }
+      // Which limit bound is asked of every piece, not only the first. A step is reported by the
+      // average power across it, so a ceiling that engages half way through still shows up in the
+      // reported power — and if the constraint were read from the first piece alone, that step
+      // would report a shortfall with nothing named as its cause.
+      if (allowed < Math.abs(wantedCellI) - 1e-9) {
+        const ratio = allowed / Math.abs(wantedCellI);
+        if (worst === null || ratio < worst.ratio) worst = { name: tightest.name, ratio };
+        if (tightest.name === limit.name) recordLimitEvent(note, limit, t + piece * subSeconds, direction);
       }
 
       soc = socAfter(cell, soc, cellI, subSeconds);
-      tempC = solver.idealised ? tempC : tempAfter(cell, tempC, heatW(cell, soc, cellI, tempC), plant.ambientC, subSeconds);
+      tempC = solver.idealised ? tempC : tempAfter(cell, tempC, heatW(cell, soc, cellI, tempC), coolantFor(t, tempC), 1, subSeconds);
+      if (weakCell) {
+        weakSoc = socAfter(weakCell, weakSoc, cellI, subSeconds);
+        weakTempC = solver.idealised ? weakTempC
+          : tempAfter(weakCell, weakTempC, heatW(weakCell, weakSoc, cellI, weakTempC), coolantFor(t, weakTempC), 1, subSeconds);
+      }
+      // Balancing, and the count the management system is keeping against what is true.
+      balance(balancing, { soc, spreadV: Math.abs(ocv(cell, soc) - (weakCell ? ocv(weakCell, weakSoc) : ocv(cell, soc))), cellV: ocv(cell, soc), seconds: subSeconds }, memory);
+      countedSoc(counting, { trueSoc: soc, capacityAh: cell.capacityAh, seconds: subSeconds }, memory);
     }
     if (failure !== null) break;
+    if (worst) bindName = worst.name;
 
     const n = subSteps;
     const dcW = sumDc / n, acW = sumAc / n, cellI = sumCellI / n;
@@ -259,16 +419,34 @@ export function simulate(input: RunInput): RunOutput {
     series.achievedPowerW.push(acW);
     series.gridPowerW.push(gridW);
     series.dcPowerW.push(dcW);
-    series.packVoltageV.push(startVoltage * shape.seriesCells);
+    // The loaded terminal voltage, which is what a meter on the string reads, not the open-circuit
+    // voltage it would relax to. §12.2 wants the fall under load to be visible.
+    const measuredV = terminalVoltage(cell, startSoc, lastCellCurrent, startTemp);
+    series.packVoltageV.push(measuredV * shape.seriesCells);
     series.packCurrentA.push(cellI * shape.parallelStrings);
-    series.cellVoltageV.push(startVoltage);
+    series.cellVoltageV.push(measuredV);
+    // What the protections read: the terminal voltages, with the load on them.
+    series.cellVoltageMaxV.push(measured.cellVoltageMax);
+    series.cellVoltageMinV.push(measured.cellVoltageMin);
     series.soc.push(startSoc);
+    series.countedSoc.push(Math.min(1, Math.max(0, startSoc + memory.countingDriftSoc)));
     series.cellTempC.push(startTemp);
+    series.cellTempMaxC.push(Math.max(startTemp, startWeakTemp));
     series.converterLossW.push(sumConvLoss / n);
     series.batteryLossW.push(sumBattLoss / n);
     series.auxiliaryW.push(auxW);
     series.unservedLoadW.push(unserved);
     bindingConstraint.push(bindName);
+    // The same tolerance the solver is held to, so the state and the named constraint cannot
+    // disagree: a converter reported as discharging while a limit is named as holding it back is
+    // two readings of one moment that contradict each other, and the learner has no way to tell
+    // which is the lie.
+    pcsStates.push(pcsState({
+      requestedW: asked.requestedW, achievedW: acW, vetoed: bms.open,
+      elapsedSeconds: t, prechargeSeconds: 0, tolerance: solver.toleranceFraction,
+    }));
+    bmsStates.push(bms.state);
+    for (const e of stepEvents) note(e);
 
     decisions.push({
       atSeconds: t, observed: asked.observed, policyVersion: policy.policyVersion,
@@ -287,9 +465,15 @@ export function simulate(input: RunInput): RunOutput {
       'converterLossW', 'batteryLossW', 'auxiliaryW', 'unservedLoadW']) series[key].push(0);
     series.packVoltageV.push(ocv(cell, soc) * shape.seriesCells);
     series.cellVoltageV.push(ocv(cell, soc));
+    series.cellVoltageMaxV.push(packSignals().cellVoltageMax);
+    series.cellVoltageMinV.push(packSignals().cellVoltageMin);
     series.soc.push(soc);
+    series.countedSoc.push(Math.min(1, Math.max(0, soc + memory.countingDriftSoc)));
     series.cellTempC.push(tempC);
+    series.cellTempMaxC.push(Math.max(tempC, weakCell ? weakTempC : tempC));
     bindingConstraint.push('');
+    pcsStates.push('standby');
+    bmsStates.push(bmsStates.at(-1) ?? 'normal');
   }
 
   const runId = input.runId ?? `run_${scenario.configHash.slice(0, 12)}`;
@@ -309,7 +493,8 @@ export function simulate(input: RunInput): RunOutput {
     run,
     series: {
       id: `series_${runId}`, label: scenario.label, kind: 'TimeSeriesResult', schemaVersion: SIM_SCHEMA_VERSION,
-      runId, stepSeconds: scenario.stepSeconds, bindingConstraint, ...series,
+      runId, stepSeconds: scenario.stepSeconds, bindingConstraint,
+      pcsState: pcsStates, bmsState: bmsStates, ...series,
     } as unknown as TimeSeriesResult,
     decisions: { id: `dec_${runId}`, label: scenario.label, kind: 'EMSDecisionLog', schemaVersion: SIM_SCHEMA_VERSION, runId, decisions } as EmsDecisionLog,
     events: { id: `evt_${runId}`, label: scenario.label, kind: 'EventLog', schemaVersion: SIM_SCHEMA_VERSION, runId, events } as EventLog,
@@ -317,11 +502,14 @@ export function simulate(input: RunInput): RunOutput {
 }
 
 function recordLimitEvent(note: (e: SimEvent) => void, limit: Limit, atSeconds: number, direction: 'charge' | 'discharge') {
-  const severity = limit.cellCurrentA <= 1e-9 ? 'alarm' : 'limit';
+  // A ceiling is a limit whatever its value. A full battery that will accept nothing more is not
+  // an alarm — the alarm severities belong to the protections in §12.4, which raise their own
+  // events when a measured signal passes a trip point. Confusing the two makes both meaningless.
+  const stopped = limit.cellCurrentA <= 1e-9;
   note({
     atSeconds, owner: limit.by === 'battery' ? 'BMS' : limit.by === 'EMS' ? 'EMS' : limit.by,
-    severity, code: limit.name.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, ''),
-    message: `${limit.name} held the ${direction} back. ${limit.reason}`,
+    severity: 'limit', code: limit.name.toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, ''),
+    message: `${limit.name} — the ${direction} is held ${stopped ? 'to nothing' : 'below what was asked'}. ${limit.reason}`,
     latched: false,
     clearsWhen: 'The condition that caused it no longer applies.',
   });

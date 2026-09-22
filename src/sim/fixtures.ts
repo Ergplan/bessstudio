@@ -62,6 +62,23 @@ export const fixturePlant = (over: Partial<PlantConfiguration['converter']> = {}
   auxiliaryW: 0, coolingCapacityW: 0, coolingInputW: 0, ambientC: 25, islandCapable: false,
 });
 
+/**
+ * F03's converter: a hundred kVA with nothing else in the way.
+ *
+ * The DC current limit is set far above anything the fixture asks for, so the capability circle is
+ * the only thing binding — which is the first half of the fixture. The second half tightens the
+ * current limit and checks that it takes precedence, because §12.3 is explicit that the circle
+ * alone is insufficient.
+ */
+export const headroomConverter = (over: Partial<PlantConfiguration['converter']> = {}): PlantConfiguration['converter'] => ({
+  model: 'Fixture converter — 100 kVA', ratedW: 100_000, ratedVA: 100_000,
+  dcMinV: 200, dcMaxV: 400, dcMaxA: 2000,
+  chargeEfficiency: 1, dischargeEfficiency: 1, standbyW: 0,
+  rampWPerSecond: 1e9, deratingStartC: 1000, deratingPerC: 0,
+  provenance: fixtureProvenance('a converter bounded only by its apparent power rating'),
+  ...over,
+});
+
 export const fixturePolicy: EmsPolicy = sealWith(emsPolicySchema, {
   id: 'fixture-policy', label: 'Fixture — relay the request', kind: 'EMSPolicy',
   policy: 'manual', policyVersion: 'fixture-1',
