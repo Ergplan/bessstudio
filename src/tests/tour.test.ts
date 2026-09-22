@@ -9,7 +9,7 @@ const model = buildModel(structuredClone(defaults));
 describe('the guided walk', () => {
   it('walks down the assembly and back out', () => {
     const steps = walkSteps(model);
-    expect(steps.map(s => s.id)).toEqual(['container', 'banks', 'string', 'pack', 'cell', 'path']);
+    expect(steps.map(s => s.id)).toEqual(['container', 'banks', 'string', 'pack', 'cooling', 'cell', 'path']);
     steps.forEach((step, i) => {
       expect(step.eyebrow, step.id).toBe(`Step ${i + 1} of ${steps.length}`);
       expect(step.body.length, step.id).toBeGreaterThan(80);
@@ -18,11 +18,18 @@ describe('the guided walk', () => {
     });
   });
 
-  it('never narrates conductors while the view hides them', () => {
-    // Routing is dropped from the scene whenever the assembly is exploded, so a step that talks
-    // about busbars or the electrical path has to leave the model together.
+  it('never narrates routing the view is hiding', () => {
+    // Routing is dropped from the scene whenever the assembly is exploded, and each layer can be
+    // switched off by the step itself — so a step has to show whatever it is talking about.
     for (const step of walkSteps(model)) {
-      if (/busbar|link|conductor|combiner|terminal/i.test(step.body)) expect(step.explode, step.id).toBe(0);
+      if (/busbar|link|conductor|combiner|terminal/i.test(step.body)) {
+        expect(step.explode, step.id).toBe(0);
+        expect(step.visibility.busbars ?? step.visibility.hv ?? true, `${step.id} narrates conductors it hides`).not.toBe(false);
+      }
+      if (/coolant|cold plate|thermal unit/i.test(step.body)) {
+        expect(step.explode, step.id).toBe(0);
+        expect(step.visibility.coolant ?? true, `${step.id} narrates cooling it hides`).not.toBe(false);
+      }
     }
   });
 

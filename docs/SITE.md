@@ -560,11 +560,15 @@ run, end ticks and a value — millimetres at component scale, metres once a plo
 in view. At container scope it measures the enclosure rather than the drawn bounds, so the figure
 on the canvas is the one the inspector reports.
 
-**Scene controls.** Roof off · cutaway · explode (0–100 %) · electrical path · guided walk.
+**Scene controls.** Roof off · cutaway · explode (0–100 %) · electrical path · cooling path ·
+guided walk. The two path traces are exclusive: the electrical one follows one string, because a
+string is a series path; the cooling one follows the whole loop, because a loop is one circuit
+through every rack. A traced run is drawn thicker so it can be followed at container zoom.
 
 **Guided walk.** Narrated steps down to a single cell and back out through the electrical path —
-container, banks and aisle, string, pack, cell, path out, preceded by the site where the project
-buys a fleet. Each step sets the
+container, banks and aisle, string, pack, how the heat gets out, cell, path out, preceded by the
+site where the project buys a fleet. The narration runs as a strip across the foot of the canvas,
+inside the room the camera already leaves for the overlays, so it never covers the model. Each step sets the
 view (roof, walls, lids, routing, explode, highlight) and narrates it with the figures the current
 design produced, so a different topology narrates differently. Auto-advances with a progress bar;
 pauses; steps with the arrow keys; leaves on Escape. Manual from the start for anyone who has asked

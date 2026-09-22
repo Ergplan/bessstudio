@@ -1,11 +1,24 @@
 import {roundRoute} from '../connectivity/routes';
 import {type Model,type Vec,type Node,type Edge,add,m} from '../domain/model';
-import type {Visibility} from '../config/schema';
+import type {Config,Visibility} from '../config/schema';
+
+/**
+ * Which path the viewer has asked to trace.
+ *
+ * The configuration carries a single `highlight` flag, which tinted every route belonging to the
+ * selected rack — so asking for the electrical path lit up the coolant pipes and the BMS wiring
+ * with it. Which path is meant is read back from the layers that are on, so the two controls stay
+ * exclusive without changing what a saved configuration has to contain.
+ */
+export type PathMode='none'|'electrical'|'cooling';
+export const pathModeOf=(c:Config):PathMode=>!c.highlight?'none'
+  :c.visibility.coolant&&!c.visibility.hv&&!c.visibility.busbars?'cooling':'electrical';
+const coolingKind=(k:string)=>k==='coolantSupply'||k==='coolantReturn'||k==='coldPlate';
 export type Primitive={id:string;owner:string;shape:'box'|'cylinder';position:Vec;size:Vec;color:string;metal?:boolean;rotation?:[number,number,number,number];category:Visibility|'structure';};
 export const palette={frame:'#253f4c',tray:'#b7c6cb',cell:'#407bab',cap:'#d0dde0',terminal:'#d8b876',lime:'#b4d858',supply:'#2d96d5',return:'#e7665c',hv:'#ee813c',bms:'#8c83b7',earth:'#8aa840'};
 export function belongs(id:string,scope:string){return scope==='BESS'||id===scope||id.startsWith(scope+'/');}
 export function displacement(node:Node|undefined,model:Model):Vec {if(!node)return [0,0,0];const e=model.config.explode;if(node.kind==='pack'||node.kind==='cell'){const pack=node.kind==='pack'?node:model.packs.find(p=>p.id===node.parent);const level=Number(pack?.id.split('/P')[1]??1)-1;return [0,e*(level*.23+(node.kind==='cell'?.32:0)),0];}return [0,0,0];}
-export function primitives(model:Model,scope='BESS',assembled=false):Primitive[]{if(scope!=='BESS'&&model.nodes.find(n=>n.id===scope)?.kind==='ancillary')return primitives(model,'BESS',assembled).filter(p=>p.owner===scope);const out:Primitive[]=[],c=model.config,a=c.assumptions,d=model.dimensions,v=c.visibility,e=assembled?0:c.explode;const detail=scope!=='BESS';
+export function primitives(model:Model,scope='BESS',assembled=false):Primitive[]{const mode=assembled?'none':pathModeOf(model.config);if(scope!=='BESS'&&model.nodes.find(n=>n.id===scope)?.kind==='ancillary')return primitives(model,'BESS',assembled).filter(p=>p.owner===scope);const out:Primitive[]=[],c=model.config,a=c.assumptions,d=model.dimensions,v=c.visibility,e=assembled?0:c.explode;const detail=scope!=='BESS';
  const box=(owner:string,tag:string,position:Vec,size:Vec,color:string,category:Primitive['category']='structure',metal=false)=>{out.push({id:`${owner}#${tag}`,owner,shape:'box',position,size,color,category,metal});};
  const cylinder=(owner:string,tag:string,from:Vec,to:Vec,r:number,color:string,category:Primitive['category'])=>{const dx=to[0]-from[0],dy=to[1]-from[1],dz=to[2]-from[2],len=Math.hypot(dx,dy,dz);if(len<1e-6)return;const dir=[dx/len,dy/len,dz/len];let q:[number,number,number,number]=[dir[2],0,-dir[0],1+dir[1]];const norm=Math.hypot(...q);q=norm<1e-8?[1,0,0,0]:q.map(x=>x/norm) as typeof q;out.push({id:`${owner}#${tag}`,owner,shape:'cylinder',position:[(from[0]+to[0])/2,(from[1]+to[1])/2,(from[2]+to[2])/2],size:[r,len,r],color,category,rotation:q});};
  if(scope==='BESS'){const [l,h,w]=d.enclosure;box('BESS','floor',[0,-.09,0],[l+.12,.18,w+.12],palette.frame);box('BESS','deck',[0,.015,0],[l,.025,w],'#d2dadd', 'structure',true);for(const x of [-l/2,l/2]){if(x<0){box('BESS','end-lower',[x,.23,0],[.07,.46,w],'#d8e2e6');box('BESS','end-upper',[x,(h+.64)/2,0],[.07,h-.64,w],'#d8e2e6');for(const sign of [-1,1])box('BESS',`gland-side${sign}`,[x,.55,sign*(w/4+.2)],[.07,.18,w/2-.4],'#d8e2e6');}else box('BESS',`end${x}`,[x,h/2,0],[.07,h,w],'#dbe4e7');for(const z of [-w/2,w/2])box('BESS',`corner${x}${z}`,[x,h/2,z],[.1,h,.1],palette.frame);}
@@ -23,6 +36,9 @@ export function primitives(model:Model,scope='BESS',assembled=false):Primitive[]
  }
  }
  if(v.cells)for(const cell of model.cells){if(!belongs(cell.id,scope))continue;const pos=assembled?cell.position:add(cell.position,displacement(cell,model));box(cell.id,'body',pos,cell.size,palette.cell,'cells',true);if(detail||Number(cell.parent?.split('/P')[1])===model.stats.seriesPacks){box(cell.id,'cap',add(pos,[0,cell.size[1]/2-.003,0]),[cell.size[0],.006,cell.size[2]],palette.cap,'cells',true);box(cell.id,'vent',add(pos,[0,cell.size[1]/2+.002,0]),[.037,.003,.016],palette.frame,'cells');for(const pol of ['+','-']){const pt=model.electrical.ports[`${cell.id}:${pol}`].position;box(cell.id,pol,assembled?pt:add(pt,displacement(cell,model)),[.024,.009,.016],palette.terminal,'cells',true);}}}
- const route=(edge:Edge)=>{if(e>0)return;const graph=edge.kind.startsWith('coolant')||edge.kind==='coldPlate'?model.hydraulic:model.electrical;const f=graph.ports[edge.from],t=graph.ports[edge.to];if(!belongs(f.node,scope)||!belongs(t.node,scope))return;const kind=edge.kind;const category:Primitive['category']=kind==='busbar'?'busbars':kind==='hv'?'hv':kind==='bms'?'bms':kind==='earth'?'earth':'coolant';if(!v[category as Visibility]||kind==='coldPlate')return;const color=kind==='busbar'?'#c49b5b':kind==='hv'?palette.hv:kind==='earth'?palette.earth:kind==='bms'?palette.bms:kind==='coolantSupply'?palette.supply:palette.return;const routed=kind==='busbar'?edge.points:roundRoute(edge.points,m(a.bendRadius));for(let i=1;i<routed.length;i++)cylinder(f.node,`${edge.id}/${i}`,routed[i-1],routed[i],kind==='busbar'?.0035:kind==='bms'?.004:kind==='hv'?.011:.009,c.highlight&&belongs(f.node,scope==="BESS"?'R01':scope)?'#c6ed5a':color,category);};
+ const route=(edge:Edge)=>{if(e>0)return;const graph=edge.kind.startsWith('coolant')||edge.kind==='coldPlate'?model.hydraulic:model.electrical;const f=graph.ports[edge.from],t=graph.ports[edge.to];if(!belongs(f.node,scope)||!belongs(t.node,scope))return;const kind=edge.kind;const category:Primitive['category']=kind==='busbar'?'busbars':kind==='hv'?'hv':kind==='bms'?'bms':kind==='earth'?'earth':'coolant';if(!v[category as Visibility]||kind==='coldPlate')return;const color=kind==='busbar'?'#c49b5b':kind==='hv'?palette.hv:kind==='earth'?palette.earth:kind==='bms'?palette.bms:kind==='coolantSupply'?palette.supply:palette.return;const routed=kind==='busbar'?edge.points:roundRoute(edge.points,m(a.bendRadius));
+ const traced=mode!=='none'&&(mode==='cooling')===coolingKind(kind)&&(mode==='cooling'||belongs(f.node,scope==="BESS"?'R01':scope));
+ const radius=(kind==='busbar'?.0035:kind==='bms'?.004:kind==='hv'?.011:.009)*(traced?1.7:1);
+ for(let i=1;i<routed.length;i++)cylinder(f.node,`${edge.id}/${i}`,routed[i-1],routed[i],radius,traced?'#c6ed5a':color,category);};
  model.electrical.edges.forEach(route);model.hydraulic.edges.forEach(route);return out.filter(p=>p.category!=='bms'||v.bms);
 }

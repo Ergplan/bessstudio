@@ -69,8 +69,7 @@ export function Walkthrough({model,plan,onClose}:{model:Model;plan:SitePlan|null
   return <div className="walk" role="region" aria-label="Guided walk through the assembly">
     <div className="walk-progress"><i style={{width:`${playing?elapsed/STEP_MS*100:index===steps.length-1?100:0}%`}}/></div>
     <div className="walk-body">
-      <span className="walk-eyebrow">{step.eyebrow}</span>
-      <h2>{step.title}</h2>
+      <div className="walk-head"><span className="walk-eyebrow">{step.eyebrow}</span><h2>{step.title}</h2></div>
       <p>{step.body}</p>
     </div>
     <div className="walk-controls">

@@ -73,7 +73,8 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | A studio lesson reads the live model, never fixed copy | `src/domain/learn.ts`, `src/domain/tour.ts` | unit tests |
 | Every design-review finding has an explanation | `src/domain/learn.ts` | unit test reads the codes out of the model |
 | Every mechanical assumption has an explanation | `src/domain/learn.ts` | unit test reads the keys out of the schema |
-| The guided walk never narrates conductors while the view hides them | `src/domain/tour.ts` | unit tests |
+| The guided walk never narrates routing the view is hiding | `src/domain/tour.ts` | unit tests |
+| A path trace lights only the path that was asked for | `src/geometry/primitives.ts` | unit tests |
 | The site never overlaps two units, and everything placed sits inside the plot | `src/geometry/site.ts` | unit tests |
 | The site is laid out at the selected product's dimensions, modelled interior or not | `src/geometry/site.ts`, `src/app/pages/Studio.tsx` | unit tests |
 | Augmentation units have a reserved pad on the plot from day one | `src/geometry/site.ts` | unit tests |
@@ -84,7 +85,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 Baseline commands:
 
 ```bash
-npm run test        # 192 unit tests
+npm run test        # 198 unit tests
 npm run test:rules  # 41 Firestore rules tests, against the emulator
 npm run build       # static export
 ```

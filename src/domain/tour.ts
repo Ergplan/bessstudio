@@ -65,10 +65,16 @@ export function walkSteps(model: Model, plan: SitePlan | null = null): WalkStep[
       visibility: { roof: false, walls: false, lids: false, cells: true, busbars: true, labels: false }, explode: 0, highlight: false,
     },
     {
+      id: 'cooling', eyebrow: '', target: rack,
+      title: 'How the heat gets out',
+      body: `Every rack is fed from a header running the length of the container. Inside one, coolant crosses the plate under each of its packs and returns warmer — ${s.packs} plates in parallel across the ${s.racks} racks. Cells age about twice as fast for every 10 °C, so this loop is a warranty instrument: the spread between the hottest and coldest cell in a container is what shows up in year eight as a spread in capacity.`,
+      visibility: { roof: false, walls: false, lids: true, coolant: true, hv: false, busbars: false, labels: false }, explode: 0, highlight: true,
+    },
+    {
       id: 'cell', eyebrow: '', target: cell,
       title: 'One cell',
       body: `${source.cellVoltage} V and ${source.cellAh} Ah — ${s.cellEnergy.toFixed(3)} kWh, about a day of a ceiling fan. It takes ${v(s.cells, 0)} of them to fill the container, and every allowance you have just seen exists to hold them at the right temperature and pressure.`,
-      visibility: { roof: false, walls: false, lids: false, cells: true, busbars: true, labels: false }, explode: 0, highlight: false,
+      visibility: { roof: false, walls: false, lids: false, cells: true, busbars: true, coolant: false, labels: false }, explode: 0, highlight: false,
     },
     {
       id: 'path', eyebrow: '', target: 'BESS',
