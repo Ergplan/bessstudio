@@ -340,3 +340,17 @@ h2.project-title{border-color:transparent}
 .sim-events li>span{font-size:10.5px;color:var(--slate-light);padding-top:3px}
 .sim-events li b{font-size:12px;font-weight:500;color:var(--ink)}
 .sim-events li p{margin:2px 0 0;font-size:11px}
+
+/* The ergOS card: goal, observed, action, requested against delivered, reason, and Why. */
+.ergos{margin-top:12px;border:1px solid var(--line-soft);background:rgba(255,255,255,.02);padding:10px 12px}
+.ergos>.row>b{font-size:12.5px}
+.ergos-goal{margin:6px 0 0;font-size:11.5px;color:var(--slate-light);line-height:1.6}
+.ergos-observed{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.ergos-observed span{font-family:var(--mono);font-size:11px;color:var(--ink)}
+.ergos-observed i{font-style:normal;color:var(--slate-light);margin-right:4px}
+.ergos-power{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:8px;font-family:var(--mono);font-size:11.5px}
+.ergos-power em{font-style:normal;color:var(--amber);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase}
+.ergos-why{margin-top:8px}
+.ergos-why summary{cursor:pointer;font-size:11.5px;color:var(--blue);user-select:none}
+.ergos-why summary:hover{text-decoration:underline}
+.ergos-why[open] summary{margin-bottom:6px}

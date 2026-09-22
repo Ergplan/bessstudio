@@ -87,8 +87,17 @@ export type LimitInput = {
   /** The hard floor and ceiling on state of charge. */
   socFloor: number;
   socCeiling: number;
-  /** True while the grid is absent: nothing may be imported or exported. */
+  /** True while the grid is absent: there is nowhere to export to and nothing to import from. */
   islanded: boolean;
+  /**
+   * What the island itself will take, in AC watts, positive when the site needs power.
+   *
+   * In an island the plant is not limited by a connection — there is no connection. It is limited
+   * by the load: a battery cannot discharge into a site that is not drawing, and cannot charge
+   * from one that is not generating. This is that balance, and leaving it out was the bug that
+   * made an island look like a plant with its export limit set to zero.
+   */
+  islandBalanceW: number;
   idealised: boolean;
 };
 
@@ -174,15 +183,23 @@ export function limitsFor(input: LimitInput, direction: 'charge' | 'discharge'):
       : `The converter is rated ${Math.round(c.ratedW / 1e3)} kW.`,
   });
 
-  // 5. What the grid will take or give, unless there is no grid.
-  const gridW = input.islanded ? 0 : (discharging ? plant.gridExportLimitW : plant.gridImportLimitW);
+  // 5. What the grid will take or give — or, in an island, what the site itself will.
+  const balance = input.islandBalanceW;
+  const gridW = input.islanded
+    ? Math.max(0, discharging ? balance : -balance)
+    : (discharging ? plant.gridExportLimitW : plant.gridImportLimitW);
   const gridDcW = discharging ? gridW / c.dischargeEfficiency : gridW * c.chargeEfficiency;
   const iForGrid = cellCurrentForCellPower(cell, soc, tempC, (discharging ? 1 : -1) * gridDcW / shape.totalCells);
   out.push({
-    by: 'grid', name: input.islanded ? 'Islanded — no grid connection' : (discharging ? 'Site export limit' : 'Site import limit'),
-    cellCurrentA: input.islanded ? 0 : (iForGrid === null ? Number.POSITIVE_INFINITY : Math.abs(iForGrid)),
+    by: 'grid',
+    name: input.islanded
+      ? (gridW > 0 ? 'The island’s own balance' : 'Islanded — nothing to dispatch into')
+      : (discharging ? 'Site export limit' : 'Site import limit'),
+    cellCurrentA: iForGrid === null ? Number.POSITIVE_INFINITY : Math.abs(iForGrid),
     reason: input.islanded
-      ? 'The grid is absent, so nothing may be imported or exported.'
+      ? (gridW > 0
+        ? `The grid is absent. The island needs ${Math.round(gridW / 1e3)} kW in this direction, and there is nowhere else for the power to go.`
+        : 'The grid is absent, and the island needs nothing in this direction: there is nowhere for the power to go.')
       : `The connection is limited to ${Math.round(gridW / 1e3)} kW in this direction.`,
   });
 

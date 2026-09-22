@@ -157,11 +157,17 @@ export const manualPolicy: EmsPolicy = sealWith(emsPolicySchema, {
   priceWindows: [],
 });
 
-/** Every preset, so a test can walk them rather than trusting a list written by hand. */
+/**
+ * Every preset, so a test can walk them rather than trusting a list written by hand.
+ *
+ * Declared at the bottom of the file, after the supervisory presets, because a list that is missing
+ * half of what it claims to cover is worse than no list: every check written against it passes.
+ */
 export const presets = {
-  parameterSets: [lfpParameterSet],
-  plants: [teachingPlant],
-  policies: [manualPolicy],
+  get parameterSets() { return [lfpParameterSet]; },
+  get plants() { return [teachingPlant, backupPlant]; },
+  get policies() { return [manualPolicy, ...supervisoryPolicies]; },
+  get scenarios() { return [...conditions, dayScenario, outageScenario, telemetryLossScenario]; },
 };
 
 /* ------------------------------------------------ the conditions presets -- */
@@ -183,7 +189,7 @@ const condition = (over: Partial<Scenario>): Scenario => sealWith(scenarioSchema
   initialSoc: 0.8, initialCellTempC: 25, ambientC: null,
   durationSeconds: 7200, stepSeconds: 60,
   siteLoad: null, generation: null, price: null, outage: null, controls: [],
-  injected: { weakCell: null, coolingFailsAtSeconds: null, communicationLostAtSeconds: null },
+  injected: { weakCell: null, coolingFailsAtSeconds: null, communicationLostAtSeconds: null, telemetryLostAtSeconds: null },
   reactiveVar: 0,
   ...over,
 });
@@ -211,8 +217,7 @@ export const weakCellCondition = condition({
   id: 'condition-weak-cell', label: 'One weak cell',
   injected: {
     weakCell: { capacityFraction: 0.8, resistanceMultiple: 3, socOffset: -0.1, tempOffsetC: 5 },
-    coolingFailsAtSeconds: null, communicationLostAtSeconds: null,
-  },
+    coolingFailsAtSeconds: null, communicationLostAtSeconds: null, telemetryLostAtSeconds: null },
 });
 
 /** The coolant stops moving an hour in. §12.5: the temperature rise and the derating, nothing else. */
@@ -230,13 +235,159 @@ export const coolingFailureCondition = condition({
   id: 'condition-cooling-failure', label: 'The cooling stops',
   initialSoc: 1, initialCellTempC: 40,
   durationSeconds: 14_400, stepSeconds: 120,
-  injected: { weakCell: null, coolingFailsAtSeconds: 1800, communicationLostAtSeconds: null },
+  injected: { weakCell: null, coolingFailsAtSeconds: 1800, communicationLostAtSeconds: null, telemetryLostAtSeconds: null },
 });
 
 /** The plant stops hearing from the management system half an hour in. */
 export const communicationLossCondition = condition({
   id: 'condition-communication-loss', label: 'The management system goes quiet',
-  injected: { weakCell: null, coolingFailsAtSeconds: null, communicationLostAtSeconds: 1800 },
+  injected: { weakCell: null, coolingFailsAtSeconds: null, communicationLostAtSeconds: 1800, telemetryLostAtSeconds: null },
 });
 
 export const conditions = [normalCondition, hotCondition, weakCellCondition, coolingFailureCondition, communicationLossCondition];
+
+/* ------------------------------------------------ the supervisory presets -- */
+
+/**
+ * One day, at five-minute resolution.
+ *
+ * Every policy below §11.3 decides on telemetry, so there has to be telemetry for them to decide
+ * on. This is one illustrative commercial-industrial day: a base load that never goes away, a
+ * morning shoulder, an evening peak after the sun has gone, and a solar array that produces its
+ * most at exactly the wrong time of day for the peak. That mismatch is the whole subject of
+ * lessons 2 and 3, and it is why the day is shaped this way rather than smoothly.
+ *
+ * Illustrative, and labelled so. No site was measured to produce it.
+ */
+export const DAY_SECONDS = 86_400;
+export const DAY_STEP_SECONDS = 300;
+const DAY_STEPS = DAY_SECONDS / DAY_STEP_SECONDS;
+
+const sampled = (f: (hour: number) => number) =>
+  Array.from({ length: DAY_STEPS }, (_, i) => f((i * DAY_STEP_SECONDS) / 3600));
+
+/** A base load, a working day on top of it, and an evening peak after the sun has gone. */
+export const siteLoadProfile = {
+  name: 'Illustrative commercial and industrial day',
+  unit: 'W' as const,
+  samples: sampled(h => {
+    const base = 700_000;
+    const working = h >= 8 && h < 18 ? 900_000 : 0;
+    const evening = h >= 17 && h < 22 ? 1_000_000 * Math.sin(((h - 17) / 5) * Math.PI) : 0;
+    return Math.round(base + working + evening);
+  }),
+};
+
+/** A 2 MW array, producing between six and eighteen hundred, most of it in the middle. */
+export const solarProfile = {
+  name: 'Illustrative 2 MW rooftop array, clear day',
+  unit: 'W' as const,
+  samples: sampled(h => (h >= 6 && h < 18 ? Math.round(2_000_000 * Math.sin(((h - 6) / 12) * Math.PI) ** 2) : 0)),
+};
+
+/** Three prices, in rupees per megawatt-hour. Illustrative: no tariff was quoted to produce them. */
+export const priceProfile = {
+  name: 'Illustrative three-part tariff',
+  unit: 'currency/MWh' as const,
+  samples: sampled(h => (h < 6 ? 3_000 : h >= 18 && h < 22 ? 12_000 : 7_000)),
+};
+
+/**
+ * The same 5 MWh enclosure, with the transfer equipment that lets it form an island.
+ *
+ * Kept as a separate plant rather than a flag on the teaching one, because it is a different
+ * product: islanding needs a transfer switch and a grid-forming converter, and §15 lesson 4's
+ * "supported topology" means exactly that a plant without them cannot do this.
+ */
+export const backupPlant: PlantConfiguration = sealWith(plantConfigurationSchema, {
+  ...teachingPlant,
+  id: 'plant-5mwh-backup',
+  label: '5 MWh enclosure with island transfer — backup plant',
+  islandCapable: true,
+});
+
+const policy = (over: Partial<EmsPolicy> & Pick<EmsPolicy, 'id' | 'label' | 'policy' | 'policyVersion'>): EmsPolicy =>
+  sealWith(emsPolicySchema, {
+    kind: 'EMSPolicy', reserveSoc: 0.1, emergencyReserveSoc: 0.05, setpointCadenceSeconds: 300,
+    peakTargetW: null, priceWindows: [], telemetryTimeoutSeconds: 900, staleFallback: 'stop', ...over,
+  });
+
+/** Hold the site's import below 1.5 MW, and refill only in the room left under it. */
+export const peakShavingPolicy = policy({
+  id: 'policy-peak-shaving', label: 'Hold the import below the target', policy: 'peak-shaving',
+  policyVersion: 'peak-shaving-1', peakTargetW: 1_500_000,
+});
+
+/** Store what the array would otherwise export, and spend it on the site. */
+export const selfConsumptionPolicy = policy({
+  id: 'policy-self-consumption', label: 'Use the generation on site', policy: 'self-consumption',
+  policyVersion: 'self-consumption-1',
+});
+
+/**
+ * Keep half the battery for an outage.
+ *
+ * A high reserve and a low emergency floor, because that difference is the lesson: what is
+ * protected under normal economics is exactly what an outage is allowed to spend.
+ */
+export const backupReservePolicy = policy({
+  id: 'policy-backup-reserve', label: 'Keep the backup ready', policy: 'backup-reserve',
+  policyVersion: 'backup-reserve-1', reserveSoc: 0.5, emergencyReserveSoc: 0.1,
+});
+
+/** Charge in the cheap window, discharge in the dear one. Prices illustrative. */
+export const priceSchedulePolicy = policy({
+  id: 'policy-price-schedule', label: 'Follow the tariff', policy: 'price-schedule',
+  policyVersion: 'price-schedule-1',
+  priceWindows: [
+    { fromHour: 0, toHour: 6, pricePerMWh: 3_000, action: 'charge' },
+    { fromHour: 6, toHour: 18, pricePerMWh: 7_000, action: 'hold' },
+    { fromHour: 18, toHour: 22, pricePerMWh: 12_000, action: 'discharge' },
+  ],
+});
+
+/**
+ * The baseline for §11.4's comparison: a clock, and nothing else.
+ *
+ * It charges overnight and discharges in the evening whatever the site is actually doing, which is
+ * how a great many plants are still run. It keeps every PCS limit and every BMS protection — §11.4
+ * forbids a baseline that disables safety or invents irrational dispatch to flatter the comparison.
+ */
+export const fixedSchedulePolicy = policy({
+  id: 'policy-fixed-schedule', label: 'Fixed schedule', policy: 'price-schedule',
+  policyVersion: 'fixed-schedule-1',
+  priceWindows: [
+    { fromHour: 1, toHour: 5, pricePerMWh: 3_000, action: 'charge' },
+    { fromHour: 18, toHour: 21, pricePerMWh: 12_000, action: 'discharge' },
+  ],
+});
+
+/** One illustrative day, with the site, the array and the tariff on it. */
+export const dayScenario: Scenario = sealWith(scenarioSchema, {
+  id: 'scenario-illustrative-day', label: 'One illustrative day', kind: 'Scenario',
+  plantId: teachingPlant.id, policyId: peakShavingPolicy.id,
+  initialSoc: 0.5, initialCellTempC: 25, ambientC: null,
+  durationSeconds: DAY_SECONDS, stepSeconds: DAY_STEP_SECONDS,
+  siteLoad: siteLoadProfile, generation: solarProfile, price: priceProfile,
+  outage: null, injected: { weakCell: null, coolingFailsAtSeconds: null, communicationLostAtSeconds: null, telemetryLostAtSeconds: null },
+  reactiveVar: 0, controls: [],
+});
+
+/** The same day with the grid gone from six in the evening until nine. */
+export const outageScenario: Scenario = sealWith(scenarioSchema, {
+  ...dayScenario,
+  id: 'scenario-evening-outage', label: 'The grid goes at six',
+  plantId: backupPlant.id, policyId: backupReservePolicy.id,
+  outage: { fromSeconds: 18 * 3600, toSeconds: 21 * 3600 },
+});
+
+/** The same day with the site telemetry lost at noon, so the fallback can be seen. */
+export const telemetryLossScenario: Scenario = sealWith(scenarioSchema, {
+  ...dayScenario,
+  id: 'scenario-telemetry-loss', label: 'The site meter goes quiet at noon',
+  injected: { weakCell: null, coolingFailsAtSeconds: null, communicationLostAtSeconds: null, telemetryLostAtSeconds: 12 * 3600 },
+});
+
+export const supervisoryPolicies = [
+  peakShavingPolicy, selfConsumptionPolicy, backupReservePolicy, priceSchedulePolicy, fixedSchedulePolicy,
+];

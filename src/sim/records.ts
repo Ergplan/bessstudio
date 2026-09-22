@@ -171,6 +171,17 @@ export const emsPolicySchema = z.object({
   setpointCadenceSeconds: z.number().positive(),
   /** Site import the policy tries to stay below, where the policy is peak shaving. */
   peakTargetW: z.number().min(0).nullable(),
+  /**
+   * How stale the telemetry the policy decides on may be before the fallback applies.
+   *
+   * §11.3: "stale telemetry, command acknowledgement, communication timeout and fallback policy
+   * belong to the documented component configuration — there is no universal response and none
+   * will be claimed." So the timeout and the fallback are configuration on the policy, recorded in
+   * the run, rather than a number chosen inside the engine and never shown to anybody.
+   */
+  telemetryTimeoutSeconds: z.number().positive().default(30),
+  /** What the policy does once its telemetry is older than that. */
+  staleFallback: z.enum(['hold-last-setpoint', 'stop']).default('stop'),
   /** Price windows, where the policy follows a schedule. Hour of day, half-open. */
   priceWindows: z.array(z.object({
     fromHour: z.number().min(0).max(24), toHour: z.number().min(0).max(24),
@@ -254,7 +265,14 @@ export const scenarioSchema = z.object({
     coolingFailsAtSeconds: z.number().min(0).nullable().default(null),
     /** The plant stops hearing from the battery management system at this second. */
     communicationLostAtSeconds: z.number().min(0).nullable().default(null),
-  }).strict().default({ weakCell: null, coolingFailsAtSeconds: null, communicationLostAtSeconds: null }),
+    /**
+     * The supervisory layer stops hearing from the site at this second: no meter, no forecast, no
+     * new telemetry. Deliberately separate from the line above, because losing the site meter and
+     * losing the battery management system are different failures with different consequences —
+     * one costs the policy its inputs, the other costs the plant its protections.
+     */
+    telemetryLostAtSeconds: z.number().min(0).nullable().default(null),
+  }).strict().default({ weakCell: null, coolingFailsAtSeconds: null, communicationLostAtSeconds: null, telemetryLostAtSeconds: null }),
   /**
    * Reactive power commanded at the connection, in vars, positive when the plant supplies them.
    * It takes its share of the converter's apparent power before any active power is available.
@@ -416,6 +434,21 @@ export const timeSeriesResultSchema = z.object({
   converterLossW: z.array(z.number()),
   batteryLossW: z.array(z.number()),
   auxiliaryW: z.array(z.number()),
+  /**
+   * The site around the plant, and the connection between them.
+   *
+   * §11.4 compares policies on peak grid import, self-consumption and curtailment, none of which
+   * can be read from the plant's own terminals: they are properties of the *site*. So the site
+   * load and the generation the policy decided on are recorded alongside what the connection
+   * actually carried, with import and export kept apart rather than netted into one signed number
+   * that has to be re-read every time somebody wants a peak.
+   */
+  siteLoadW: z.array(z.number()),
+  generationW: z.array(z.number()),
+  gridImportW: z.array(z.number()),
+  gridExportW: z.array(z.number()),
+  /** Generation that could not be exported or stored, and was thrown away. */
+  curtailedW: z.array(z.number()),
   /** Which subsystem set the achieved power at each step, by name. Empty string where nothing did. */
   bindingConstraint: z.array(z.string()),
   /** The converter's state and the management system's, one per sample. §12.3 and §12.4. */
@@ -447,6 +480,25 @@ export const emsDecisionSchema = z.object({
   achievedPowerW: z.number(),
   /** The explanation shown to the reader. §14.1: it must resolve to the values above. */
   explanation: z.string().min(1),
+  /**
+   * The four things §11.3 requires the always-visible card to carry alongside the explanation:
+   * what this policy is for, what it decided to do, which of its own rules fired, and — because
+   * "Why?" has to open something real — the identifier a reader can look that rule up by.
+   */
+  goal: z.string().min(1).max(200).default('Not stated.'),
+  action: z.enum(['charge', 'discharge', 'hold', 'reduce']).default('hold'),
+  rule: z.string().min(1).max(80).default('unstated'),
+  /** How old the telemetry was when it decided, and whether that put it on its fallback. */
+  telemetryAgeSeconds: z.number().min(0).default(0),
+  usedFallback: z.boolean().default(false),
+  /**
+   * True where the cadence held the previous setpoint rather than issuing a new one. §11.3 keeps
+   * the setpoint cadence distinct from the integration step, so a reader can see the difference
+   * between a policy that decided to do the same thing again and one that was not asked.
+   */
+  heldSetpoint: z.boolean().default(false),
+  /** True while the plant is running its own island and the policy is not in command at all. */
+  localControl: z.boolean().default(false),
 }).strict();
 export type EmsDecision = z.infer<typeof emsDecisionSchema>;
 

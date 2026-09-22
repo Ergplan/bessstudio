@@ -40,13 +40,27 @@ describe('what the plant actually does when asked', () => {
     expect(out.events).toBeTruthy();
   });
 
-  it('holds a request above the converter rating to the rating, and names it', () => {
+  it('reduces a request above the converter rating before issuing it, and says so', () => {
+    // The policy asks for what the plant can do. §11.3 lists reducing the request as one of the
+    // four actions it may take, and the reduction is announced rather than left to be inferred
+    // from a shortfall further down.
     const out = run({ manualRequestW: 4_000_000 });
     expect(out.series.achievedPowerW[0]).toBeLessThanOrEqual(teachingPlant.converter.ratedW * 1.001);
-    expect(out.series.bindingConstraint[0]).toMatch(/Converter|BMS|current/i);
+    expect(out.series.requestedPowerW[0]).toBeCloseTo(teachingPlant.converter.ratedW, 6);
+    expect(out.decisions.decisions[0].action).toBe('reduce');
+    expect(out.decisions.decisions[0].explanation).toMatch(/4,?000 kW was asked for|4000 kW was asked for/);
+    const reduced = out.events.events.find(e => e.code === 'request-reduced');
+    expect(reduced, 'a reduction is an event').toBeTruthy();
+    expect(reduced!.owner).toBe('EMS');
+  });
+
+  it('names the subsystem that held it back when one does, below the rating', () => {
+    const out = run({ scenario: teaching({ initialSoc: 0.2 }), manualRequestW: 2_500_000 });
+    expect(out.series.bindingConstraint[0]).toMatch(/Converter|BMS|current|voltage/i);
     expect(out.events.events.length, 'a limit that bound is an event').toBeGreaterThan(0);
-    expect(out.events.events[0].owner === 'PCS' || out.events.events[0].owner === 'BMS').toBe(true);
-    expect(out.events.events[0].message).toMatch(/the discharge is held below what was asked/);
+    const held = out.events.events.find(e => e.owner === 'PCS' || e.owner === 'BMS');
+    expect(held).toBeTruthy();
+    expect(held!.message).toMatch(/the discharge is held below what was asked/);
   });
 
   it('never takes a cell past its own voltage limits, in either direction', () => {
@@ -195,11 +209,14 @@ describe('when it cannot do what was asked', () => {
     }
   });
 
-  it('says a policy that is not built yet is not built, rather than dispatching nothing quietly', () => {
-    const later = sealWith(emsPolicySchema, { ...manualPolicy, policy: 'peak-shaving', peakTargetW: 500_000 });
-    const out = run({ policy: later, manualRequestW: 1_000_000 });
+  it('holds, and says what is missing, when a policy is given no telemetry to decide on', () => {
+    // An absence is never a silent zero: a peak-shaving policy with no site load reported holds
+    // and names what it is missing, rather than shaving against an assumed zero.
+    const shaving = sealWith(emsPolicySchema, { ...manualPolicy, policy: 'peak-shaving', peakTargetW: 500_000 });
+    const out = run({ policy: shaving, manualRequestW: 1_000_000 });
     expect(out.series.achievedPowerW.every(p => p === 0)).toBe(true);
-    expect(out.decisions.decisions[0].explanation).toMatch(/not built yet.*lesson 2/is);
+    expect(out.decisions.decisions[0].explanation).toMatch(/no site load is being reported/i);
+    expect(out.decisions.decisions[0].rule).toBe('peak-shaving/no-load-telemetry');
   });
 
   it('refuses an invalid configuration before it computes anything, and says what is wrong', () => {

@@ -4,7 +4,7 @@ import {
   evaluate as evaluateBms, newMemory, type BmsMemory, type PackSignals,
 } from './bms';
 import { activePowerCeiling, pcsState } from './pcs';
-import { decide, type EmsObservation } from './ems';
+import { decide, localIslandControl, type EmsObservation, type EmsRequest } from './ems';
 import { binding, limitsFor, plantShape, type Limit } from './limits';
 import { signConvention } from './signs';
 import {
@@ -172,6 +172,7 @@ export function simulate(input: RunInput): RunOutput {
     packVoltageV: [], packCurrentA: [], cellVoltageV: [], cellVoltageMaxV: [], cellVoltageMinV: [],
     soc: [], countedSoc: [], cellTempC: [], cellTempMaxC: [],
     converterLossW: [], batteryLossW: [], auxiliaryW: [], unservedLoadW: [],
+    siteLoadW: [], generationW: [], gridImportW: [], gridExportW: [], curtailedW: [],
   };
   const bindingConstraint: string[] = [];
   const pcsStates: string[] = [];
@@ -262,18 +263,72 @@ export function simulate(input: RunInput): RunOutput {
     tempC = tempAfter(cell, tempC, 0, coolantFor(now, tempC), 1, seconds);
     if (weakCell) weakTempC = tempAfter(weakCell, weakTempC, 0, coolantFor(now, weakTempC), 1, seconds);
   };
+  /** What the supervisory layer last asked for, when it last asked, and what it said then. */
+  let lastSetpointW = 0;
+  let lastDecidedAt: number | null = null;
+  let heldDecision: EmsRequest | null = null;
+  let islandAnnounced = false, gridRestored = false;
   let failure: string | null = invalid.length ? invalid.join(' ') : null;
 
   for (let step = 0; step < steps && failure === null; step++) {
     const t = step * scenario.stepSeconds;
     now = t;
-    const islanded = !!scenario.outage && t >= scenario.outage.fromSeconds && t < scenario.outage.toSeconds;
+    const outaged = !!scenario.outage && t >= scenario.outage.fromSeconds && t < scenario.outage.toSeconds;
+    // An outage only makes an island of a plant that can form one. §15 lesson 4 requires a
+    // supported topology, and a plant without the transfer equipment does not become capable of
+    // islanding because a scenario asked it to — the site simply goes dark.
+    const islanded = outaged && plant.islandCapable;
+    if (outaged && !islandAnnounced) {
+      islandAnnounced = true;
+      note({
+        atSeconds: t, owner: 'grid', severity: 'alarm', code: 'grid-lost',
+        message: islanded
+          ? `The grid is absent. The plant is forming its own island, control is local, and the floor falls from the ${(policy.reserveSoc * 100).toFixed(0)}% reserve to the ${(policy.emergencyReserveSoc * 100).toFixed(0)}% emergency floor — which is what the protected energy was being kept for.`
+          : 'The grid is absent, and this plant is not island capable: it has no transfer equipment to form an island with, so the site load goes unserved rather than being picked up.',
+        latched: false, clearsWhen: 'The grid returns.',
+      });
+    }
+    if (!outaged && islandAnnounced && !gridRestored) {
+      gridRestored = true;
+      note({
+        atSeconds: t, owner: 'grid', severity: 'info', code: 'grid-restored',
+        message: `The grid is back. Control returns to the ${policy.policy} policy and the floor returns to the ${(policy.reserveSoc * 100).toFixed(0)}% reserve, so what is left below it is protected again.`,
+        latched: false, clearsWhen: '',
+      });
+    }
     const siteLoadW = at(scenario.siteLoad, step);
+    // How old the supervisory layer's picture of the site is. §11.3 keeps this separate from the
+    // battery management system's own link: losing the meter costs the policy its inputs, and
+    // losing the management system costs the plant its protections.
+    const telemetryLost = scenario.injected?.telemetryLostAtSeconds ?? null;
+    const telemetryAgeSeconds = telemetryLost !== null && t >= telemetryLost ? t - telemetryLost : 0;
     const observation: EmsObservation = {
       atSeconds: t, soc, siteLoadW, generationW: at(scenario.generation, step),
       pricePerMWh: at(scenario.price, step), islanded, manualRequestW: input.manualRequestW ?? 0,
+      plantRatedW: plant.converter.ratedW, telemetryAgeSeconds, lastSetpointW,
     };
-    const asked = decide(policy, observation);
+
+    /**
+     * Who is deciding, and whether they were asked this step.
+     *
+     * Three cases, in this order. An island takes the decision away from the supervisory layer
+     * entirely — §11.2 forbids no-break control from depending on it, so it is not consulted at
+     * all rather than consulted and overridden. Otherwise the policy decides, but only on its own
+     * cadence: between setpoints the last one is held, which is the distinction §11.3 draws
+     * between the cadence and the integration step.
+     */
+    const due = lastDecidedAt === null || t - lastDecidedAt >= policy.setpointCadenceSeconds - 1e-9;
+    const asked: EmsRequest = islanded
+      ? localIslandControl({
+        siteLoadW, generationW: at(scenario.generation, step),
+        auxiliaryW: plant.auxiliaryW + plant.converter.standbyW, plantRatedW: plant.converter.ratedW,
+      })
+      : due
+        ? decide(policy, observation)
+        : { ...heldDecision!, requestedW: lastSetpointW };
+    const heldSetpoint = !islanded && !due;
+    if (!heldSetpoint) { lastDecidedAt = t; heldDecision = asked; }
+    lastSetpointW = asked.requestedW;
 
     // Auxiliaries and converter standby run whenever the plant is energised, in either direction
     // and whether or not it is dispatching. They are counted here, once.
@@ -290,7 +345,15 @@ export function simulate(input: RunInput): RunOutput {
     // A policy that asks for nothing while the learner asked for something is itself the binding
     // constraint, and the EMS is the one that decided it. Without this the plant sits in standby
     // with no constraint named and no event logged, which is exactly the silence §11.3 forbids.
-    let bindName = asked.requestedW === 0 ? (asked.hold ?? '') : 'Request met in full';
+    let bindName = asked.requestedW === 0 ? (asked.hold ?? '')
+      : asked.reducedFromW !== null ? 'Reduced to what the plant can do' : 'Request met in full';
+    if (asked.reducedFromW !== null) {
+      note({
+        atSeconds: t, owner: 'EMS', severity: 'limit', code: 'request-reduced',
+        message: `The request was reduced before it was issued. ${asked.explanation}`,
+        latched: false, clearsWhen: 'A request within the plant’s rating is issued.',
+      });
+    }
     if (asked.hold && (input.manualRequestW ?? 0) !== 0) {
       note({
         atSeconds: t, owner: 'EMS', severity: 'limit',
@@ -326,6 +389,9 @@ export function simulate(input: RunInput): RunOutput {
         // An outage lowers the reserve the policy keeps in hand; it never lowers the hard floor.
         reserveSoc: islanded ? policy.emergencyReserveSoc : policy.reserveSoc,
         socFloor: 0, socCeiling: 1, islanded, idealised: solver.idealised,
+        // What the island itself needs: the site's load less its own generation, plus the
+        // auxiliaries, which are on the island too and have to be carried by the battery.
+        islandBalanceW: (siteLoadW ?? 0) + plant.auxiliaryW + plant.converter.standbyW - (at(scenario.generation, step) ?? 0),
       }, direction);
       const { limit, ordered } = binding(limits);
 
@@ -407,9 +473,33 @@ export function simulate(input: RunInput): RunOutput {
     // On charge `acW` is already negative, so the same subtraction deepens the import — which is
     // right, because the auxiliaries are drawn from the same connection in both directions.
     const gridW = acW - auxW;
-    // The grid covers any shortfall unless there is no grid. Only in an outage can a load go
-    // unserved, and then only by however much the plant could not produce.
-    const unserved = islanded && siteLoadW !== null ? Math.max(0, siteLoadW - Math.max(0, gridW)) : 0;
+
+    /**
+     * The site, and what the connection between it and the grid actually carried.
+     *
+     * Everything on the site meets at one point: the generation, the site's own load, and what the
+     * plant put out after its auxiliaries. What is left over is exported, up to the export limit;
+     * what is missing is imported. Generation beyond the export limit that the battery did not
+     * take is curtailed — thrown away — and saying so is the only honest way to report a policy
+     * that filled the battery too early in the day.
+     *
+     * In an island there is no connection at all, so nothing is imported, nothing is exported, and
+     * whatever the site asked for and did not get is unserved.
+     */
+    const genW = at(scenario.generation, step) ?? 0;
+    const loadW = siteLoadW ?? 0;
+    const surplus = genW + gridW - loadW;
+    let gridImportW = 0, gridExportW = 0, curtailedW = 0, unserved = 0;
+    if (islanded || outaged) {
+      unserved = Math.max(0, -surplus);
+      curtailedW = Math.max(0, surplus);
+    } else if (surplus >= 0) {
+      gridExportW = Math.min(surplus, plant.gridExportLimitW);
+      curtailedW = surplus - gridExportW;
+    } else {
+      gridImportW = Math.min(-surplus, plant.gridImportLimitW);
+      unserved = -surplus - gridImportW;
+    }
 
     // The state as it was at the start of this interval, and the power averaged across it. The
     // state has already been advanced by the loop above, so the values pushed here are the ones
@@ -436,6 +526,11 @@ export function simulate(input: RunInput): RunOutput {
     series.batteryLossW.push(sumBattLoss / n);
     series.auxiliaryW.push(auxW);
     series.unservedLoadW.push(unserved);
+    series.siteLoadW.push(loadW);
+    series.generationW.push(genW);
+    series.gridImportW.push(gridImportW);
+    series.gridExportW.push(gridExportW);
+    series.curtailedW.push(curtailedW);
     bindingConstraint.push(bindName);
     // The same tolerance the solver is held to, so the state and the named constraint cannot
     // disagree: a converter reported as discharging while a limit is named as holding it back is
@@ -451,9 +546,18 @@ export function simulate(input: RunInput): RunOutput {
     decisions.push({
       atSeconds: t, observed: asked.observed, policyVersion: policy.policyVersion,
       requestedPowerW: asked.requestedW, appliedLimits, achievedPowerW: acW,
-      explanation: bindName && bindName !== 'Request met in full'
+      // The suffix belongs to a request that was made and then held back by something downstream.
+      // Where the policy is itself the reason there is no request, its own sentence already says
+      // so, and appending "the reserve held back held it to 0 kW" says it twice and badly.
+      explanation: bindName && bindName !== 'Request met in full' && asked.hold === null
         ? `${asked.explanation} The ${bindName.toLowerCase()} held it to ${Math.abs(acW / 1e3).toFixed(0)} kW.`
         : asked.explanation,
+      // The action is what the *policy* decided, not what became of it. A request cut to nothing by
+      // a ceiling downstream is still the policy asking to charge, and reading it as "reduce"
+      // would credit ergOS with a decision the battery management system made.
+      goal: asked.goal, action: asked.action,
+      rule: asked.rule, telemetryAgeSeconds, usedFallback: asked.usedFallback,
+      heldSetpoint, localControl: islanded,
     });
   }
 
@@ -462,7 +566,8 @@ export function simulate(input: RunInput): RunOutput {
   if (!failure && series.timeSeconds.length) {
     series.timeSeconds.push(steps * scenario.stepSeconds);
     for (const key of ['requestedPowerW', 'achievedPowerW', 'gridPowerW', 'dcPowerW', 'packCurrentA',
-      'converterLossW', 'batteryLossW', 'auxiliaryW', 'unservedLoadW']) series[key].push(0);
+      'converterLossW', 'batteryLossW', 'auxiliaryW', 'unservedLoadW',
+      'siteLoadW', 'generationW', 'gridImportW', 'gridExportW', 'curtailedW']) series[key].push(0);
     series.packVoltageV.push(ocv(cell, soc) * shape.seriesCells);
     series.cellVoltageV.push(ocv(cell, soc));
     series.cellVoltageMaxV.push(packSignals().cellVoltageMax);

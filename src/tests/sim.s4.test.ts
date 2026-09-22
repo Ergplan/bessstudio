@@ -36,9 +36,10 @@ describe('requested against achieved, all the way through', () => {
   });
 
   it('reports the converter as derated when it is holding the request back', () => {
-    const out = run(normalCondition, 4_000_000);
+    // Below the rating, so the policy relays it whole and the converter is the one holding back.
+    const out = run(sealWith(scenarioSchema, { ...normalCondition, initialSoc: 0.2 }), 2_500_000);
     expect(out.series.pcsState[0]).toBe('derated');
-    expect(Math.abs(out.series.achievedPowerW[0])).toBeLessThan(4_000_000);
+    expect(Math.abs(out.series.achievedPowerW[0])).toBeLessThan(2_500_000);
     expect(out.series.bindingConstraint[0]).not.toBe('Request met in full');
   });
 
@@ -284,7 +285,10 @@ describe('the state and the constraint are two readings of one moment', () => {
       const out = run(sealWith(scenarioSchema, { ...normalCondition, initialSoc: soc }), request);
       const s = out.series;
       for (const i of dispatching(s.timeSeconds).map((_, k) => k)) {
-        const named = s.bindingConstraint[i] !== '' && s.bindingConstraint[i] !== 'Request met in full';
+        // The EMS reducing a request before issuing it is not the converter failing to meet one:
+        // there the converter met exactly what it was asked, and the reduction is upstream.
+        const named = s.bindingConstraint[i] !== '' && s.bindingConstraint[i] !== 'Request met in full'
+          && s.bindingConstraint[i] !== 'Reduced to what the plant can do';
         if (named && Math.abs(s.achievedPowerW[i]) > 1) {
           expect(s.pcsState[i], `${label}, sample ${i}: "${s.bindingConstraint[i]}" but the converter reads ${s.pcsState[i]}`).toBe('derated');
         }

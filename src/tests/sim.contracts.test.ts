@@ -228,10 +228,13 @@ describe('the records, and what they refuse', () => {
     expect(() => equipmentParameterSetSchema.parse(lfpParameterSet)).not.toThrow();
     expect(() => plantConfigurationSchema.parse(teachingPlant)).not.toThrow();
     expect(() => emsPolicySchema.parse(manualPolicy)).not.toThrow();
-    for (const p of [...presets.parameterSets, ...presets.plants, ...presets.policies]) {
+    for (const p of [...presets.parameterSets, ...presets.plants, ...presets.policies, ...presets.scenarios]) {
       expect(sealIntact(p as never), `${p.id} seal intact`).toBe(true);
       expect(p.schemaVersion).toBe(SIM_SCHEMA_VERSION);
     }
+    for (const s of presets.scenarios) expect(() => scenarioSchema.parse(s), s.id).not.toThrow();
+    for (const p of presets.policies) expect(() => emsPolicySchema.parse(p), p.id).not.toThrow();
+    for (const p of presets.plants) expect(() => plantConfigurationSchema.parse(p), p.id).not.toThrow();
   });
 
   const cell = () => structuredClone(lfpParameterSet.cell);
@@ -318,7 +321,8 @@ describe('the records, and what they refuse', () => {
       cellVoltageMaxV: arr(), cellVoltageMinV: arr(), soc: arr(), countedSoc: arr(),
       cellTempC: arr(), cellTempMaxC: arr(), converterLossW: arr(), batteryLossW: arr(), auxiliaryW: arr(),
       bindingConstraint: ['', '', ''], pcsState: ['', '', ''], bmsState: ['', '', ''],
-      unservedLoadW: arr(), schemaVersion: 1,
+      unservedLoadW: arr(), siteLoadW: arr(), generationW: arr(), gridImportW: arr(),
+      gridExportW: arr(), curtailedW: arr(), schemaVersion: 1,
     };
     expect(() => timeSeriesResultSchema.parse(series)).not.toThrow();
     expect(() => timeSeriesResultSchema.parse({ ...series, soc: [0, 0] })).toThrow(/2 samples against 3 timestamps/);
@@ -371,7 +375,8 @@ describe('persistence, and what survives it', () => {
       soc: [0.5, 0.49], countedSoc: [0.5, 0.49], cellTempC: [25, 25], cellTempMaxC: [25, 25],
       converterLossW: [0, 0], batteryLossW: [0, 0], auxiliaryW: [0, 0],
       bindingConstraint: ['', ''], pcsState: ['standby', 'standby'], bmsState: ['normal', 'normal'],
-      unservedLoadW: [0, 0],
+      unservedLoadW: [0, 0], siteLoadW: [0, 0], generationW: [0, 0], gridImportW: [0, 0],
+      gridExportW: [0, 0], curtailedW: [0, 0],
     } as never,
     decisions: { id: 'd-1', label: 'Decisions', kind: 'EMSDecisionLog', schemaVersion: 1, runId: 'run-1', decisions: [] } as never,
     events: { id: 'e-1', label: 'Events', kind: 'EventLog', schemaVersion: 1, runId: 'run-1', events: [] } as never,

@@ -174,7 +174,7 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
       <div className="grid cols-2">
         <Card title="What the plant is doing, and who decided" tight>
           <Stack constraint={constraint} discharging={s.achievedPowerW[act] > 0} />
-          <p className="lesson-explain">{decision?.explanation}</p>
+          {decision && <Ergos decision={decision} achievedW={s.achievedPowerW[act]} constraint={constraint} />}
           {constraint && constraint !== 'Request met in full' && (
             <div className="notice warning"><b>{constraint}</b>
               <p>{decision?.appliedLimits.find(l => l.reason.startsWith(constraint))?.reason.split(': ').slice(1).join(': ')}</p></div>
@@ -252,6 +252,75 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
             more than {out.run.solver.maxSubStepSeconds} s at a time. {out.run.engine} {out.run.engineVersion}.</li>
         </ul>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * The ergOS card.
+ *
+ * §11.3 fixes what it carries and in what order: the goal, what was observed, the action, the
+ * requested and delivered power with any active limit, and one plain sentence of reason — with
+ * **Why?** opening the rule underneath it and the values it fired on. Nothing here is written by
+ * hand: every figure is read from the decision the engine recorded at this timestamp, which is
+ * what §14.1 means by an explanation that resolves to logged values.
+ */
+function Ergos({ decision, achievedW, constraint }: {
+  decision: { goal: string; action: string; rule: string; explanation: string; requestedPowerW: number;
+    observed: Record<string, number>; policyVersion: string; telemetryAgeSeconds: number;
+    usedFallback: boolean; heldSetpoint: boolean; localControl: boolean;
+    appliedLimits: { by: string; limitW: number; reason: string }[] };
+  achievedW: number; constraint: string;
+}) {
+  const tone: Tone = decision.action === 'hold' ? 'neutral' : decision.action === 'reduce' ? 'warn' : 'info';
+  const shown = ['soc', 'siteLoadW', 'generationW', 'pricePerMWh', 'floorSoc', 'islandBalanceW'];
+  const label: Record<string, string> = {
+    soc: 'Charge level', siteLoadW: 'Site load', generationW: 'Generation', pricePerMWh: 'Price',
+    floorSoc: 'Floor', islandBalanceW: 'The island needs', manualRequestW: 'Asked for',
+    reserveSoc: 'Reserve', telemetryAgeSeconds: 'Telemetry age', telemetryTimeoutSeconds: 'Telemetry timeout',
+    hourOfDay: 'Hour of day', windowPricePerMWh: 'Window price', auxiliaryW: 'Auxiliaries', localControl: 'Local control',
+    islanded: 'Islanded',
+  };
+  const value = (k: string, v: number) =>
+    k.endsWith('Soc') || k === 'soc' ? `${(v * 100).toFixed(1)}%`
+      : k.endsWith('W') ? `${Math.round(v / 1000).toLocaleString()} kW`
+        : k.endsWith('Seconds') ? `${Math.round(v)} s`
+          : k.includes('rice') ? v.toLocaleString() : String(v);
+  return (
+    <div className="ergos">
+      <div className="row" style={{ gap: 8 }}>
+        <b>ergOS is deciding</b>
+        <Badge tone={tone}>{decision.action}</Badge>
+        <div className="spacer" />
+        <span className="muted">educational simulation</span>
+      </div>
+      <p className="ergos-goal">{decision.goal}</p>
+      <div className="ergos-observed">
+        {shown.filter(k => decision.observed[k] !== undefined).map(k => (
+          <span key={k}><i>{label[k] ?? k}</i> {value(k, decision.observed[k])}</span>
+        ))}
+      </div>
+      <div className="ergos-power">
+        <span>{Math.abs(decision.requestedPowerW / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })} kW requested</span>
+        <span aria-hidden>→</span>
+        <span>{Math.abs(achievedW / 1000).toLocaleString(undefined, { maximumFractionDigits: 0 })} kW delivered</span>
+        {constraint && constraint !== 'Request met in full' && <em>{constraint}</em>}
+      </div>
+      <p className="lesson-explain">{decision.explanation}</p>
+      <details className="ergos-why">
+        <summary>Why?</summary>
+        <KV label="Rule">{decision.rule}</KV>
+        <KV label="Policy version">{decision.policyVersion}</KV>
+        <KV label="Telemetry age">{Math.round(decision.telemetryAgeSeconds)} s{decision.usedFallback ? ' — past its timeout, so the fallback applied' : ''}</KV>
+        <KV label="Setpoint">{decision.heldSetpoint ? 'Held from the last decision' : 'Issued this step'}</KV>
+        {decision.localControl && <KV label="Control">Local — the policy is not in command while the plant is islanded</KV>}
+        {decision.appliedLimits.slice(0, 3).map(l => (
+          <KV key={l.reason} label={l.by}>{Math.round(l.limitW / 1000).toLocaleString()} kW — {l.reason}</KV>
+        ))}
+        <p className="muted" style={{ margin: '8px 0 0' }}>
+          Every figure above was recorded by the run at this moment. Nothing in the sentence is written separately from them.
+        </p>
+      </details>
     </div>
   );
 }
