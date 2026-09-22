@@ -419,6 +419,23 @@ approver returned something, with the reason. A customer is told only that their
 quotation was issued — never about their own submission, and never anything carrying another
 customer's name.
 
+### 4.5b First run — an empty workspace `LIVE`
+
+A real organization starts **empty**. Seeded reference records belong to the demonstration
+workspace only; a supplier signing up used to be handed five fictional customers carrying crores of
+invented pipeline, which is a mess to clear up rather than a demonstration.
+
+Each list distinguishes *nothing yet* from *nothing matches*, because telling a first-time user to
+adjust a filter they never set is how an empty workspace reads as a broken one:
+
+| Page | Nothing yet | Nothing matches |
+| --- | --- | --- |
+| Dashboard | *Your workspace is empty* → **Add a customer** | — |
+| Customers | *No customers yet* → **Add the first customer** | *No customers match* → **Clear the filter** |
+| Projects | no customers: *A customer comes first* → **Add a customer**. Customers but no projects: *No projects yet* → **New project** | *No projects match* → **Clear the filter** |
+| Quotes | *No quotations* → **Go to projects** | — |
+| Queue | *No enquiries waiting. Submitted designs appear here the moment a customer sends one.* | — |
+
 ### 4.6 Dashboard — `/app` `LIVE`
 
 Staff only; customers get a reduced *Overview*.

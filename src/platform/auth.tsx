@@ -146,7 +146,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const member: Member = { uid: account.uid, email: account.email, displayName: account.displayName, role: 'owner', addedAt: nowIso() };
     await repo.saveMember(organization.id, member);
     await repo.saveSettings(organization.id, { priceBook: defaultPriceBook });
-    await seedOrganization(organization.id, member);
+    // Only the demonstration workspace. A real organization's first screen must be their own, not
+    // five fictional customers carrying crores of invented pipeline — which is what a new supplier
+    // signing up used to be handed.
+    if (demo) await seedOrganization(organization.id, member);
     // The profile document only exists in Firestore, and only a signed-in caller may write it. In
     // the demonstration workspace there is no such caller, and a rejected write here would abandon
     // the organization that was just created.

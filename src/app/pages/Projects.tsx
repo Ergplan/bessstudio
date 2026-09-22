@@ -78,7 +78,20 @@ export function Projects() {
               );
             })}</tbody>
           </table>
-        ) : <Empty title="No projects" message="Open a customer and add a project to start sizing." action={<Link className="btn accent" href="/app/customers">Go to customers</Link>} />}
+        ) : projects.length ? (
+          <Empty title="No projects match" message="Nothing matches this search or application filter."
+            action={<button className="btn" onClick={() => { setFilter(''); setApp('all'); }}>Clear the filter</button>} />
+        ) : customers.length ? (
+          // A project can be raised from right here now, so sending them to the customers page for
+          // it is a detour the interface no longer needs.
+          <Empty title="No projects yet" message="A project is one plant: its duty cycle, its sizing, its engineering and the quotations raised from it."
+            action={can(role, 'project.write')
+              ? <button className="btn accent" onClick={() => setDraft({ customerId: customers[0].id, name: '' })}><Plus size={15} /> New project</button>
+              : undefined} />
+        ) : (
+          <Empty title="A customer comes first" message="Every project belongs to a customer, so there needs to be one before a plant can be sized."
+            action={<Link className="btn accent" href="/app/customers">Add a customer</Link>} />
+        )}
       </Card>
       {draft && (
         <Modal title="New project" onClose={() => setDraft(null)} footer={<>

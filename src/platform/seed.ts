@@ -47,6 +47,12 @@ const sketches: Sketch[] = [
   },
 ];
 
+/**
+ * Reference records for the demonstration workspace.
+ *
+ * Demo only. A real organization gets an empty workspace, because a first screen full of somebody
+ * else's invented pipeline is not a product demonstration, it is a mess to clear up.
+ */
 export async function seedOrganization(orgId: string, member: Member) {
   const repo = repository();
   if ((await repo.list(orgId, 'customers')).length) return;

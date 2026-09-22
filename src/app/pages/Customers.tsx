@@ -90,7 +90,15 @@ export function Customers() {
               );
             })}</tbody>
           </table>
-        ) : <Empty title="No customers match" message="Adjust the search or stage filter, or add a new customer record." />}
+        ) : customers.length ? (
+          // Something is filtered out. Telling a first-time user to adjust a filter they never set
+          // is how an empty workspace reads as a broken one.
+          <Empty title="No customers match" message="Nothing matches this search or stage filter."
+            action={<button className="btn" onClick={() => { setFilter(''); setStage('all'); }}>Clear the filter</button>} />
+        ) : (
+          <Empty title="No customers yet" message="A customer record holds the contacts, the projects sized for them and every quotation raised."
+            action={writable ? <button className="btn accent" onClick={() => setDraft(blank(org!.id, user!.uid, user!.displayName))}><Plus size={15} /> Add the first customer</button> : undefined} />
+        )}
       </Card>
 
       {draft && (
