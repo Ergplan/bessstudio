@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { brand } from '../../brand/brand';
-import { formatMoney, landedCost, localRate, type Currency } from '../../catalog/pricing';
+import { atRate, formatMoney, landedCost, localRate, type Currency } from '../../catalog/pricing';
 import { uplift } from '../../quoting/quote';
 import { packOf, cellOf } from '../../catalog/products';
 import type { SizingResult } from '../../sizing/engine';
@@ -125,8 +125,12 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
         pcsCostInrPerKW: priceBook.landed.pcsCostInrPerKW * factor,
       }, finance.landed.kWh, finance.landed.ratedKW)
     : null;
-  const enclosuresTotal = landed ? sizing.units * landed.deliveredInr : 0;
-  const pcsTotal = landed ? sizing.units * landed.pcsInr : 0;
+  // The table prints the rate and the amount side by side, so the amount is computed from the rate
+  // as printed. Otherwise "7 × 44,791,087" sits next to a figure two rupees away from it.
+  const perEnclosure = landed ? atRate(landed.deliveredInr, local) : 0;
+  const perPcs = landed ? atRate(landed.pcsInr, local) : 0;
+  const enclosuresTotal = sizing.units * perEnclosure;
+  const pcsTotal = sizing.units * perPcs;
 
   return (
     <div className="offer" style={{ ['--o-navy' as string]: b.primary, ['--o-accent' as string]: b.accent }}>
@@ -377,8 +381,8 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
               <table className="offer-table">
                 <thead><tr><th>Order value — {sizing.units} enclosures / {num(sizing.installedDcMWh, 1)} MWh</th><th className="num">{local}</th></tr></thead>
                 <tbody>
-                  {landed && <tr><td>BESS enclosures ({sizing.units} × {num(landed.deliveredInr)})</td><td className="num">{num(enclosuresTotal)}</td></tr>}
-                  {landed && <tr><td>Power conversion systems ({sizing.units} × {num(landed.pcsInr)})</td><td className="num">{num(pcsTotal)}</td></tr>}
+                  {landed && <tr><td>BESS enclosures ({sizing.units} × {num(perEnclosure)})</td><td className="num">{num(enclosuresTotal)}</td></tr>}
+                  {landed && <tr><td>Power conversion systems ({sizing.units} × {num(perPcs)})</td><td className="num">{num(pcsTotal)}</td></tr>}
                   {!landed && quote.lines.filter(l => !l.optional).map(l => <tr key={l.id}><td>{l.label}</td><td className="num">{num(l.total)}</td></tr>)}
                   {landed && Math.abs(quote.subtotal - enclosuresTotal - pcsTotal) > 1 && (
                     <tr><td>Other supply and services</td><td className="num">{num(quote.subtotal - enclosuresTotal - pcsTotal)}</td></tr>
