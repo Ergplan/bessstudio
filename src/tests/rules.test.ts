@@ -415,3 +415,69 @@ describe('simulation scenarios and runs', () => {
 it('the rules file is the one the application ships', () => {
   expect(readFileSync('firestore.rules', 'utf8')).toContain('acceptingInvite');
 });
+
+/**
+ * F08 — access and provenance, through the rules rather than through the interface.
+ *
+ * §18: customer A cannot obtain customer B's run through direct identifiers, exports, or job/cache
+ * endpoints. There are no job or cache endpoints here — the engine runs in the browser, which is
+ * the departure recorded in the S2 packet — so what is left to prove is the part that exists: a
+ * direct identifier, a listing, and a document in another tenant entirely.
+ */
+describe('F08 — one customer cannot reach another’s work', () => {
+  const OTHER = 'org_someone_else';
+  const otherPath = (...parts: string[]) => ['organizations', OTHER, ...parts].join('/');
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async ctx => {
+      const db = ctx.firestore();
+      const stamp = new Date().toISOString();
+      // Two customers in this workspace, and one in another one entirely.
+      await setDoc(doc(db, orgPath('simRuns', 'run_a')), { orgId: ORG, ownerUid: 'cust', kind: 'SimulationRun', updatedAt: stamp, record: { id: 'a', status: 'complete' } });
+      await setDoc(doc(db, orgPath('simRuns', 'run_b')), { orgId: ORG, ownerUid: 'cust2', kind: 'SimulationRun', updatedAt: stamp, record: { id: 'b', status: 'complete' } });
+      await setDoc(doc(db, orgPath('quotes', 'q_b')), quote({ ownerUid: 'cust2' }));
+      await setDoc(doc(db, orgPath('projects', 'p_b')), { orgId: ORG, ownerUid: 'cust2', name: 'Theirs', customerId: 'c2' });
+      await setDoc(doc(db, otherPath('simRuns', 'run_c')), { orgId: OTHER, ownerUid: 'outsider', kind: 'SimulationRun', updatedAt: stamp, record: { id: 'c', status: 'complete' } });
+      await setDoc(doc(db, otherPath('members', 'outsider')), { uid: 'outsider', email: 'out@example.com', role: 'customer', orgId: OTHER });
+    });
+  });
+
+  it('refuses another customer’s run by its direct identifier', async () => {
+    const db = as('cust', 'cust@example.com');
+    await assertSucceeds(getDoc(doc(db, orgPath('simRuns', 'run_a'))));
+    await assertFails(getDoc(doc(db, orgPath('simRuns', 'run_b'))));
+  });
+
+  it('refuses another customer’s design and quotation the same way', async () => {
+    const db = as('cust', 'cust@example.com');
+    await assertFails(getDoc(doc(db, orgPath('projects', 'p_b'))));
+    await assertFails(getDoc(doc(db, orgPath('quotes', 'q_b'))));
+  });
+
+  it('refuses a listing that would return another customer’s runs', async () => {
+    // The listing is the export route: one document at a time can be refused and a collection
+    // read would hand over everything at once.
+    const db = as('cust', 'cust@example.com');
+    await assertFails(getDocs(collection(db, orgPath('simRuns'))));
+  });
+
+  it('refuses everything in a workspace the reader is not a member of', async () => {
+    const db = as('cust', 'cust@example.com');
+    await assertFails(getDoc(doc(db, otherPath('simRuns', 'run_c'))));
+    await assertFails(getDocs(collection(db, otherPath('simRuns'))));
+    await assertFails(setDoc(doc(db, otherPath('simRuns', 'run_d')), { orgId: OTHER, ownerUid: 'cust', kind: 'SimulationRun', updatedAt: new Date().toISOString(), record: { id: 'd' } }));
+  });
+
+  it('refuses a run written into this workspace under another workspace’s name', async () => {
+    const db = as('cust', 'cust@example.com');
+    await assertFails(setDoc(doc(db, orgPath('simRuns', 'run_e')), {
+      orgId: OTHER, ownerUid: 'cust', kind: 'SimulationRun', updatedAt: new Date().toISOString(), record: { id: 'e' },
+    }));
+  });
+
+  it('still lets staff of this workspace see its own records, which is the point of the boundary', async () => {
+    const db = as('eng', 'eng@example.com');
+    await assertSucceeds(getDoc(doc(db, orgPath('simRuns', 'run_b'))));
+    await assertFails(getDoc(doc(db, otherPath('simRuns', 'run_c'))));
+  });
+});

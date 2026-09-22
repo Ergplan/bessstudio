@@ -17,12 +17,14 @@ import { applyAction, availableActions, isEditable } from '../../quoting/lifecyc
 import { Financial, useFinancialAccess } from '../components/Gate';
 import { addCustomLine, convertQuote, quoteTotals, removeLine, reviseQuote } from '../../quoting/quote';
 import { atRate, currencies, formatMoney, type Currency } from '../../catalog/pricing';
+import { designHashOf, engineeringAppendix, staleAgainst } from '../../quoting/appendix';
+import type { StoredRun } from '../../sim/store';
 
-type Tab = 'commercial' | 'scope' | 'content' | 'offer' | 'proposal';
+type Tab = 'commercial' | 'scope' | 'content' | 'offer' | 'proposal' | 'appendix';
 
 export function QuoteDetail({ id: quoteId }: { id: string }) {
   const router = useRouter();
-  const { quotes, projects, priceBook, saveQuote } = useWorkspace();
+  const { quotes, projects, priceBook, saveQuote, runs } = useWorkspace();
   const { org, role, user } = useSession();
   const [tab, setTab] = useState<Tab>('commercial');
   const [note, setNote] = useState('');
@@ -145,8 +147,8 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
       <div className="no-print">
         <Tabs<Tab> active={tab} onChange={setTab} tabs={[
           { id: 'commercial', label: 'Pricing' }, { id: 'scope', label: 'Scope & terms' },
-          { id: 'content', label: 'Offer content' }, { id: 'offer', label: 'Offer document' },
-          { id: 'proposal', label: 'One-page summary' },
+          { id: 'content', label: 'Offer content' }, { id: 'appendix', label: 'Engineering appendix' },
+          { id: 'offer', label: 'Offer document' }, { id: 'proposal', label: 'One-page summary' },
         ]} />
       </div>
 
@@ -305,7 +307,95 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
         </div>
       ) : <Card><Empty title="No sizing behind this quotation" message="The project this quotation was raised against is no longer available, so the offer cannot be built." /></Card>)}
 
+      {tab === 'appendix' && (built ? (
+        <Appendix quote={quote} sizing={built.sizing} project={project ?? null} role={role} runs={runs}
+          onApprove={() => patch({
+            evidenceApprovedBy: user?.displayName || user?.email || 'Unknown',
+            evidenceApprovedByUid: user?.uid ?? null,
+            evidenceApprovedAt: new Date().toISOString(),
+          }, 'Engineering evidence approved.')}
+          onAnchor={() => patch({ designHash: designHashOf(built.sizing, built.sizing.input) }, 'Quotation tied to the current design revision.')} />
+      ) : <Card><Empty title="No design behind this quotation" message="An appendix describes a design, and this quotation has none available." /></Card>)}
+
       {tab === 'proposal' && <Proposal quote={quote} org={org} />}
+    </div>
+  );
+}
+
+/**
+ * The engineering appendix, and the two things §16 will not let it do.
+ *
+ * It does not release anything: the buttons here record an engineering approval and tie the
+ * quotation to a design revision, and neither is an approval of a price. And it does not let a
+ * design change pass quietly: a quotation prepared against an earlier revision says so, in the
+ * place somebody reads before sending it.
+ */
+function Appendix({ quote, sizing, project, role, runs, onApprove, onAnchor }: {
+  quote: Quote; sizing: ReturnType<typeof sizeSystem>; project: { id: string; sizing: SizingInput } | null;
+  role: Parameters<typeof can>[0]; runs: StoredRun[]; onApprove: () => void; onAnchor: () => void;
+}) {
+  const current = designHashOf(sizing, sizing.input);
+  const live = project ? designHashOf(sizeSystem(project.sizing), project.sizing) : current;
+  const staleness = staleAgainst(quote.designHash ?? current, live);
+  // The newest result kept against this project, if there is one. A run whose four hashes do not
+  // match what it is being attached to is refused by the appendix itself rather than here.
+  const kept = project ? runs.filter(r => r.projectId === project.id)[0] ?? null : null;
+  const appendix = engineeringAppendix({
+    sizing, designHash: quote.designHash ?? current,
+    run: kept
+      ? {
+        run: kept.record, series: kept.series,
+        hashes: {
+          scenario: kept.record.scenarioHash, plant: kept.record.plantHash,
+          policy: kept.record.policyHash, parameters: kept.record.parameterSetHash,
+        },
+      }
+      : null,
+    evidence: quote.evidenceApprovedAt
+      ? { approvedBy: quote.evidenceApprovedBy ?? 'Unknown', approvedAt: date(quote.evidenceApprovedAt) }
+      : null,
+  });
+  return (
+    <div className="grid" style={{ gap: 14 }}>
+      {staleness.stale && (
+        <div className="notice error"><b>The design has moved on since this quotation was prepared</b>
+          <p>{staleness.message}</p></div>
+      )}
+      {!quote.designHash && (
+        <div className="notice warning"><b>This quotation is not tied to a design revision yet</b>
+          <p>Until it is, nothing can tell whether the design has changed under it.</p></div>
+      )}
+      {appendix.warnings.map(w => <div key={w} className="notice warning"><p>{w}</p></div>)}
+
+      {appendix.sections.map(section => (
+        <Card key={section.heading} title={section.heading} tight
+          actions={<Badge tone={section.status === 'reviewed' ? 'good' : 'warn'}>{section.status}</Badge>}>
+          {section.rows.map(r => <KV key={r.label} label={r.label}>{r.value}</KV>)}
+          <ul className="muted" style={{ margin: '10px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+            {section.notes.map(n => <li key={n}>{n}</li>)}
+          </ul>
+        </Card>
+      ))}
+
+      <Card title="What this appendix is not" tight>
+        <ul className="muted" style={{ margin: 0, paddingLeft: 18, lineHeight: 1.8 }}>
+          {appendix.limitations.map(l => <li key={l}>{l}</li>)}
+        </ul>
+        <div className="row" style={{ marginTop: 12 }}>
+          <button className="btn sm" onClick={onAnchor} disabled={quote.designHash === live}>
+            Tie this quotation to the current design
+          </button>
+          <button className="btn sm accent" onClick={onApprove} disabled={!can(role, 'evidence.approve') || !!quote.evidenceApprovedAt}>
+            Approve the engineering evidence
+          </button>
+          <div className="spacer" />
+          <span className="muted">
+            {can(role, 'evidence.approve')
+              ? 'Approving the evidence covers the model and its assumptions. It is not an approval of the price.'
+              : 'Only a role that may vouch for engineering evidence can approve it, and that is not the role that releases a price.'}
+          </span>
+        </div>
+      </Card>
     </div>
   );
 }

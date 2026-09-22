@@ -27,6 +27,15 @@ const envelope = {
   orgId: z.string().min(1).max(120),
   ownerUid: z.string().min(1).max(160),
   updatedAt: z.string().min(4).max(40),
+  /**
+   * The project this belongs to, and the exact design revision it was produced against.
+   *
+   * §16: a simulation links to an **immutable project revision**. Without both of these a stored
+   * result is a number with no idea what it was a number about, and the first design change after
+   * it makes it silently wrong rather than visibly stale.
+   */
+  projectId: z.string().max(120).default(''),
+  designHash: z.string().max(64).default(''),
 };
 
 export const storedScenarioSchema = z.object({
@@ -81,19 +90,22 @@ export const sealScenario = (s: Scenario): Scenario => sealWith(scenarioSchema, 
 /** A run, its series and its logs, sealed and rounded, ready to be written once. */
 export function sealRun(args: {
   orgId: string; ownerUid: string; at: string;
+  projectId?: string; designHash?: string;
   run: SimulationRun; series: TimeSeriesResult; decisions: EmsDecisionLog; events: EventLog;
 }): StoredRun {
   const record = sealWith(simulationRunSchema, args.run);
   return storedRunSchema.parse({
     id: record.id, orgId: args.orgId, ownerUid: args.ownerUid, updatedAt: args.at,
+    projectId: args.projectId ?? '', designHash: args.designHash ?? '',
     kind: 'SimulationRun', record,
     series: roundSeries(args.series), decisions: args.decisions, events: args.events,
   });
 }
 
-export function storeScenario(args: { orgId: string; ownerUid: string; at: string; scenario: Scenario }): StoredScenario {
+export function storeScenario(args: { orgId: string; ownerUid: string; at: string; scenario: Scenario; projectId?: string; designHash?: string }): StoredScenario {
   return storedScenarioSchema.parse({
     id: args.scenario.id, orgId: args.orgId, ownerUid: args.ownerUid, updatedAt: args.at,
+    projectId: args.projectId ?? '', designHash: args.designHash ?? '',
     kind: 'Scenario', record: sealScenario(args.scenario),
   });
 }

@@ -15,6 +15,7 @@ import { accounting, simulate } from '../../sim/engine';
 import { comparePolicies } from '../../sim/compare';
 import { indiaPresets, teachingTariffs } from '../../sim/india';
 import { inr } from '../../sim/lifecycle';
+import { conversionCaveat, designFromLesson } from '../../quoting/conversion';
 import { badgeLabels, badgeMeanings } from '../../sim/provenance';
 import { pcsStateMeaning, pcsStateOwner, type PcsState } from '../../sim/pcs';
 import { bmsStateMeaning, type BmsState } from '../../sim/bms';
@@ -79,12 +80,15 @@ function Catalogue({ projectId }: { projectId: string | null }) {
 
 function Player({ card, projectId }: { card: LessonCard; projectId: string | null }) {
   const router = useRouter();
+  const { keepRun } = useWorkspace();
   const [values, setValues] = useState(() => defaultControls(card));
   // At rest the whole run is on the charts, because a learner should see the shape of the thing
   // before deciding to watch it happen. Play rewinds and reveals it.
   const [cursor, setCursor] = useState(Number.MAX_SAFE_INTEGER);
   const [playing, setPlaying] = useState(false);
   const [previous, setPrevious] = useState<{ label: string; headline: Metric; second: Metric; endSoc: number } | null>(null);
+  const [converting, setConverting] = useState(false);
+  const [kept, setKept] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // The result. Recomputed whenever a control moves, because §15.1 requires the comparison to be
@@ -95,7 +99,7 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
   const steps = out.series.timeSeconds.length;
   const totals = useMemo(() => accounting(out.series), [out]);
 
-  useEffect(() => { setCursor(Number.MAX_SAFE_INTEGER); setPlaying(false); }, [values]);
+  useEffect(() => { setCursor(Number.MAX_SAFE_INTEGER); setPlaying(false); setKept(false); }, [values]);
   useEffect(() => {
     if (timer.current) { clearInterval(timer.current); timer.current = null; }
     if (!playing || steps === 0) return;
@@ -222,6 +226,18 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
           <div className="row" style={{ marginTop: 12 }}>
             <button className="btn sm" onClick={reset}><RotateCcw size={14} /> Reset</button>
             {projectId && <button className="btn sm" onClick={() => router.push(`/app/projects?id=${projectId}`)}>Back to the design</button>}
+            {projectId && <button className="btn sm accent" onClick={() => setConverting(true)}>Take this duty into the design</button>}
+            {projectId && out.run.status === 'complete' && (
+              <button className="btn sm" disabled={kept} onClick={async () => {
+                // Written once and never edited: the rules refuse an update from every role, so a
+                // changed configuration becomes a new run rather than a correction to this one.
+                await keepRun({
+                  run: out.run, series: s, decisions: out.decisions, events: out.events,
+                  label: card.template.label, projectId,
+                });
+                setKept(true);
+              }}>{kept ? 'Result kept' : 'Keep this result with the project'}</button>
+            )}
           </div>
         </Card>
       </div>
@@ -261,6 +277,10 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
           <EventLog events={out.events.events.filter(e => e.atSeconds <= s.timeSeconds[at] + 0.001)} />
         </Card>
       </div>
+
+      {converting && projectId && (
+        <Conversion card={card} values={values} projectId={projectId} onClose={() => setConverting(false)} />
+      )}
 
       <Card title="What this model is, and is not" tight>
         <p className="muted" style={{ margin: 0 }}>
@@ -711,5 +731,49 @@ function Stack({ owner, discharging }: { owner: string; discharging: boolean }) 
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * Taking a lesson's duty into a design.
+ *
+ * §17.2 asks for the learning-to-design conversion, and the honest version of it is mostly a list
+ * of what does not come across. The power and the duration do. The teaching plant, its cell and its
+ * converter do not, and neither does any claim that this is now about a site: the panel shows where
+ * every figure came from and what the design still needs before anybody proposes it to anyone.
+ */
+function Conversion({ card, values, projectId, onClose }: {
+  card: LessonCard; values: Record<string, number>; projectId: string; onClose: () => void;
+}) {
+  const router = useRouter();
+  const { projects, saveProject } = useWorkspace();
+  const project = projects.find(p => p.id === projectId);
+  const c = designFromLesson({ lessonId: card.template.id, lessonLabel: card.template.label, values });
+  if (!project) return null;
+  return (
+    <Card title="Take this duty into the design" subtitle={`What ${card.template.label.toLowerCase()} would mean for ${project.name}`} tight>
+      <table className="data">
+        <thead><tr><th>Figure</th><th>Value</th><th>Where it came from</th></tr></thead>
+        <tbody>
+          {c.provenance.map(p => (
+            <tr key={p.field}><td>{p.field}</td><td className="mono">{p.value}</td><td className="muted">{p.from}</td></tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="notice warning" style={{ marginTop: 10 }}>
+        <b>What this design still needs</b>
+        <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+          {c.outstanding.map(o => <li key={o}>{o}</li>)}
+        </ul>
+      </div>
+      <p className="muted">{conversionCaveat}</p>
+      <div className="row" style={{ marginTop: 10 }}>
+        <button className="btn accent sm" onClick={async () => {
+          await saveProject({ ...project, sizing: c.input }, `Duty taken from ${card.template.label}.`);
+          router.push(`/app/projects?id=${projectId}`);
+        }}>Apply it to {project.name}</button>
+        <button className="btn sm" onClick={onClose}>Not now</button>
+      </div>
+    </Card>
   );
 }

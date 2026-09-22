@@ -44,6 +44,16 @@ export type Permission =
   | 'quote.request-approval'
   /** Release a formal quotation. Deliberately separated from preparing one. */
   | 'quote.approve'
+  /**
+   * Vouch for the engineering evidence behind a design: the model, its assumptions, its solver
+   * settings and the appendix built from them.
+   *
+   * §16 keeps this apart from pricing on purpose, in both directions: an engineer may approve model
+   * evidence without approving a price, and an approver may release a price without vouching for a
+   * solver setting. Folding the two into one permission would make every price approval an
+   * engineering sign-off that nobody with the right training had given.
+   */
+  | 'evidence.approve'
   /** Submit an indicative design for a formal quotation. The customer's one write into the pipeline. */
   | 'quote.submit'
   /** See the whole organization's records rather than only one's own. */
@@ -52,11 +62,15 @@ export type Permission =
   | 'finance.view';
 
 const grants: Record<Role, Permission[]> = {
-  owner: ['org.manage', 'customer.write', 'project.write', 'quote.write', 'quote.prepare', 'quote.request-approval', 'quote.approve', 'pricebook.write', 'pipeline.view', 'finance.view', 'read'],
-  admin: ['org.manage', 'customer.write', 'project.write', 'quote.write', 'quote.prepare', 'quote.request-approval', 'quote.approve', 'pricebook.write', 'pipeline.view', 'finance.view', 'read'],
+  owner: ['org.manage', 'customer.write', 'project.write', 'quote.write', 'quote.prepare', 'quote.request-approval', 'quote.approve', 'evidence.approve', 'pricebook.write', 'pipeline.view', 'finance.view', 'read'],
+  admin: ['org.manage', 'customer.write', 'project.write', 'quote.write', 'quote.prepare', 'quote.request-approval', 'quote.approve', 'evidence.approve', 'pricebook.write', 'pipeline.view', 'finance.view', 'read'],
+  // An approver releases prices. That is not the same as vouching for a model, and this role does
+  // not claim to: `evidence.approve` is deliberately absent.
   approver: ['customer.write', 'project.write', 'quote.write', 'quote.prepare', 'quote.request-approval', 'quote.approve', 'pipeline.view', 'finance.view', 'read'],
   sales: ['customer.write', 'project.write', 'quote.write', 'quote.prepare', 'quote.request-approval', 'pipeline.view', 'finance.view', 'read'],
-  engineer: ['customer.write', 'project.write', 'quote.write', 'pipeline.view', 'finance.view', 'read'],
+  // An engineer vouches for the evidence and cannot release a price, which is the other half of
+  // the same separation.
+  engineer: ['customer.write', 'project.write', 'quote.write', 'evidence.approve', 'pipeline.view', 'finance.view', 'read'],
   viewer: ['pipeline.view', 'finance.view', 'read'],
   // The customer owns their own design and may price it indicatively, but cannot approve anything,
   // cannot see anyone else's records, and cannot prepare a formal quotation.
@@ -237,6 +251,21 @@ export type Quote = {
   validUntil: string; incoterms: string; paymentTerms: string; deliveryWeeks: number; warrantyYears: number;
   scopeIncluded: string[]; scopeExcluded: string[]; assumptions: string[];
   sizingSnapshot: unknown; financeSnapshot: unknown; priceBookId: string;
+  /**
+   * The exact design revision this quotation was prepared against.
+   *
+   * §16: a design change flags stale quotation assumptions. It can only do that if the quotation
+   * remembers which design it was quoting, so it does — by the same canonical hash the simulation
+   * records use, which means "the design changed" means one thing across the whole application.
+   */
+  designHash?: string | null;
+  /**
+   * Who vouched for the engineering evidence, which is never the same act as approving the price.
+   * §16 keeps the two permissions apart, and this record keeps the two signatures apart with them.
+   */
+  evidenceApprovedBy?: string | null;
+  evidenceApprovedByUid?: string | null;
+  evidenceApprovedAt?: string | null;
   offer?: Record<string, unknown>;   // narrative overrides for the offer document
   preparedBy: string; preparedByEmail: string; createdAt: string; updatedAt: string; sentAt: string | null;
 };

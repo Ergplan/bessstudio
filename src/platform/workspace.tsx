@@ -6,6 +6,8 @@ import { can } from './types';
 import { restage } from './stages';
 import { defaultPriceBook, type PriceBook } from '../catalog/pricing';
 import { nowIso, type Activity, type Customer, type Project, type Quote, type ActivityKind } from './types';
+import { sealRun, type StoredRun } from '../sim/store';
+import type { EmsDecisionLog, EventLog, SimulationRun, TimeSeriesResult } from '../sim/records';
 
 export type Workspace = {
   loading: boolean; customers: Customer[]; projects: Project[]; quotes: Quote[]; activities: Activity[];
@@ -15,6 +17,20 @@ export type Workspace = {
   saveQuote(value: Quote, note?: string, kind?: ActivityKind): Promise<void>;
   removeRecord(name: 'customers' | 'projects' | 'quotes', id: string): Promise<void>;
   savePriceBook(value: PriceBook): Promise<void>;
+  /**
+   * Keep a simulation result, once.
+   *
+   * §16 ties a simulation to an immutable project revision, and §17.2 asks S11 for immutable
+   * results. A run is written once and never edited — the rules refuse an update from every role,
+   * including an owner's — so "save" here means "add", and a changed configuration is a new run
+   * rather than an edit to this one.
+   */
+  keepRun(args: {
+    run: SimulationRun; series: TimeSeriesResult; decisions: EmsDecisionLog; events: EventLog;
+    label?: string; projectId?: string; designHash?: string;
+  }): Promise<StoredRun | null>;
+  /** The runs kept in this workspace, newest first. */
+  runs: StoredRun[];
 };
 
 const WorkspaceContext = createContext<Workspace | null>(null);
@@ -32,6 +48,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [runs, setRuns] = useState<StoredRun[]>([]);
   const [priceBook, setPriceBook] = useState<PriceBook>(defaultPriceBook);
   const [toast, setToast] = useState('');
 
@@ -44,6 +61,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       repo.watch(org.id, 'projects', setProjects),
       repo.watch(org.id, 'quotes', setQuotes),
       repo.watch(org.id, 'activities', setActivities),
+      repo.watch(org.id, 'simRuns', setRuns),
     ];
     repo.getSettings(org.id).then(s => setPriceBook(s?.priceBook ?? defaultPriceBook)).finally(() => setLoading(false));
     return () => stops.forEach(stop => stop());
@@ -115,7 +133,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setPriceBook(value);
       setToast('Price book updated.');
     },
-  }), [loading, canSeeAll, customers, projects, quotes, activities, priceBook, toast, org, user, record]);
+    runs,
+    async keepRun({ run, series, decisions, events, label, projectId, designHash }) {
+      if (!org || !user) return null;
+      const stored = sealRun({
+        orgId: org.id, ownerUid: user.uid, at: nowIso(), projectId, designHash,
+        run, series, decisions, events,
+      });
+      await repository().save(org.id, 'simRuns', stored);
+      setRuns(list => [stored, ...list.filter(r => r.id !== stored.id)]);
+      setToast(label ? `${label} kept.` : 'Result kept.');
+      return stored;
+    },
+  }), [loading, canSeeAll, customers, projects, quotes, activities, priceBook, toast, org, user, record, runs]);
 
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
