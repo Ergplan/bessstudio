@@ -77,11 +77,11 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
   const setOffer = (patch: Partial<OfferContent>) =>
     patch && quote && void saveQuote({ ...quote, offer: { ...(quote.offer ?? {}), ...patch } });
 
-  const exportOfferHtml = () => {
+  const exportOfferHtml = async () => {
     if (!offerRef.current || !quote) return;
     const node = offerRef.current.querySelector('.offer');
     if (!node) return;
-    downloadFile(offerHtml(node as HTMLElement, `${quote.number} r${quote.version} — ${quote.customerName}`),
+    downloadFile(await offerHtml(node as HTMLElement, `${quote.number} r${quote.version} — ${quote.customerName}`),
       `${quote.number}-r${quote.version}-offer.html`);
   };
 
@@ -129,7 +129,7 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
         ))}
         {!customerView && can(role, 'quote.prepare') && <button className="btn" onClick={() => void revise()}><Copy size={14} /> New revision</button>}
         {!customerView && <button className="btn" onClick={exportJson}><Download size={14} /> JSON</button>}
-        {showMoney && <button className="btn" onClick={exportOfferHtml} disabled={!built}><FileCode2 size={14} /> Offer HTML</button>}
+        {showMoney && <button className="btn" onClick={() => void exportOfferHtml()} disabled={!built}><FileCode2 size={14} /> Offer HTML</button>}
         {showMoney && <button className="btn primary" onClick={() => { setTab('offer'); setTimeout(() => window.print(), 120); }}>
           <Printer size={14} /> Print offer / PDF
         </button>}
