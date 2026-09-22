@@ -557,8 +557,9 @@ canvas centre; component inspector right; statistics strip below.
 
 **Scene controls.** Roof off · cutaway · explode (0–100 %) · electrical path · guided walk.
 
-**Guided walk.** Six narrated steps down from the enclosure to a single cell and back out through
-the electrical path — container, banks and aisle, string, pack, cell, path out. Each step sets the
+**Guided walk.** Narrated steps down to a single cell and back out through the electrical path —
+container, banks and aisle, string, pack, cell, path out, preceded by the site where the project
+buys a fleet. Each step sets the
 view (roof, walls, lids, routing, explode, highlight) and narrates it with the figures the current
 design produced, so a different topology narrates differently. Auto-advances with a progress bar;
 pauses; steps with the arrow keys; leaves on Escape. Manual from the start for anyone who has asked

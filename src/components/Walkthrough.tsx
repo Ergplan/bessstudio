@@ -1,19 +1,20 @@
 'use client';
-import {useCallback,useEffect,useRef,useState} from 'react';
+import {useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import {ChevronLeft,ChevronRight,Pause,Play,X} from 'lucide-react';
 import type {Model} from '../domain/model';
 import type {Config} from '../config/schema';
 import {useStudio} from '../state/store';
 import {walkSteps} from '../domain/tour';
+import type {SitePlan} from '../geometry/site';
 
 const STEP_MS=11000;
 
 /** Someone who has asked not to be moved around gets the narration without the timer. */
 const reducedMotion=()=>typeof window!=='undefined'&&window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
-export function Walkthrough({model,onClose}:{model:Model;onClose:()=>void}){
+export function Walkthrough({model,plan,onClose}:{model:Model;plan:SitePlan|null;onClose:()=>void}){
   const {update,focus}=useStudio();
-  const steps=walkSteps(model);
+  const steps=useMemo(()=>walkSteps(model,plan),[model,plan]);
   const [index,setIndex]=useState(0);
   const [playing,setPlaying]=useState(!reducedMotion());
   const [elapsed,setElapsed]=useState(0);
@@ -34,7 +35,7 @@ export function Walkthrough({model,onClose}:{model:Model;onClose:()=>void}){
   const leave=useCallback(()=>{
     const restore=before.current;
     if(restore)update(c=>{Object.assign(c.visibility,restore.visibility);c.explode=restore.explode;c.highlight=restore.highlight;});
-    focus('BESS');
+    focus(plan?'SITE':'BESS');
     onClose();
   },[focus,onClose,update]);
 

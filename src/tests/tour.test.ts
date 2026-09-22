@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildModel } from '../domain/model';
 import { defaults } from '../config/schema';
 import { walkSteps } from '../domain/tour';
+import { planSite } from '../geometry/site';
 
 const model = buildModel(structuredClone(defaults));
 
@@ -23,6 +24,19 @@ describe('the guided walk', () => {
     for (const step of walkSteps(model)) {
       if (/busbar|link|conductor|combiner|terminal/i.test(step.body)) expect(step.explode, step.id).toBe(0);
     }
+  });
+
+  it('starts on the plot when the project buys a fleet', () => {
+    const plan = planSite({
+      units: 7, pcsCount: 4, pcsModel: 'PCS 2507.5 kW', pcsKW: 2507.5,
+      transformerCount: 2, transformerMVA: 6.3, energyMWh: 35.11, powerMW: 8,
+    }, model.dimensions.enclosure);
+    const steps = walkSteps(model, plan);
+    expect(steps[0].id).toBe('site');
+    expect(steps[0].target).toBe('SITE');
+    // The counter is derived, so adding the step cannot leave the rest saying "of 6".
+    steps.forEach((step, i) => expect(step.eyebrow).toBe(`Step ${i + 1} of ${steps.length}`));
+    expect(walkSteps(model)[0].id).toBe('container');
   });
 
   it('reads the design rather than repeating fixed copy', () => {
