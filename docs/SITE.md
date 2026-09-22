@@ -555,6 +555,11 @@ canvas centre; component inspector right; statistics strip below.
 
 **Views.** Isometric, top, front, side, reset. Orbit, zoom, pan.
 
+**Dimensions.** The dimension layer measures the three axes of whatever is in view with an offset
+run, end ticks and a value — millimetres at component scale, metres once a plot or a container is
+in view. At container scope it measures the enclosure rather than the drawn bounds, so the figure
+on the canvas is the one the inspector reports.
+
 **Scene controls.** Roof off · cutaway · explode (0–100 %) · electrical path · guided walk.
 
 **Guided walk.** Narrated steps down to a single cell and back out through the electrical path —

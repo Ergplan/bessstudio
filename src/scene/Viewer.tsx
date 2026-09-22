@@ -18,6 +18,37 @@ function Batch({items,selected}:{items:Primitive[];selected:string}){const ref=u
  return <instancedMesh ref={ref} args={[items[0].shape==='box'?boxGeo:cylinderGeo,material,items.length]} onClick={e=>{e.stopPropagation();pick(id(e));}} onDoubleClick={e=>{e.stopPropagation();const owner=id(e);focus(scope==='SITE'?(owner.startsWith('UNIT-')?'BESS':scope):owner);}} castShadow receiveShadow frustumCulled={false} />;
 }
 function Branding({model}:{model:Model}){const brandName=useStudio(s=>s.brandName)||brand.vendorShort.toUpperCase();const tex=useMemo(()=>{const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=256;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#213e50';ctx.font='600 114px Arial';ctx.textAlign='center';ctx.fillText(brandName,512,155);const t=new THREE.CanvasTexture(canvas);t.colorSpace=THREE.SRGBColorSpace;if(model.config.logo){const img=new Image();img.onload=()=>{ctx.clearRect(0,0,1024,256);const scale=Math.min(1024/img.width,256/img.height);ctx.drawImage(img,(1024-img.width*scale)/2,(256-img.height*scale)/2,img.width*scale,img.height*scale);t.needsUpdate=true;};img.src=model.config.logo;}return t;},[model.config.logo,brandName]);useEffect(()=>()=>tex.dispose(),[tex]);return <mesh position={[model.dimensions.enclosure[0]/2+.04,model.dimensions.enclosure[1]*.66,0]} rotation={[0,Math.PI/2,0]}><planeGeometry args={[model.dimensions.enclosure[2]*.76,model.dimensions.enclosure[2]*.19]}/><meshBasicMaterial map={tex} transparent side={THREE.DoubleSide}/></mesh>;}
+const enclosureBox=(e:Vec)=>new THREE.Box3(new THREE.Vector3(-e[0]/2,0,-e[2]/2),new THREE.Vector3(e[0]/2,e[1],e[2]/2));
+
+/**
+ * Dimension runs on whatever is in view.
+ *
+ * The layer used to be one line of text under the container, which is not what anybody means by
+ * turning dimensions on. It now measures the three axes of the current bounds with an offset run,
+ * end ticks and a value — millimetres at component scale, metres once a plot is in view, because
+ * "50,800 mm" is not how anybody talks about a site.
+ */
+function Dimensions({bounds}:{bounds:THREE.Box3}){
+  const size=bounds.getSize(new THREE.Vector3()),min=bounds.min,max=bounds.max;
+  const reach=Math.max(size.x,size.y,size.z);
+  const off=Math.max(.12,reach*.06),bar=Math.max(.004,reach*.0022),tick=off*.55;
+  const say=(m:number)=>reach>5?`${m.toFixed(m<10?2:1)} m`:`${(m*1000).toFixed(m<.3?1:0)} mm`;
+  const runs:{key:string;length:number;centre:[number,number,number];scale:[number,number,number];ticks:[number,number,number][];label:[number,number,number]}[]=[
+    {key:'X',length:size.x,centre:[(min.x+max.x)/2,min.y-off,max.z+off],scale:[size.x,bar,bar],
+      ticks:[[min.x,min.y-off,max.z+off],[max.x,min.y-off,max.z+off]],label:[(min.x+max.x)/2,min.y-off-tick*.6,max.z+off]},
+    {key:'Z',length:size.z,centre:[max.x+off,min.y-off,(min.z+max.z)/2],scale:[bar,bar,size.z],
+      ticks:[[max.x+off,min.y-off,min.z],[max.x+off,min.y-off,max.z]],label:[max.x+off+tick*.6,min.y-off-tick*.3,(min.z+max.z)/2]},
+    {key:'Y',length:size.y,centre:[max.x+off,(min.y+max.y)/2,max.z+off],scale:[bar,size.y,bar],
+      ticks:[[max.x+off,min.y,max.z+off],[max.x+off,max.y,max.z+off]],label:[max.x+off+tick*.5,(min.y+max.y)/2,max.z+off+tick*.5]},
+  ];
+  return <group>{runs.filter(r=>r.length>1e-3).map(r=><group key={r.key}>
+    <mesh position={r.centre} scale={r.scale}><boxGeometry args={[1,1,1]}/><meshBasicMaterial color="#6d8494"/></mesh>
+    {r.ticks.map((t,i)=><mesh key={i} position={t} scale={r.key==='Y'?[bar,tick*.5,tick]:[r.key==='X'?bar:tick,tick*.5,r.key==='X'?tick:bar]}>
+      <boxGeometry args={[1,1,1]}/><meshBasicMaterial color="#8ea6b4"/></mesh>)}
+    <Html center position={r.label}><span className="dimension-label">{r.key} {say(r.length)}</span></Html>
+  </group>)}</group>;
+}
+
 function Scene({model,api}:{model:Model;api:React.Ref<ViewerHandle>}){const {scope,selected,revision,config,select,site}=useStudio(),{camera,gl,scene,size,invalidate}=useThree(),controls=useRef<any>(null);
  const plan=useMemo(()=>site?planSite(site):null,[site]);
  const ps=useMemo(()=>scope==='SITE'&&plan?sitePrimitives(plan,selected):primitives(model,scope),[model,scope,plan,selected]);const batches=useMemo(()=>{const map=new Map<string,Primitive[]>();ps.forEach(p=>{const key=`${p.shape}-${!!p.metal}`;const batch=map.get(key);if(batch)batch.push(p);else map.set(key,[p]);});return [...map.values()];},[ps]);
@@ -31,7 +62,7 @@ function Scene({model,api}:{model:Model;api:React.Ref<ViewerHandle>}){const {sco
  return <><color attach="background" args={['#0B0F14']}/><ambientLight intensity={1.5}/><hemisphereLight args={['#E4EDF2','#1A232A',1.35]}/><directionalLight position={[2,12,5]} intensity={3} castShadow shadow-mapSize={[2048,2048]} shadow-camera-left={-14} shadow-camera-right={14} shadow-camera-top={9} shadow-camera-bottom={-9} shadow-bias={-.0002}/><directionalLight position={[-8,5,-6]} intensity={1.8}/><group>{batches.map((items,i)=><Batch key={`${i}-${items.length}`} items={items} selected={selected}/>)}{scope==='BESS'&&<Branding model={model}/>}</group><mesh rotation={[-Math.PI/2,0,0]} position={[0,-.19,0]} receiveShadow><planeGeometry args={[200,200]}/><shadowMaterial opacity={.34}/></mesh><gridHelper args={[40,80,'#2A3843','#182027']} position={[0,-.195,0]}/>
  {!config.presentation&&config.visibility.labels&&(scope==='SITE'?(plan?.placements.filter(p=>p.kind==='container')??[]).map(p=>({id:p.id,kind:'container' as const,position:p.position,size:p.size})):scope==='BESS'?model.racks:scope.includes('/C')?model.cells.filter(n=>n.id===scope):model.packs.filter(n=>belongs(n.id,scope))).map(n=><Html key={n.id} center position={add(add(n.position,[0,n.size[1]+.1,0]),displacement(n,model))} distanceFactor={undefined}><button className="scene-label" onClick={()=>select(n.id)} onDoubleClick={()=>useStudio.getState().focus(n.id)}>{n.id}</button></Html>)}
  {!config.presentation&&config.visibility.labels&&scope!=='BESS'&&model.packs.filter(p=>belongs(p.id,scope)).flatMap(p=>['+','-'].map(pol=><Html key={`${p.id}${pol}`} center position={add(model.electrical.ports[`${p.id}:${pol}`].position,displacement(p,model))}><span className="polarity-label">{pol}</span></Html>))}
- {config.visibility.dimensions&&<Html center position={[0,-.04,model.dimensions.enclosure[2]/2+.5]}><span className="dimension-label">{scope==='SITE'?plan?`${plan.plot[0].toFixed(1)} × ${plan.plot[1].toFixed(1)} m plot`:'':scope==='BESS'?model.dimensions.enclosure.map(x=>`${(x*1000).toFixed(0)} mm`).join(' × '):model.nodes.find(n=>n.id===scope)?.size.map(x=>`${(x*1000).toFixed(1)} mm`).join(' × ')} · X × Y × Z</span></Html>}
+ {config.visibility.dimensions&&<Dimensions bounds={scope==='BESS'?enclosureBox(model.dimensions.enclosure):bounds}/>}
  <OrbitControls ref={controls} onEnd={()=>useStudio.getState().update(c=>{c.camera.position=camera.position.toArray() as Vec;c.camera.target=controls.current.target.toArray() as Vec;c.camera.zoom=camera.zoom;})} makeDefault enableDamping dampingFactor={.12} minZoom={3} maxZoom={2800}/></>;
 }
 class Boundary extends Component<{children:ReactNode},{error:string}>{state={error:''};static getDerivedStateFromError(e:Error){return {error:e.message};}render(){return this.state.error?<div className="fallback"><h2>3D viewer unavailable</h2><p>{this.state.error}</p><p>Engineering data, configuration and schedules remain available.</p></div>:this.props.children;}}
