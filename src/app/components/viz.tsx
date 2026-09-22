@@ -78,10 +78,19 @@ export function LineChart({ data, height = 210, width: w = 720, yLabel, format, 
       <svg className="chart" viewBox={`0 0 ${w} ${height}`} role="img" aria-label={yLabel ?? 'Line chart'}>
         {ticks.map(t => <g key={t}><line className="grid-line" x1={pad.l} x2={w - pad.r} y1={py(t)} y2={py(t)} /><text x={pad.l - 8} y={py(t) + 3.5} textAnchor="end">{format(t)}</text></g>)}
         {xticks.map(t => <text key={t} x={px(t)} y={height - 10} textAnchor="middle">{t}</text>)}
-        {rule && <g><line x1={pad.l} x2={w - pad.r} y1={py(rule.y)} y2={py(rule.y)} stroke={status.serious} strokeWidth="1.5" strokeDasharray="5 4" /><text x={w - pad.r} y={py(rule.y) - 6} textAnchor="end" fill={status.serious} fontWeight="600">{rule.label}</text></g>}
+        {rule && <line x1={pad.l} x2={w - pad.r} y1={py(rule.y)} y2={py(rule.y)} stroke={status.serious} strokeWidth="1.5" strokeDasharray="5 4" />}
         <line className="axis" x1={pad.l} x2={w - pad.r} y1={py(y0)} y2={py(y0)} />
         {data.map(s => <polyline key={s.name} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"
           strokeDasharray={s.dashed ? '6 4' : undefined} points={s.points.map(p => `${px(p.x)},${py(p.y)}`).join(' ')} />)}
+        {/* The rule's label is drawn after the series, on whichever side of the rule is clear at
+            the right-hand end and over a patch of the card, so it never has to be read through
+            the line it is there to be compared with. */}
+        {rule && (() => {
+          const y = py(rule.y), above = !data.some(s => { const p = s.points.at(-1); return p && py(p.y) < y && y - py(p.y) < 16; });
+          const width = rule.label.length * 5.4 + 10, top = above ? y - 17 : y + 4;
+          return <g><rect x={w - pad.r - width} y={top} width={width} height={13} fill="var(--card)" />
+            <text x={w - pad.r - 5} y={top + 10} textAnchor="end" fill={status.serious} fontWeight="600">{rule.label}</text></g>;
+        })()}
         {slots.map((p, i) => (
           <rect key={p.x} className="mark-hit" x={px(p.x) - (w - pad.l - pad.r) / Math.max(slots.length, 1) / 2} y={pad.t}
             width={(w - pad.l - pad.r) / Math.max(slots.length, 1)} height={height - pad.t - pad.b}
