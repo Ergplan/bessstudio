@@ -153,6 +153,36 @@ service cloud.firestore {
         allow delete: if canManage(orgId) || (isCustomer(orgId) && ownsExisting() && resource.data.status == 'draft');
       }
 
+      /**
+       * Simulation scenarios. A learner's own workbench: staff see the workspace, a customer sees
+       * the scenarios they own and nothing else. The same shape as projects, because a scenario is
+       * the same kind of thing — something a person edits that belongs to them.
+       */
+      match /simScenarios/{docId} {
+        allow read: if isStaff(orgId) || (isCustomer(orgId) && ownsExisting());
+        allow create: if staysInOrg(orgId)
+          && (canWrite(orgId) || (isCustomer(orgId) && ownsIncoming()));
+        allow update: if staysInOrg(orgId)
+          && (canWrite(orgId) || (isCustomer(orgId) && ownsExisting() && ownsIncoming()));
+        allow delete: if canWrite(orgId) || (isCustomer(orgId) && ownsExisting());
+      }
+
+      /**
+       * Simulation runs, and the results they produced.
+       *
+       * A run is a fact about the past: what was asked, what the model did, and what produced it.
+       * It is written once and never edited, here rather than only in the client, because a result
+       * that can be revised after the fact is not evidence of anything. A configuration that has
+       * changed produces a new run; it does not overwrite the old one.
+       */
+      match /simRuns/{docId} {
+        allow read: if isStaff(orgId) || (isCustomer(orgId) && ownsExisting());
+        allow create: if staysInOrg(orgId)
+          && (canWrite(orgId) || (isCustomer(orgId) && ownsIncoming()));
+        allow update: if false;
+        allow delete: if canManage(orgId) || (isCustomer(orgId) && ownsExisting());
+      }
+
       match /activities/{docId} {
         allow read: if isStaff(orgId);
         // The audit trail is append-only: entries are never edited or removed from the client.

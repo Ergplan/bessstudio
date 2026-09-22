@@ -5,6 +5,7 @@ import {
 } from 'firebase/firestore';
 import { firebase, firebaseEnabled } from './firebase';
 import { nowIso, type Activity, type Customer, type Invite, type Member, type Organization, type OrgSettings, type Project, type Quote } from './types';
+import type { StoredRun, StoredScenario } from '../sim/store';
 
 /**
  * Data access for the platform. Both adapters expose the same surface so the UI never branches:
@@ -18,10 +19,16 @@ import { nowIso, type Activity, type Customer, type Invite, type Member, type Or
  *   organizations/{orgId}/projects/{projectId}
  *   organizations/{orgId}/quotes/{quoteId}
  *   organizations/{orgId}/activities/{activityId}
+ *   organizations/{orgId}/simScenarios/{scenarioId}
+ *   organizations/{orgId}/simRuns/{runId}
  *   organizations/{orgId}/settings/priceBook
  *   users/{uid}
  */
-export type Collections = { customers: Customer; projects: Project; quotes: Quote; activities: Activity };
+export type Collections = {
+  customers: Customer; projects: Project; quotes: Quote; activities: Activity;
+  /** A learner's simulation scenarios, and the runs they produced. See `src/sim/store.ts`. */
+  simScenarios: StoredScenario; simRuns: StoredRun;
+};
 export type CollectionName = keyof Collections;
 
 export interface Repository {
@@ -48,7 +55,9 @@ export interface Repository {
 const sortKey = (name: CollectionName) => (name === 'activities' ? 'at' : 'updatedAt');
 // Firestore meters reads per document returned, so each collection is fetched only as deep as the
 // interface shows it. The audit trail is append-only and unbounded; the screens show a handful.
-const pageSize = (name: CollectionName) => (name === 'activities' ? 120 : 500);
+// A run carries its whole time series, so a page of them is far more data than a page of
+// customers. The lesson screens ask for the runs of one scenario, not for every run ever made.
+const pageSize = (name: CollectionName) => (name === 'activities' ? 120 : name === 'simRuns' ? 40 : 500);
 const stripUndefined = <T>(value: T): T => JSON.parse(JSON.stringify(value ?? null));
 
 class FirestoreRepository implements Repository {

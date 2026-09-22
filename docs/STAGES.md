@@ -27,8 +27,8 @@ when a prerequisite or a mandatory check fails.
 | --- | --- | --- | --- | --- | --- |
 | **S0** | Baseline and acceptance contract | — | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s0--baseline-and-acceptance-contract) |
 | **S1** | Finish the quoting tool | S0 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s1--finish-the-quoting-tool) |
-| **S2** | Model contracts and evidence | S1 | **`BLOCKED`** — Terraform location unknown | — | — |
-| **S3** | First charge/discharge lesson | S2 | `PLANNED` | — | — |
+| **S2** | Model contracts and evidence | S1 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s2--model-contracts-and-evidence) |
+| **S3** | First charge/discharge lesson | S2 | `BUILDING` | — | — |
 | **S4** | PCS and BMS behaviour | S3 | `PLANNED` | — | — |
 | **S5** | jouleWise ergOS EMS | S4 | `PLANNED` | — | — |
 | **S6** | Lessons 1–6 | S5 | `PLANNED` | — | — |
@@ -113,8 +113,8 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 Baseline commands:
 
 ```bash
-npm run test        # 347 unit tests
-npm run test:rules  # 41 Firestore rules tests, against the emulator
+npm run test        # 387 unit tests
+npm run test:rules  # 48 Firestore rules tests, against the emulator
 npm run build       # static export, 15 routes
 ```
 
@@ -268,6 +268,138 @@ members and reads as "nothing seen".
 **READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S2 — model contracts and
 evidence**, currently **BLOCKED**: the GCloud Terraform environment is not in this repository and I
 have no record of it. Repository, path and VM shape needed before S2 can be planned.
+
+---
+
+## S2 — Model contracts and evidence
+
+**State:** READY FOR ACCEPTANCE — review pending
+**Revision:** see the commit carrying this file
+**Depends on:** S1 (READY FOR ACCEPTANCE)
+
+### 1. Scope
+
+Delivered: the record contracts every later stage is written against — units, sign conventions,
+parameter provenance, input validation, configuration hashing, immutable run snapshots, and tenant
+authorization on the new records in the rules.
+
+- **`src/sim/units.ts`** — one canonical unit per quantity (W, Wh, A, Ah, V, s, °C, Ω, VA, var)
+  carried everywhere inside the engine, with a compile-time brand so watts cannot be assigned where
+  watt-hours are wanted. Values enter through a constructor naming the unit given — `kW(2.5)`,
+  `minutes(30)` — and leave through a reader naming the unit wanted. There is no way to spell a
+  bare conversion factor in calling code. Crossings that have no answer (power over zero time,
+  charge at zero voltage) throw rather than returning infinity, and the cell-to-pack crossings take
+  the topology explicitly.
+- **`src/sim/signs.ts`** — one application convention (**positive = discharging**), and an adapter
+  per library that disagrees. pandapower's storage element is positive for charging and its adapter
+  flips; PyBaMM and PySAM agree and their adapters are the identity, present and tested anyway
+  because a decision on the record is not the same as an absence.
+- **`src/sim/provenance.ts`** — the three §14 badges as data, with the rule that a badge above
+  illustrative needs a source and a validated badge needs a review date, and that a single missing
+  parameter drops the whole result to illustrative. Applicability ranges travel with the parameters
+  and produce the sentence shown when a condition falls outside them.
+- **`src/sim/hash.ts`** — a 128-bit change-detection hash over a canonical form with the
+  presentational fields removed, so a rename does not invalidate a cached result and a changed
+  parameter does.
+- **`src/sim/records.ts`** — the ten §13.2 records as strict schemas, each versioned and sealed.
+  Units are named in the field rather than in a comment, so a record read back cannot be
+  misinterpreted by code that never saw the schema.
+- **`src/sim/store.ts`** — the persistence envelope (`orgId`, `ownerUid`, `updatedAt` outside the
+  record so a rule can read them), round-trip encode/decode, series rounded to six significant
+  figures for storage, and the single place the cache question is asked.
+- **`src/sim/presets.ts`** — one illustrative LFP teaching plant, shaped like the catalogue's 5 MWh
+  enclosure so a learner recognises it in the studio, with every parameter the catalogue does not
+  carry listed and labelled as illustrative.
+- **`firestore.rules`** — `simScenarios` and `simRuns`, with `allow update: if false` on runs.
+
+Explicitly deferred: **the Python simulation service and its Google Cloud VM.** See §7 below.
+
+### 2. Environment
+
+As S1. New runtime dependency: none — `zod` was already in use. No Python, no service, no container.
+
+### 3. Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **387 passed** (+40) | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | **48 passed** (+7) | **PASS** |
+| Static export | `npm run build` | 15 routes | 15 routes | **PASS** |
+| Round-trip persistence | unit | a scenario and a run survive storage unchanged | `toEqual` on both | **PASS** |
+| kW/MW conversion | unit | exact both ways | exact, over five magnitudes | **PASS** |
+| minute/hour conversion | unit | exact both ways | exact | **PASS** |
+| Invalid units rejected | unit | power over zero time, charge at zero volts | `RangeError` on each | **PASS** |
+| Invalid ranges rejected | unit | inverted voltage window, efficiency > 1, zero capacity | rejected, each with the reason | **PASS** |
+| Invalid topologies rejected | unit | zero, fractional and negative series/parallel | rejected | **PASS** |
+| Hash changes with material inputs | unit | 500 configurations differing by 1 mW | 500 distinct hashes | **PASS** |
+| Hash ignores immaterial inputs | unit | rename, reorder, re-id | hash unchanged | **PASS** |
+| Immutable run snapshots | rules | no role may edit a run | update and overwrite refused for all six roles | **PASS** |
+| Evidence badges present | unit | a badge on every parameter set, and no claim without evidence | enforced in the schema | **PASS** |
+| Tenant authorization on the new records | rules | in the rules, not only the UI | 7 rules tests, incl. a foreign `orgId` and another owner's records | **PASS** |
+| Tampered record detected | unit | a record edited in the database fails to decode | throws, naming the hash | **PASS** |
+
+### 4. Browser walkthrough
+
+None. S2 adds no user-visible surface: the contracts are consumed by S3, which is the first stage
+with a screen. The S0 and S1 browser checks were re-run as regression and are unchanged.
+
+### 5. Defects
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D27 | The first converter schema accepted a converter that could not reach its own rating at the bottom of its own DC window — the same defect the R2 audit had just found in the catalogue. | minor — caught in this stage, never shipped | **fixed**; the schema refuses it, with the current it would need |
+
+### 6. Demonstration and rollback
+
+Demo: none yet — `npm run test src/tests/sim.contracts.test.ts` is the demonstration until S3 puts
+a screen on it.
+Rollback: `git revert` the S2 commit. No migrations: the two new collections are empty until S3
+writes to them, and the rules changes only add paths.
+
+### 7. Decision
+
+**READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S3 — first charge/discharge
+lesson.**
+
+> **A recorded departure from §13.4, under the §17.1 rule that a genuine requirement change is
+> recorded with its rationale and consequences.**
+>
+> §13.4 proposes a **Python simulation service on a Google Cloud VM**, and §13 proposes PyBaMM,
+> PySAM and pandapower behind it. That service has no host: the Terraform environment is not in
+> this repository, and §13.4 itself records that until it is pointed at, *"the deployment target is
+> named but not specified, and no stage depends on it."*
+>
+> **The engine is therefore written in TypeScript and runs in the browser**, against exactly the
+> contracts above. The rationale:
+>
+> - The application is a static export. A Python service cannot be reached from it without a host,
+>   and there is no host.
+> - §15.1 requires the lesson loop to replay **from the same initial state** the moment a learner
+>   changes one control. A round trip to a job queue makes that a wait; in the browser it is
+>   immediate, and §15's "a simulated day playing back in under a minute" becomes trivially true
+>   without touching solver accuracy.
+> - Of the six components in §13, four are *already* application models by that table's own
+>   description — the EMS policy, the PCS and BMS coordination, and the orchestration between them.
+>   Only the battery's electrical/thermal response and the long-horizon dispatch pathway proposed a
+>   library, and a first-order Thevenin equivalent circuit is a few dozen lines in any language.
+>
+> **The consequences, stated rather than glossed:**
+>
+> - PyBaMM's SPM/SPMe/DFN models, PySAM's annual pathway and pandapower's power flow are **not**
+>   available. Everything that needed them stays `GAP`: electrochemical fidelity beyond an
+>   equivalent circuit, AC network power flow, and any cross-engine comparison. The sign adapters
+>   for all three are written and tested, so the later pathway is a port rather than a rewrite.
+> - No asynchronous job, cancellation, progress or worker-failure surface exists, because there is
+>   no worker. **S12's checks that name those things cannot pass as written** and will be recorded
+>   there as not applicable or as blocked, not quietly dropped.
+> - Nothing about this changes what a result may claim. The badges, applicability ranges and
+>   validation fixtures are unchanged, and a browser-side engine earns exactly the same
+>   `illustrative` badge the teaching parameters allow.
+>
+> If the Terraform environment is produced later, the contracts, records, hashes, sign adapters and
+> fixtures all carry across unchanged, and the Python service becomes a second engine behind the
+> same `SimulationRun.engine` field — which exists for that reason.
 
 ---
 

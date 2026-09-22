@@ -332,6 +332,86 @@ describe('the audit trail', () => {
   });
 });
 
+describe('simulation scenarios and runs', () => {
+  const scenario = (over: Record<string, unknown> = {}) => ({
+    orgId: ORG, ownerUid: 'cust', kind: 'Scenario', updatedAt: new Date().toISOString(),
+    record: { id: 's1', initialSoc: 0.5 }, ...over,
+  });
+  const run = (over: Record<string, unknown> = {}) => ({
+    orgId: ORG, ownerUid: 'cust', kind: 'SimulationRun', updatedAt: new Date().toISOString(),
+    record: { id: 'r1', status: 'complete', configHash: 'a'.repeat(32) }, ...over,
+  });
+
+  beforeEach(async () => {
+    await env.withSecurityRulesDisabled(async ctx => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, orgPath('simScenarios', 'sc_cust')), scenario());
+      await setDoc(doc(db, orgPath('simScenarios', 'sc_other')), scenario({ ownerUid: 'cust2' }));
+      await setDoc(doc(db, orgPath('simRuns', 'run_cust')), run());
+      await setDoc(doc(db, orgPath('simRuns', 'run_other')), run({ ownerUid: 'cust2' }));
+    });
+  });
+
+  it('lets a learner keep their own scenarios and refuses them anybody else’s', async () => {
+    const db = as('cust', 'cust@example.com');
+    await assertSucceeds(getDoc(doc(db, orgPath('simScenarios', 'sc_cust'))));
+    await assertFails(getDoc(doc(db, orgPath('simScenarios', 'sc_other'))));
+    await assertSucceeds(updateDoc(doc(db, orgPath('simScenarios', 'sc_cust')), { updatedAt: new Date().toISOString() }));
+    await assertFails(updateDoc(doc(db, orgPath('simScenarios', 'sc_other')), { updatedAt: new Date().toISOString() }));
+  });
+
+  it('refuses a scenario written under somebody else’s name, or into another tenant', async () => {
+    const db = as('cust', 'cust@example.com');
+    await assertFails(setDoc(doc(db, orgPath('simScenarios', 'sc_new')), scenario({ ownerUid: 'cust2' })));
+    await assertFails(setDoc(doc(db, orgPath('simScenarios', 'sc_new')), scenario({ orgId: 'org_someone_else' })));
+    await assertSucceeds(setDoc(doc(db, orgPath('simScenarios', 'sc_new')), scenario()));
+  });
+
+  it('shows staff the whole workspace, as everywhere else', async () => {
+    for (const uid of ['sales', 'eng', 'owner']) {
+      const db = as(uid, `${uid}@example.com`);
+      await assertSucceeds(getDoc(doc(db, orgPath('simScenarios', 'sc_cust'))));
+      await assertSucceeds(getDoc(doc(db, orgPath('simRuns', 'run_other'))));
+    }
+  });
+
+  /**
+   * The one that matters. §17.2 asks for immutable run snapshots, and the client enforcing it is
+   * not the same thing as the database enforcing it — a client can be modified.
+   */
+  it('never lets a run be edited, by anybody, in any role', async () => {
+    for (const uid of ['cust', 'sales', 'eng', 'appr', 'admin', 'owner']) {
+      const db = as(uid, `${uid}@example.com`);
+      await assertFails(updateDoc(doc(db, orgPath('simRuns', 'run_cust')), { updatedAt: new Date().toISOString() }));
+      await assertFails(updateDoc(doc(db, orgPath('simRuns', 'run_cust')), { record: { id: 'r1', status: 'failed' } }));
+      // Nor by writing the whole document again over the top of it.
+      await assertFails(setDoc(doc(db, orgPath('simRuns', 'run_cust')), run({ record: { id: 'r1', status: 'failed' } })));
+    }
+  });
+
+  it('lets a new run be written, because a changed configuration is a new run', async () => {
+    const db = as('cust', 'cust@example.com');
+    await assertSucceeds(setDoc(doc(db, orgPath('simRuns', 'run_second')), run()));
+    await assertFails(setDoc(doc(db, orgPath('simRuns', 'run_third')), run({ ownerUid: 'cust2' })));
+  });
+
+  it('lets a learner read and remove their own run, and neither for another’s', async () => {
+    const db = as('cust', 'cust@example.com');
+    await assertSucceeds(getDoc(doc(db, orgPath('simRuns', 'run_cust'))));
+    await assertFails(getDoc(doc(db, orgPath('simRuns', 'run_other'))));
+    await assertFails(deleteDoc(doc(db, orgPath('simRuns', 'run_other'))));
+    await assertSucceeds(deleteDoc(doc(db, orgPath('simRuns', 'run_cust'))));
+  });
+
+  it('keeps a stranger out of both collections entirely', async () => {
+    const db = as('nobody', 'nobody@example.com');
+    for (const path of [orgPath('simScenarios', 'sc_cust'), orgPath('simRuns', 'run_cust')]) {
+      await assertFails(getDoc(doc(db, path)));
+      await assertFails(setDoc(doc(db, path), scenario({ ownerUid: 'nobody' })));
+    }
+  });
+});
+
 it('the rules file is the one the application ships', () => {
   expect(readFileSync('firestore.rules', 'utf8')).toContain('acceptingInvite');
 });
