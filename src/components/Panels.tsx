@@ -6,6 +6,7 @@ import {source,type Config} from '../config/schema';
 import {brandSlug,useStudio} from '../state/store';
 import type {ViewerHandle} from '../scene/Viewer';
 import {jsonExport,csvExport,download,glbExport,parseConfig} from '../export/exports';
+import {lessonFor,remedyFor} from '../domain/learn';
 export function NumberField({label,value,min=0,max=100000,step=1,unit,onChange,optional=false}:{label:string;value:number|null;min?:number;max?:number;step?:number;unit:string;onChange:(n:number|null)=>void;optional?:boolean}){const [draft,setDraft]=useState(value===null?'':String(value)),[error,setError]=useState('');useEffect(()=>setDraft(value===null?'':String(value)),[value]);const commit=()=>{if(draft===''&&optional){onChange(null);setError('');return;}const n=Number(draft);if(draft===''||!Number.isFinite(n)||n<min||n>max){setError(`Use ${min}–${max} ${unit}`);return;}setError('');onChange(n);};return <label className="number-field">{label}<span><input aria-label={label} type="number" value={draft} min={min} max={max} step={step} placeholder={optional?'Unset':''} onChange={e=>setDraft(e.target.value)} onBlur={commit} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();}} aria-invalid={!!error}/><i>{unit}</i></span>{error&&<small className="error-text">{error}</small>}</label>;}
 export function ConfigPanel({model}:{model:Model}){const {config,update,reset,notify,brandName}=useStudio(),a=config.assumptions;const fields:[keyof typeof a,string,number,number,number][]=[['cellWidth','Cell width',173.5,174,.1],['cellHeight','Cell height',206.8,207.2,.1],['cellGap','Intercell gap',0,20,.5],['rowGap','Row gap',0,30,1],['compression','Compression / end',5,80,1],['wall','Enclosure wall',1,20,1],['coldPlate','Cold plate',3,40,1],['terminalClearance','Terminal clearance',12,100,1],['connector','Connector allowance',30,180,1],['rackGap','Rack gap',60,500,5],['verticalGap','Vertical gap',50,300,5],['aisle','Service aisle',600,1800,10],['requiredAisle','Required aisle',600,1800,10],['endBay','End service bay',450,2200,10],['bendRadius','Routing bend radius',10,80,1]];
  return <><section><h3>Equipment review <span>USER INPUT</span></h3><div className="form-grid">{([['maxVoltage','Maximum voltage','V'],['minVoltage','Minimum voltage','V'],['maxCurrent','Maximum current','A']] as const).map(([key,label,unit])=><NumberField key={key} label={label} value={config.equipment[key]} unit={unit} min={key==='minVoltage'?0:1} max={key==='maxCurrent'?100000:10000} optional onChange={n=>update(c=>{c.equipment[key]=n;})}/>)}</div><p className="muted">Clear a rating to mark it unverified. Maximum-voltage comparison alone does not establish PCS compatibility.</p></section><section><h3>Mechanical assumptions <span>MM</span></h3><div className="form-grid">{fields.map(([key,label,min,max,step])=><NumberField key={key} label={label} value={a[key] as number} min={min} max={max} step={step} unit="mm" onChange={n=>update(c=>{(c.assumptions[key] as number)=n!;})}/>)}</div><label className="check-field"><input type="checkbox" checked={a.manual} onChange={e=>update(c=>{c.assumptions.manual=e.target.checked;})}/>Manual internal enclosure</label>{a.manual&&<div className="form-grid">{([['length',1000,25000],['width',1000,8000],['height',500,5000]] as const).map(([key,min,max])=><NumberField key={key} label={`Internal ${key}`} value={a[key]} unit="mm" min={min} max={max} onChange={n=>update(c=>{c.assumptions[key]=n!;})}/>)}</div>}<p className="muted">Required X × Y × Z: {model.dimensions.required.map(x=>(x*1000).toFixed(1)).join(' × ')} mm. Cell thickness stays 71.7 mm.</p></section><section><h3>Usable AC estimate <span>OPTIONAL</span></h3><div className="form-grid">{([['soc','Usable SOC fraction','0–1',.001,1,.01],['efficiency','Discharge efficiency','0–1',.001,1,.01],['auxKW','Average auxiliaries','kW',0,100000,1],['acKW','AC output target','kW',.001,100000,1],['constantDCKW','Constant DC demand','kW',.001,100000,1]] as const).map(([key,label,unit,min,max,step])=><NumberField key={key} label={label} value={config.usable[key]} unit={unit} min={min} max={max} step={step} optional onChange={n=>update(c=>{c.usable[key]=n;})}/>)}</div><p className="muted">No validated defaults. Use one-way discharge efficiency, not round-trip efficiency. Current feasibility is checked at minimum voltage.</p>{model.stats.duration!==null&&<div className="notice"><b>Simplified duration estimate: {model.stats.duration.toFixed(2)} h</b><p>AC load + auxiliaries; excludes dynamic, ageing and thermal limits. {model.warnings.some(w=>w.code==='ac-current')?'Target is current-infeasible.':'Subject to equipment validation.'}</p></div>}{model.stats.currentAtMin!==null&&<p className="muted">Constant DC current: {model.stats.currentAtMax!.toFixed(1)}–{model.stats.currentAtMin.toFixed(1)} A across the voltage range.</p>}</section><section><h3>Branding</h3><label className="file-button"><Upload size={15}/>Upload {brandName} logo<input aria-label="Upload logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={async e=>{try{const file=e.target.files?.[0];if(!file)return;if(file.size>1400000)throw new Error('Use a logo smaller than 1.4 MB.');if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw new Error('Use a PNG, JPEG or WebP logo.');const data=await new Promise<string>((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result as string);r.onerror=reject;r.readAsDataURL(file);});const img=new Image();img.src=data;await img.decode();update(c=>{c.logo=data;});}catch(err){notify(String(err));}}}/></label><p className="muted">No brand asset was attached. A plain text wordmark is used. Uploaded logos stay on this device.</p>{config.logo&&<button className="wide" onClick={()=>update(c=>{c.logo=null;})}>Remove uploaded logo</button>}<button className="wide" style={{marginTop:12}} onClick={reset}><RotateCcw size={15}/>Reset to reference baseline</button></section></>;
@@ -18,4 +19,75 @@ export function InspectPanel({model}:{model:Model}){const {selected,focus,select
  return <><section><h3>{cell?'Selected cell':pack?'Selected pack':'Calculated DC performance'} <span>CALCULATED</span></h3>{data.map(([k,v])=><div className="data-row" key={k}><span>{k}</span><b>{v}</b></div>)}<p className="muted">Nominal DC power is not guaranteed constant AC output.</p>{pack&&!cell&&<><h3>Addressable cells</h3><div className="cell-select">{model.cells.filter(c=>c.parent===selected).map(c=><button title={c.id} aria-label={`Select ${c.id}`} className={c.id===selected?'selected':''} key={c.id} onClick={()=>select(c.id)} onDoubleClick={()=>focus(c.id)}>{c.order!+1}</button>)}</div></>}</section><section><h3>Dimensions <span>{cell?'SOURCE':'DERIVED'}</span></h3>{['X / length','Y / height','Z / width'].map((label,i)=><div key={label} className="data-row"><span>{label}</span><b>{((n?.size??model.dimensions.enclosure)[i]*1000).toFixed(1)} mm</b></div>)}{pack&&!cell&&<p className="muted">Body only X × Y × Z: {model.dimensions.body.map(x=>(x*1000).toFixed(1)).join(' × ')} mm.<br/>Finished bounds include gaps, compression, cold plate, terminal and connector allowances.</p>}<button className="wide" onClick={()=>focus(selected)}><Maximize size={15}/>Isolate selection</button></section><section><h3>Electrical path</h3><Connectivity model={model}/><p className="muted">Generated from the electrical graph. Orange HV is insulated; ± labels define polarity. Visual cable diameters are illustrative.</p></section><section><h3>Cooling & controls</h3><div className="data-row"><span>Cold plates</span><b>{model.packs.length} parallel branches</b></div><div className="data-row"><span>Dry-break ports</span><b>{model.packs.length*2}</b></div><p className="muted">Supply → cold plate → return → chiller / pump / reservoir. No asserted flow rate, temperature or cooling capacity.</p><p className="muted">Required protections: overcharge, overdischarge, short circuit, under-temperature and over-temperature. Functions are requirements, not demonstrated hardware behavior.</p></section><section><h3>Input provenance</h3><div className="notice"><b>Source discrepancy</b><p>{source.packEnergyLabel} kWh supplied; {model.stats.packEnergy.toFixed(4)} kWh calculated. The system uses full precision.</p></div><p className="muted">Source temperature ranges, provisionally interpreted: charge 0 to +55 °C; discharge −10 to +55 °C. These are not coolant setpoints. Repeated 157 A entries do not establish peak current.</p><p className="muted">Cell terminal, vent and insulation details are illustrative. Cable cross-sections, fuse ratings, fault withstand, creepage and insulation ratings remain unspecified. Reserved zones do not constitute a fire-safety design.</p></section></>;
 }
 export function ExportPanel({model,viewer}:{model:Model;viewer:RefObject<ViewerHandle|null>}){const [artifact,setArtifact]=useState<{url:string;name:string;size:number}|null>(null);useEffect(()=>{let previous:string|undefined;const handler=(event:Event)=>{const detail=(event as CustomEvent).detail;if(previous)URL.revokeObjectURL(previous);previous=detail.url;setArtifact(detail);};window.addEventListener('bess-export-ready',handler);return()=>{window.removeEventListener('bess-export-ready',handler);if(previous)URL.revokeObjectURL(previous);};},[]);const {notify,import:importConfig,brandName}=useStudio(),stem=brandSlug(brandName),[resolution,setResolution]=useState('1920'),[busy,setBusy]=useState(false),[profile,setProfile]=useState('');const run=async(f:()=>Promise<void>)=>{setBusy(true);try{await f();}catch(e){notify(`Export failed: ${e instanceof Error?e.message:String(e)}`);}finally{setBusy(false);}};return <><section><h3>Export current design</h3><div className="export-buttons"><label className="field-label">Image resolution<select aria-label="Image resolution" value={resolution} onChange={e=>setResolution(e.target.value)}><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option><option value="3840">3840 × 2160 · 4K</option></select></label><button disabled={busy} onClick={()=>run(async()=>{if(!viewer.current)throw new Error('WebGL is required for PNG export.');download(await viewer.current.png(Number(resolution),Number(resolution)*9/16),`${stem}.png`);notify('PNG exported with branding, labels and concept notes.');})}><Download size={15}/>Export PNG</button><button disabled={busy} onClick={()=>{download(new Blob([jsonExport(model,viewer.current?.camera())],{type:'application/json'}),`${stem}.json`);notify('Versioned configuration exported.');}}><Download size={15}/>Export JSON</button><label className="file-button"><Upload size={15}/>Import JSON<input aria-label="Import JSON" type="file" accept=".json,application/json" onChange={async e=>{try{const f=e.target.files?.[0];if(!f)return;if(f.size>20_000_000)throw new Error('Configuration exceeds the 20 MB file limit.');importConfig(parseConfig(await f.text()));}catch(err){notify(`Import rejected: ${err instanceof Error?err.message:String(err)}`);}e.target.value='';}}/></label><button disabled={busy} onClick={()=>{download(new Blob([csvExport(model)],{type:'text/csv;charset=utf-8'}),`${stem}-component-schedule.csv`);notify(`Schedule exported: ${model.packs.length} packs and ${model.cells.length.toLocaleString()} cells.`);}}><Download size={15}/>Component schedule · CSV</button><button disabled={busy} onClick={()=>run(async()=>{download(await glbExport(model),`${stem}-assembled.glb`);notify('Assembled GLB exported, including hidden components.');})}><Download size={15}/>Assembled model · GLB</button></div><p className="muted">PNG includes the current view, wordmark / uploaded logo and selected annotations. GLB always includes the assembled model and hidden geometry, independent of cutaway or exploded state. GLB includes IDs; wordmark and text annotations are PNG-only.</p>{busy&&<p role="status">Preparing export…</p>}{artifact&&<div className="export-result"><a href={artifact.url} download={artifact.name}>Download {artifact.name}</a><p>{(artifact.size/1024).toFixed(0)} KB · ready</p>{artifact.name.endsWith('.png')&&<img src={artifact.url} alt="Exported PNG preview"/>}</div>}</section><section><h3>Device performance</h3><button className="wide" disabled={busy} onClick={()=>run(async()=>{if(!viewer.current)throw new Error('WebGL unavailable.');setProfile('Measuring 3 seconds…');const result=await viewer.current.profile();setProfile(`${result.fps.toFixed(1)} frames/s\n${result.drawCalls} draw calls · ${result.triangles.toLocaleString()} triangles\n${result.renderer}\n${result.userAgent}`);})}>Profile this view</button>{profile&&<p className="profile" data-testid="profile-result">{profile}</p>}<p className="muted">Observed on this device / view only. Not a universal performance result.</p></section></>;
+}
+
+/**
+ * The learning layer. Once a system is sized and quoted, this is where someone finds out why it is
+ * shaped the way it is — read from the live model, so the prose cannot drift from the design.
+ */
+export function LearnPanel({model}:{model:Model}){
+  const {selected,focus}=useStudio();
+  const lesson=lessonFor(model,selected);
+  // The ladder from the container down to whatever is selected, labelled by what each level is
+  // rather than by its depth, so an ancillary does not end up called a pack.
+  const label=(id:string)=>{
+    if(id==='BESS')return 'The container';
+    const kind=model.nodes.find(n=>n.id===id)?.kind;
+    return kind==='rack'?'String':kind==='pack'?'Pack':kind==='cell'?'Cell':'Component';
+  };
+  const path=['BESS',...selected.split('/').map((_,i,parts)=>parts.slice(0,i+1).join('/'))
+    .filter(id=>id!=='BESS'&&model.nodes.some(n=>n.id===id))];
+  return <>
+    <section>
+      <h3>{lesson.title}</h3>
+      <p className="lesson-lead">{lesson.subtitle}</p>
+      <p className="lesson-what">{lesson.what}</p>
+    </section>
+    <section>
+      <h3>The reasoning</h3>
+      <ol className="lesson-why">{lesson.why.map((line,i)=><li key={i}>{line}</li>)}</ol>
+    </section>
+    <section>
+      <h3>From this design <span>LIVE</span></h3>
+      {lesson.numbers.map(([k,val])=><div className="data-row" key={k}><span>{k}</span><b>{val}</b></div>)}
+      <p className="muted">{lesson.consequence}</p>
+    </section>
+    <section>
+      <h3>Read at another scale</h3>
+      <div className="lesson-scale">{path.map(id=>
+        <button key={id} className={id===selected?'active':''} onClick={()=>focus(id)}>{label(id)}</button>)}
+        {model.cells[0]&&!selected.includes('/C')&&
+          <button onClick={()=>focus(model.cells.find(c=>c.id.startsWith(selected))?.id??model.cells[0].id)}>Down to a cell</button>}
+      </div>
+      <p className="muted">Each level exists to hold the one below it at the right temperature and connect it without losing the energy on the way out.</p>
+    </section>
+  </>;
+}
+
+/** Design review. Every finding carries what it means and what to do about it, not just its text. */
+export function ReviewPanel({model}:{model:Model}){
+  const [open,setOpen]=useState<string>('');
+  const {config}=useStudio();
+  const errors=model.warnings.filter(w=>w.level==='error');
+  return <section>
+    <h3>Design review <span>{errors.length} {errors.length===1?'ERROR':'ERRORS'}</span></h3>
+    {model.warnings.map(w=>{
+      const remedy=remedyFor(w.code),shown=open===w.code;
+      return <div key={w.code} className={`notice ${w.level}`}>
+        <b>{w.code.replaceAll('-',' ')}</b><p>{w.text}</p>
+        {remedy&&<>
+          <button className="notice-more" aria-expanded={shown} onClick={()=>setOpen(shown?'':w.code)}>
+            {shown?'Hide the explanation':'What does this mean?'}
+          </button>
+          {shown&&<div className="notice-body">
+            <p>{remedy.meaning}</p>
+            <p className="notice-remedy"><i>What to do</i>{remedy.remedy}</p>
+          </div>}
+        </>}
+      </div>;
+    })}
+    {config.equipment.maxVoltage!==null&&!errors.some(w=>w.code==='overvoltage')&&
+      <div className="notice info"><b>Maximum-voltage comparison passed</b><p>Full operating-voltage and current compatibility remains subject to PCS review.</p></div>}
+    <p className="muted">Geometry checks do not establish regulatory compliance. Routing uses defined corridors; bend radius is an unvalidated design assumption. Terminals and ancillaries are conceptual.</p>
+  </section>;
 }
