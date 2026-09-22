@@ -6,9 +6,10 @@ import { ArrowLeft, Pause, Play, RotateCcw, Zap } from 'lucide-react';
 import { Card, Stat, Badge, Empty, Slider, KV, type Tone } from '../components/ui';
 import { LineChart, series as chartSeries } from '../components/viz';
 import { useWorkspace } from '../../platform/workspace';
-import { lessons, lessonById, defaultControls, requestFrom, withControls, type LessonCard } from '../../sim/lessons';
-import { manualPolicy, teachingPlant, lfpParameterSet } from '../../sim/presets';
+import { lessons, lessonById, defaultControls, type LessonCard, type Metric, type Readout } from '../../sim/lessons';
+import { lfpParameterSet } from '../../sim/presets';
 import { accounting, simulate } from '../../sim/engine';
+import { comparePolicies } from '../../sim/compare';
 import { badgeLabels, badgeMeanings } from '../../sim/provenance';
 import { pcsStateMeaning, pcsStateOwner, type PcsState } from '../../sim/pcs';
 import { bmsStateMeaning, type BmsState } from '../../sim/bms';
@@ -78,15 +79,13 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
   // before deciding to watch it happen. Play rewinds and reveals it.
   const [cursor, setCursor] = useState(Number.MAX_SAFE_INTEGER);
   const [playing, setPlaying] = useState(false);
-  const [previous, setPrevious] = useState<{ label: string; deliveredWh: number; endSoc: number } | null>(null);
+  const [previous, setPrevious] = useState<{ label: string; headline: Metric; second: Metric; endSoc: number } | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // The result. Recomputed whenever a control moves, because §15.1 requires the comparison to be
   // between two real runs from the same initial state rather than between a run and a redraw.
-  const out = useMemo(() => simulate({
-    scenario: withControls(card, values), plant: teachingPlant, policy: manualPolicy,
-    parameters: lfpParameterSet, manualRequestW: requestFrom(values),
-  }), [card, values]);
+  const setup = useMemo(() => card.runWith(values), [card, values]);
+  const out = useMemo(() => simulate({ ...setup, parameters: lfpParameterSet }), [setup]);
 
   const steps = out.series.timeSeconds.length;
   const totals = useMemo(() => accounting(out.series), [out]);
@@ -115,17 +114,26 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
   const act = Math.min(at, Math.max(0, steps - 2));
   const decision = out.decisions.decisions[Math.min(act, out.decisions.decisions.length - 1)];
   const constraint = s.bindingConstraint[act];
-  const movedWh = requestFrom(values) > 0 ? totals.deliveredAcWh : totals.drawnAcWh;
-  const lostWh = totals.converterLossWh + totals.batteryLossWh + totals.auxiliaryWh;
+
+  // Everything on the screen below the controls comes from here: the card says which four figures
+  // and which two charts, and the player draws whatever it is handed.
+  const readout: Readout = { series: s, totals, values, act };
+  const metrics = card.readout(readout);
+  const plots = card.plots(readout);
 
   const change = (id: string, n: number) => {
-    setPrevious({ label: card.controls.find(c => c.id === id)!.label, deliveredWh: movedWh, endSoc: s.soc[steps - 1] });
+    setPrevious({ label: card.controls.find(c => c.id === id)!.label, headline: metrics[0], second: metrics[1], endSoc: s.soc[steps - 1] });
     setValues(v => ({ ...v, [id]: n }));
   };
   const reset = () => { setValues(defaultControls(card)); setPrevious(null); setCursor(Number.MAX_SAFE_INTEGER); setPlaying(false); };
 
   const upTo = <T,>(arr: T[]) => arr.slice(0, at + 1);
   const minutes = (i: number) => s.timeSeconds[i] / 60;
+  // A two-hour run reads in minutes and a whole day reads in hours. Same axis, different unit,
+  // decided by the scenario rather than by which lesson happened to be written first.
+  const longRun = s.timeSeconds[steps - 1] > 4 * 3600;
+  const xLabel = longRun ? 'Hour' : 'Minute';
+  const xAt = (i: number) => (longRun ? s.timeSeconds[i] / 3600 : minutes(i));
 
   return (
     <div className="grid" style={{ gap: 14 }}>
@@ -148,32 +156,25 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
         </div>
       </Card>
 
-      <div className="grid cols-4">
-        <Stat label="Charge level" value={`${(s.soc[at] * 100).toFixed(1)}`} unit="%" foot={`Started at ${(s.soc[0] * 100).toFixed(0)}%`} />
-        <Stat label="At the connection" value={kW(s.gridPowerW[at])} unit="kW" foot={Math.abs(s.gridPowerW[at]) < 1 ? 'Neither in nor out' : s.gridPowerW[at] > 0 ? 'Exporting to the grid' : 'Drawing from the grid'} />
-        <Stat label="Energy moved" value={kWh(movedWh)} unit="kWh" foot="Measured at the converter’s AC terminals" />
-        <Stat label="Lost on the way" value={kWh(lostWh)} unit="kWh" foot={`${kWh(totals.converterLossWh)} converter · ${kWh(totals.batteryLossWh)} battery · ${kWh(totals.auxiliaryWh)} auxiliaries`} />
+      <div className={`grid cols-${Math.min(4, Math.max(1, metrics.length))}`}>
+        {metrics.map(m => <Stat key={m.label} label={m.label} value={m.value} unit={m.unit} foot={m.foot} />)}
       </div>
 
-      <div className="grid cols-2">
-        <Card title="Power at each boundary" subtitle="What was asked, what the converter did, and what reached the connection" tight>
-          <LineChart xLabel="Minute" format={n => `${n.toFixed(0)} kW`} rule={{ y: 0, label: 'Neither in nor out' }}
-            data={[
-              { name: 'Asked for', color: chartSeries[4], dashed: true, points: upTo(s.requestedPowerW).map((p, i) => ({ x: minutes(i), y: p / 1000 })) },
-              { name: 'At the converter', color: chartSeries[0], points: upTo(s.achievedPowerW).map((p, i) => ({ x: minutes(i), y: p / 1000 })) },
-              { name: 'At the connection', color: chartSeries[1], points: upTo(s.gridPowerW).map((p, i) => ({ x: minutes(i), y: p / 1000 })) },
-            ]} />
-        </Card>
-        <Card title="Charge level" subtitle="And the reserve the policy keeps in hand" tight>
-          <LineChart xLabel="Minute" format={n => `${n.toFixed(0)}%`} yMin={0}
-            rule={{ y: manualPolicy.reserveSoc * 100, label: 'Reserve' }}
-            data={[{ name: 'Charge level', color: chartSeries[0], points: upTo(s.soc).map((v, i) => ({ x: minutes(i), y: v * 100 })) }]} />
-        </Card>
+      <div className={`grid cols-${Math.min(2, Math.max(1, plots.length))}`}>
+        {plots.map(plot => (
+          <Card key={plot.title} title={plot.title} subtitle={plot.subtitle} tight>
+            <LineChart xLabel={xLabel} format={plot.format} rule={plot.rule} yMin={plot.yMin}
+              data={plot.lines.map(l => ({
+                name: l.name, color: chartSeries[l.colour % chartSeries.length], dashed: l.dashed,
+                points: upTo(l.values).map((y, i) => ({ x: xAt(i), y })),
+              }))} />
+          </Card>
+        ))}
       </div>
 
       <div className="grid cols-2">
         <Card title="What the plant is doing, and who decided" tight>
-          <Stack constraint={constraint} discharging={s.achievedPowerW[act] > 0} />
+          <Stack owner={s.bindingOwner[act]} discharging={s.achievedPowerW[act] > 0} />
           {decision && <Ergos decision={decision} achievedW={s.achievedPowerW[act]} constraint={constraint} />}
           {constraint && constraint !== 'Request met in full' && (
             <div className="notice warning"><b>{constraint}</b>
@@ -205,9 +206,9 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
           {previous && (
             <div className="notice info"><b>What changed, and why</b>
               <p>
-                Moving {previous.label.toLowerCase()} took the energy moved from {kWh(previous.deliveredWh)} kWh to {kWh(movedWh)} kWh,
-                and the ending charge level from {(previous.endSoc * 100).toFixed(1)}% to {(s.soc[steps - 1] * 100).toFixed(1)}%.
-                Both runs started at {(s.soc[0] * 100).toFixed(0)}%, so the difference is the change and nothing else.
+                Moving {previous.label.toLowerCase()} took {previous.headline.label.toLowerCase()} from {previous.headline.value}{previous.headline.unit ? ` ${previous.headline.unit}` : ''} to
+                {' '}{metrics[0]?.value}{metrics[0]?.unit ? ` ${metrics[0].unit}` : ''}, and {previous.second.label.toLowerCase()} from {previous.second.value}{previous.second.unit ? ` ${previous.second.unit}` : ''} to
+                {' '}{metrics[1]?.value}{metrics[1]?.unit ? ` ${metrics[1].unit}` : ''}. The ending charge level went from {(previous.endSoc * 100).toFixed(1)}% to {(s.soc[steps - 1] * 100).toFixed(1)}%.
               </p></div>
           )}
           <div className="row" style={{ marginTop: 12 }}>
@@ -216,6 +217,10 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
           </div>
         </Card>
       </div>
+
+      {card.baseline && (
+        <Comparison card={card} setup={setup} />
+      )}
 
       <div className="grid cols-2">
         <Card title="What each subsystem is in" subtitle="The state the converter and the battery management system are in at this moment" tight>
@@ -253,6 +258,63 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
         </ul>
       </Card>
     </div>
+  );
+}
+
+/**
+ * The baseline comparison.
+ *
+ * §11.4 allows exactly one kind of baseline: a real alternative, run on the same day with the same
+ * equipment and every protection still in force. So the baseline here is either the site without
+ * storage or a fixed schedule — both things people actually do — and never an "EMS off" that
+ * disables safety or dispatches irrationally to make the candidate look good.
+ *
+ * The ending charge is disclosed whether or not it helps, because a policy that finishes with a
+ * fuller battery has not saved money; it has deferred spending it.
+ */
+function Comparison({ card, setup }: { card: LessonCard; setup: ReturnType<LessonCard['runWith']> }) {
+  const c = useMemo(() => comparePolicies(
+    { scenario: setup.scenario, plant: setup.plant, parameters: lfpParameterSet, manualRequestW: setup.manualRequestW },
+    card.baseline!.policy, setup.policy,
+  ), [card, setup]);
+
+  const rows: { label: string; a: string; b: string; better: 'lower' | 'higher' }[] =
+    card.compareOn === 'peak'
+      ? [
+        { label: 'Highest grid import', a: `${kW(c.baseline.peakGridImportW)} kW`, b: `${kW(c.candidate.peakGridImportW)} kW`, better: 'lower' },
+        { label: 'Energy drawn from the grid', a: `${kWh(c.baseline.importedWh)} kWh`, b: `${kWh(c.candidate.importedWh)} kWh`, better: 'lower' },
+        { label: 'Charge at the end', a: `${(c.baseline.endingSoc * 100).toFixed(1)}%`, b: `${(c.candidate.endingSoc * 100).toFixed(1)}%`, better: 'higher' },
+      ]
+      : card.compareOn === 'cost'
+        ? [
+          { label: 'Illustrative cost for the day', a: `₹${Math.round(c.baseline.illustrativeCost).toLocaleString('en-IN')}`, b: `₹${Math.round(c.candidate.illustrativeCost).toLocaleString('en-IN')}`, better: 'lower' },
+          { label: 'Bought', a: `${kWh(c.baseline.importedWh)} kWh`, b: `${kWh(c.candidate.importedWh)} kWh`, better: 'lower' },
+          { label: 'Sold', a: `${kWh(c.baseline.exportedWh)} kWh`, b: `${kWh(c.candidate.exportedWh)} kWh`, better: 'higher' },
+          { label: 'Charge at the end', a: `${(c.baseline.endingSoc * 100).toFixed(1)}%`, b: `${(c.candidate.endingSoc * 100).toFixed(1)}%`, better: 'higher' },
+        ]
+        : [
+          { label: 'Generation kept on site', a: `${kWh(c.baseline.selfConsumedWh)} kWh`, b: `${kWh(c.candidate.selfConsumedWh)} kWh`, better: 'higher' },
+          { label: 'Exported', a: `${kWh(c.baseline.exportedWh)} kWh`, b: `${kWh(c.candidate.exportedWh)} kWh`, better: 'lower' },
+          { label: 'Charge at the end', a: `${(c.baseline.endingSoc * 100).toFixed(1)}%`, b: `${(c.candidate.endingSoc * 100).toFixed(1)}%`, better: 'higher' },
+        ];
+
+  return (
+    <Card title="Against the alternative" subtitle={`${card.baseline!.label}, run on the same day with the same equipment and every protection still in force`} tight>
+      <table className="data">
+        <thead><tr><th /><th>{card.baseline!.label}</th><th>With ergOS</th></tr></thead>
+        <tbody>
+          {rows.map(r => (
+            <tr key={r.label}><td>{r.label}</td><td className="mono">{r.a}</td><td className="mono">{r.b}</td></tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="notice info" style={{ marginTop: 10 }}>
+        <b>Read this before the numbers above</b>
+        <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+          {c.disclosures.map(d => <li key={d}>{d}</li>)}
+        </ul>
+      </div>
+    </Card>
   );
 }
 
@@ -377,10 +439,11 @@ function EventLog({ events }: { events: { atSeconds: number; owner: string; seve
  * policy asks, the converter converts, the battery management system can refuse, and the cells do
  * what they are left with.
  */
-function Stack({ constraint, discharging }: { constraint: string; discharging: boolean }) {
-  const owner = /converter|export|import|derated|window/i.test(constraint) ? 'PCS'
-    : /reserve|policy/i.test(constraint) ? 'EMS'
-    : /bms|cell|state of charge|current/i.test(constraint) ? 'BMS' : null;
+function Stack({ owner, discharging }: { owner: string; discharging: boolean }) {
+  // The owner is read from the run rather than guessed from the wording of the constraint. The two
+  // used to be inferred separately, which is how a diagram ends up lighting the converter while
+  // the text beside it names the battery management system.
+  const lit = owner === 'battery' ? 'BMS' : owner === 'grid' ? 'PCS' : owner;
   const boxes = [
     { id: 'EMS', name: 'ergOS', role: 'asks' },
     { id: 'PCS', name: 'Converter', role: 'converts' },
@@ -391,9 +454,9 @@ function Stack({ constraint, discharging }: { constraint: string; discharging: b
     <div className={`sim-stack${discharging ? ' out' : ' in'}`}>
       {boxes.map((b, i) => (
         <div key={b.id}>
-          <div className={`sim-box${owner === b.id ? ' limiting' : ''}`}>
+          <div className={`sim-box${lit === b.id ? ' limiting' : ''}`}>
             <b>{b.name}</b><span>{b.role}</span>
-            {owner === b.id && <i className="sim-limiting"><Zap size={11} /> limiting</i>}
+            {lit === b.id && <i className="sim-limiting"><Zap size={11} /> limiting</i>}
           </div>
           {i < boxes.length - 1 && <div className="sim-flow" aria-hidden />}
         </div>

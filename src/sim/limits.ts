@@ -90,14 +90,19 @@ export type LimitInput = {
   /** True while the grid is absent: there is nowhere to export to and nothing to import from. */
   islanded: boolean;
   /**
-   * What the island itself will take, in AC watts, positive when the site needs power.
+   * What the site needs from somewhere, in AC watts: its own load plus the plant's auxiliaries,
+   * less whatever it is generating. Positive when the site is short.
    *
-   * In an island the plant is not limited by a connection — there is no connection. It is limited
-   * by the load: a battery cannot discharge into a site that is not drawing, and cannot charge
-   * from one that is not generating. This is that balance, and leaving it out was the bug that
-   * made an island look like a plant with its export limit set to zero.
+   * The plant does not have the connection to itself. Everything on the site meets at one point,
+   * so a plant charging at its rating while the site is already drawing two megawatts is asking
+   * the connection for the sum of the two — and a ceiling computed from the plant alone lets it
+   * overload the connection and then reports the overflow as load nobody served.
+   *
+   * In an island there is no connection at all, and the same quantity is the whole constraint: a
+   * battery cannot discharge into a site that is not drawing, or charge from one that is not
+   * generating.
    */
-  islandBalanceW: number;
+  siteNetW: number;
   idealised: boolean;
 };
 
@@ -184,23 +189,27 @@ export function limitsFor(input: LimitInput, direction: 'charge' | 'discharge'):
   });
 
   // 5. What the grid will take or give — or, in an island, what the site itself will.
-  const balance = input.islandBalanceW;
+  //
+  //    Off-grid, the site is the only sink and the only source. On-grid, the connection is shared:
+  //    what the plant may import is the limit less what the site is already drawing through it,
+  //    and what it may export is the limit plus whatever the site absorbs on the way out.
+  const net = input.siteNetW;
   const gridW = input.islanded
-    ? Math.max(0, discharging ? balance : -balance)
-    : (discharging ? plant.gridExportLimitW : plant.gridImportLimitW);
+    ? Math.max(0, discharging ? net : -net)
+    : Math.max(0, discharging ? plant.gridExportLimitW + net : plant.gridImportLimitW - net);
   const gridDcW = discharging ? gridW / c.dischargeEfficiency : gridW * c.chargeEfficiency;
   const iForGrid = cellCurrentForCellPower(cell, soc, tempC, (discharging ? 1 : -1) * gridDcW / shape.totalCells);
   out.push({
     by: 'grid',
     name: input.islanded
       ? (gridW > 0 ? 'The island’s own balance' : 'Islanded — nothing to dispatch into')
-      : (discharging ? 'Site export limit' : 'Site import limit'),
+      : (discharging ? 'What is left of the export limit' : 'What is left of the import limit'),
     cellCurrentA: iForGrid === null ? Number.POSITIVE_INFINITY : Math.abs(iForGrid),
     reason: input.islanded
       ? (gridW > 0
         ? `The grid is absent. The island needs ${Math.round(gridW / 1e3)} kW in this direction, and there is nowhere else for the power to go.`
         : 'The grid is absent, and the island needs nothing in this direction: there is nowhere for the power to go.')
-      : `The connection is limited to ${Math.round(gridW / 1e3)} kW in this direction.`,
+      : `The connection carries ${Math.round((discharging ? plant.gridExportLimitW : plant.gridImportLimitW) / 1e3)} kW in this direction and the site is already using ${Math.round(Math.abs(net) / 1e3)} kW of it, leaving ${Math.round(gridW / 1e3)} kW for the plant.`,
   });
 
   // 6. Where the step would end, not where it starts. This is the overshoot guard.

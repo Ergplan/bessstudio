@@ -397,3 +397,24 @@ describe('the card a learner actually reads', () => {
     }
   });
 });
+
+describe('the connection is shared between the site and the plant', () => {
+  it('never lets the plant charge the connection into overload', () => {
+    // A plant charging at its rating while the site is already drawing two megawatts is asking the
+    // connection for the sum. Before this was a limit, the overflow came back as load nobody
+    // served — the site going dark because the battery was busy filling itself.
+    const empty = sealWith(scenarioSchema, { ...dayScenario, initialSoc: 0.12 });
+    const out = run({ scenario: empty, policy: backupReservePolicy });
+    for (const [i, imp] of out.series.gridImportW.entries()) {
+      expect(imp, `sample ${i}`).toBeLessThanOrEqual(teachingPlant.gridImportLimitW + 1e-6);
+      expect(out.series.unservedLoadW[i], `sample ${i} unserved`).toBeLessThan(1e-6);
+    }
+  });
+
+  it('lets the plant export more than the export limit only by what the site itself absorbs', () => {
+    const out = run({ policy: priceSchedulePolicy });
+    for (const [i, exp] of out.series.gridExportW.entries()) {
+      expect(exp, `sample ${i}`).toBeLessThanOrEqual(teachingPlant.gridExportLimitW + 1e-6);
+    }
+  });
+});

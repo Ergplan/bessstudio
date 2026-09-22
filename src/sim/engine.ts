@@ -175,6 +175,7 @@ export function simulate(input: RunInput): RunOutput {
     siteLoadW: [], generationW: [], gridImportW: [], gridExportW: [], curtailedW: [],
   };
   const bindingConstraint: string[] = [];
+  const bindingOwner: string[] = [];
   const pcsStates: string[] = [];
   const bmsStates: string[] = [];
 
@@ -341,12 +342,17 @@ export function simulate(input: RunInput): RunOutput {
     let sumDc = 0, sumAc = 0, sumCellI = 0, sumCellV = 0, sumConvLoss = 0, sumBattLoss = 0;
     let appliedLimits: { by: string; limitW: number; reason: string }[] = [];
     /** The tightest any ceiling held this step, across every piece of it. */
-    let worst: { name: string; ratio: number } | null = null;
+    let worst: { name: string; owner: string; ratio: number } | null = null;
     // A policy that asks for nothing while the learner asked for something is itself the binding
     // constraint, and the EMS is the one that decided it. Without this the plant sits in standby
     // with no constraint named and no event logged, which is exactly the silence §11.3 forbids.
     let bindName = asked.requestedW === 0 ? (asked.hold ?? '')
       : asked.reducedFromW !== null ? 'Reduced to what the plant can do' : 'Request met in full';
+    // The EMS owns both of the cases above: a policy holding, and a policy reducing its own
+    // request. Anything else is owned by whichever ceiling turns out to bind.
+    // A policy that was asked for nothing and dispatched nothing is idle, not limiting: there is
+    // no constraint to name and nobody to attribute it to.
+    let bindOwner = bindName === '' || bindName === 'Request met in full' ? '' : 'EMS';
     if (asked.reducedFromW !== null) {
       note({
         atSeconds: t, owner: 'EMS', severity: 'limit', code: 'request-reduced',
@@ -389,9 +395,10 @@ export function simulate(input: RunInput): RunOutput {
         // An outage lowers the reserve the policy keeps in hand; it never lowers the hard floor.
         reserveSoc: islanded ? policy.emergencyReserveSoc : policy.reserveSoc,
         socFloor: 0, socCeiling: 1, islanded, idealised: solver.idealised,
-        // What the island itself needs: the site's load less its own generation, plus the
-        // auxiliaries, which are on the island too and have to be carried by the battery.
-        islandBalanceW: (siteLoadW ?? 0) + plant.auxiliaryW + plant.converter.standbyW - (at(scenario.generation, step) ?? 0),
+        // What the site needs from somewhere: its load and the plant's own auxiliaries, less its
+        // generation. On grid this is what the connection is already carrying; off grid it is the
+        // whole of what the battery may do.
+        siteNetW: (siteLoadW ?? 0) + plant.auxiliaryW + plant.converter.standbyW - (at(scenario.generation, step) ?? 0),
       }, direction);
       const { limit, ordered } = binding(limits);
 
@@ -414,10 +421,10 @@ export function simulate(input: RunInput): RunOutput {
       // And the management system's veto, which multiplies whatever survived everything else.
       const bmsFactor = direction === 'discharge' ? bms.dischargeFactor : bms.chargeFactor;
 
-      const ceilings: { name: string; value: number }[] = [
-        { name: limit.name, value: limit.cellCurrentA },
-        { name: pcsCeiling.name, value: pcsCellI },
-        { name: bms.binding ? bms.binding.label : 'Battery management system', value: limit.cellCurrentA * bmsFactor },
+      const ceilings: { name: string; owner: string; value: number }[] = [
+        { name: limit.name, owner: limit.by, value: limit.cellCurrentA },
+        { name: pcsCeiling.name, owner: 'PCS', value: pcsCellI },
+        { name: bms.binding ? bms.binding.label : 'Battery management system', owner: 'BMS', value: limit.cellCurrentA * bmsFactor },
       ];
       const tightest = ceilings.reduce((a, b) => (b.value < a.value ? b : a));
       const allowed = Math.min(Math.abs(wantedCellI), tightest.value);
@@ -449,7 +456,7 @@ export function simulate(input: RunInput): RunOutput {
       // would report a shortfall with nothing named as its cause.
       if (allowed < Math.abs(wantedCellI) - 1e-9) {
         const ratio = allowed / Math.abs(wantedCellI);
-        if (worst === null || ratio < worst.ratio) worst = { name: tightest.name, ratio };
+        if (worst === null || ratio < worst.ratio) worst = { name: tightest.name, owner: tightest.owner, ratio };
         if (tightest.name === limit.name) recordLimitEvent(note, limit, t + piece * subSeconds, direction);
       }
 
@@ -465,7 +472,7 @@ export function simulate(input: RunInput): RunOutput {
       countedSoc(counting, { trueSoc: soc, capacityAh: cell.capacityAh, seconds: subSeconds }, memory);
     }
     if (failure !== null) break;
-    if (worst) bindName = worst.name;
+    if (worst) { bindName = worst.name; bindOwner = worst.owner; }
 
     const n = subSteps;
     const dcW = sumDc / n, acW = sumAc / n, cellI = sumCellI / n;
@@ -532,6 +539,7 @@ export function simulate(input: RunInput): RunOutput {
     series.gridExportW.push(gridExportW);
     series.curtailedW.push(curtailedW);
     bindingConstraint.push(bindName);
+    bindingOwner.push(bindOwner);
     // The same tolerance the solver is held to, so the state and the named constraint cannot
     // disagree: a converter reported as discharging while a limit is named as holding it back is
     // two readings of one moment that contradict each other, and the learner has no way to tell
@@ -577,6 +585,7 @@ export function simulate(input: RunInput): RunOutput {
     series.cellTempC.push(tempC);
     series.cellTempMaxC.push(Math.max(tempC, weakCell ? weakTempC : tempC));
     bindingConstraint.push('');
+    bindingOwner.push('');
     pcsStates.push('standby');
     bmsStates.push(bmsStates.at(-1) ?? 'normal');
   }
@@ -599,7 +608,7 @@ export function simulate(input: RunInput): RunOutput {
     series: {
       id: `series_${runId}`, label: scenario.label, kind: 'TimeSeriesResult', schemaVersion: SIM_SCHEMA_VERSION,
       runId, stepSeconds: scenario.stepSeconds, bindingConstraint,
-      pcsState: pcsStates, bmsState: bmsStates, ...series,
+      pcsState: pcsStates, bmsState: bmsStates, bindingOwner, ...series,
     } as unknown as TimeSeriesResult,
     decisions: { id: `dec_${runId}`, label: scenario.label, kind: 'EMSDecisionLog', schemaVersion: SIM_SCHEMA_VERSION, runId, decisions } as EmsDecisionLog,
     events: { id: `evt_${runId}`, label: scenario.label, kind: 'EventLog', schemaVersion: SIM_SCHEMA_VERSION, runId, events } as EventLog,

@@ -186,6 +186,14 @@ export const emsPolicySchema = z.object({
   priceWindows: z.array(z.object({
     fromHour: z.number().min(0).max(24), toHour: z.number().min(0).max(24),
     pricePerMWh: z.number(), action: z.enum(['charge', 'discharge', 'hold']),
+    /**
+     * How hard to dispatch inside the window, as a fraction of the plant's rating.
+     *
+     * A schedule that only says *when* is not a schedule anybody runs a plant on: buying a full
+     * battery in ninety minutes and buying it gently across six hours are different decisions with
+     * different consequences, and a window with no power in it cannot express the difference.
+     */
+    powerFraction: z.number().positive().max(1).default(1),
   })).default([]),
   configHash: z.string().length(32),
 }).strict().superRefine((p, ctx) => {
@@ -451,6 +459,14 @@ export const timeSeriesResultSchema = z.object({
   curtailedW: z.array(z.number()),
   /** Which subsystem set the achieved power at each step, by name. Empty string where nothing did. */
   bindingConstraint: z.array(z.string()),
+  /**
+   * And who owns it.
+   *
+   * Recorded rather than inferred from the name. The four-box diagram and the named constraint are
+   * two readings of one decision, and a reader who sees the converter lit while the battery
+   * management system is named has been shown a contradiction by an interface that was guessing.
+   */
+  bindingOwner: z.array(z.string()),
   /** The converter's state and the management system's, one per sample. §12.3 and §12.4. */
   pcsState: z.array(z.string()),
   bmsState: z.array(z.string()),

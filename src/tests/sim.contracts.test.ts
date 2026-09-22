@@ -320,7 +320,7 @@ describe('the records, and what they refuse', () => {
       dcPowerW: arr(), packVoltageV: arr(), packCurrentA: arr(), cellVoltageV: arr(),
       cellVoltageMaxV: arr(), cellVoltageMinV: arr(), soc: arr(), countedSoc: arr(),
       cellTempC: arr(), cellTempMaxC: arr(), converterLossW: arr(), batteryLossW: arr(), auxiliaryW: arr(),
-      bindingConstraint: ['', '', ''], pcsState: ['', '', ''], bmsState: ['', '', ''],
+      bindingConstraint: ['', '', ''], bindingOwner: ['', '', ''], pcsState: ['', '', ''], bmsState: ['', '', ''],
       unservedLoadW: arr(), siteLoadW: arr(), generationW: arr(), gridImportW: arr(),
       gridExportW: arr(), curtailedW: arr(), schemaVersion: 1,
     };
@@ -374,7 +374,7 @@ describe('persistence, and what survives it', () => {
       cellVoltageV: [0, 0], cellVoltageMaxV: [0, 0], cellVoltageMinV: [0, 0],
       soc: [0.5, 0.49], countedSoc: [0.5, 0.49], cellTempC: [25, 25], cellTempMaxC: [25, 25],
       converterLossW: [0, 0], batteryLossW: [0, 0], auxiliaryW: [0, 0],
-      bindingConstraint: ['', ''], pcsState: ['standby', 'standby'], bmsState: ['normal', 'normal'],
+      bindingConstraint: ['', ''], bindingOwner: ['', ''], pcsState: ['standby', 'standby'], bmsState: ['normal', 'normal'],
       unservedLoadW: [0, 0], siteLoadW: [0, 0], generationW: [0, 0], gridImportW: [0, 0],
       gridExportW: [0, 0], curtailedW: [0, 0],
     } as never,

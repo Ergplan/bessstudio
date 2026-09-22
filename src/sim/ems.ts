@@ -230,10 +230,11 @@ export function decide(policy: EmsPolicy, o: EmsObservation): EmsRequest {
       observed.windowPricePerMWh = window.pricePerMWh;
       if (window.action === 'hold') return holding(`price-schedule/hold@${window.fromHour}`,
         `Hour ${hour.toFixed(1)} is inside the ${window.fromHour}–${window.toHour} window, which is a holding window at ${window.pricePerMWh} per MWh.`);
-      const wanted = window.action === 'discharge' ? o.plantRatedW : -o.plantRatedW;
+      const wanted = (window.action === 'discharge' ? o.plantRatedW : -o.plantRatedW) * window.powerFraction;
+      observed.windowPowerFraction = window.powerFraction;
       if (protectedEnergy(wanted)) return refusal();
       return relay(wanted, `price-schedule/${window.action}@${window.fromHour}`,
-        `Hour ${hour.toFixed(1)} is inside the ${window.fromHour}–${window.toHour} window at ${window.pricePerMWh} per MWh, which the schedule marks for ${window.action === 'discharge' ? 'discharging' : 'charging'}. Prices are illustrative.`);
+        `Hour ${hour.toFixed(1)} is inside the ${window.fromHour}–${window.toHour} window at ${window.pricePerMWh} per MWh, which the schedule marks for ${window.action === 'discharge' ? 'discharging' : 'charging'} at ${kW(wanted)} kW. Prices are illustrative.`);
     }
   }
 }

@@ -340,9 +340,9 @@ export const priceSchedulePolicy = policy({
   id: 'policy-price-schedule', label: 'Follow the tariff', policy: 'price-schedule',
   policyVersion: 'price-schedule-1',
   priceWindows: [
-    { fromHour: 0, toHour: 6, pricePerMWh: 3_000, action: 'charge' },
-    { fromHour: 6, toHour: 18, pricePerMWh: 7_000, action: 'hold' },
-    { fromHour: 18, toHour: 22, pricePerMWh: 12_000, action: 'discharge' },
+    { fromHour: 0, toHour: 6, pricePerMWh: 3_000, action: 'charge', powerFraction: 1 },
+    { fromHour: 6, toHour: 18, pricePerMWh: 7_000, action: 'hold', powerFraction: 1 },
+    { fromHour: 18, toHour: 22, pricePerMWh: 12_000, action: 'discharge', powerFraction: 1 },
   ],
 });
 
@@ -357,8 +357,8 @@ export const fixedSchedulePolicy = policy({
   id: 'policy-fixed-schedule', label: 'Fixed schedule', policy: 'price-schedule',
   policyVersion: 'fixed-schedule-1',
   priceWindows: [
-    { fromHour: 1, toHour: 5, pricePerMWh: 3_000, action: 'charge' },
-    { fromHour: 18, toHour: 21, pricePerMWh: 12_000, action: 'discharge' },
+    { fromHour: 1, toHour: 5, pricePerMWh: 3_000, action: 'charge', powerFraction: 1 },
+    { fromHour: 18, toHour: 21, pricePerMWh: 12_000, action: 'discharge', powerFraction: 1 },
   ],
 });
 
