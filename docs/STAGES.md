@@ -3,9 +3,9 @@
 The live record of the build defined in [`docs/SITE.md` §17](./SITE.md#17-how-this-gets-built).
 `SITE.md` is the contract; this file is what actually happened.
 
-> **S0 through S4 are built and ready for acceptance.** S5 onward are `PLANNED` — not built, not
-> tested. Fixtures F01, F02 and F03 have been run and passed; F04–F08 have not, and belong to
-> stages that have not started. Writing a check into this file is not evidence that it passed.
+> **S0 through S5 are built and ready for acceptance.** S6 onward are `PLANNED` — not built, not
+> tested. Fixtures F01 to F04 have been run and passed; F05–F08 have not, and belong to stages
+> that have not started. Writing a check into this file is not evidence that it passed.
 >
 > **Two rounds of work have landed since S1 outside the numbered register** — the studio
 > experience, and then an audit of the maths, the documents and the interface. Neither opened a
@@ -30,8 +30,8 @@ when a prerequisite or a mandatory check fails.
 | **S2** | Model contracts and evidence | S1 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s2--model-contracts-and-evidence) |
 | **S3** | First charge/discharge lesson | S2 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s3--first-chargedischarge-lesson) |
 | **S4** | PCS and BMS behaviour | S3 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s4--pcs-and-bms-behaviour) |
-| **S5** | jouleWise ergOS EMS | S4 | `BUILDING` | — | — |
-| **S6** | Lessons 1–6 | S5 | `PLANNED` | — | — |
+| **S5** | jouleWise ergOS EMS | S4 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s5--joulewise-ergos-ems) |
+| **S6** | Lessons 1–6 | S5 | `BUILDING` | — | — |
 | **S7** | Contract-demand UPS sizing | S6 | `PLANNED` | — | — |
 | **S8** | Lead-acid versus LFP | S7 | `PLANNED` | — | — |
 | **S9** | Indian conditions and lifecycle cost | S8 | `PLANNED` | — | — |
@@ -41,14 +41,14 @@ when a prerequisite or a mandatory check fails.
 
 ## Fixtures
 
-Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01, F02 and F03 have run and passed; the rest belong to stages that have not started.
+Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F04 have run and passed; the rest belong to stages that have not started.
 
 | ID | Covers | Owner stage | State |
 | --- | --- | --- | --- |
 | F01 | ideal energy and SOC, both directions | S3 | **PASS** — `src/tests/sim.fixtures.test.ts` |
 | F02 | converter balance, both directions | S3 | **PASS** — `src/tests/sim.fixtures.test.ts` |
 | F03 | apparent-power headroom, tighter bound wins | S4 | **PASS** — `src/tests/sim.fixtures.test.ts` |
-| F04 | backup reserve and the outage-mode transition | S5 | NOT RUN |
+| F04 | backup reserve and the outage-mode transition | S5 | **PASS** — `src/tests/sim.s5.test.ts` |
 | F05 | UPS sizing, the 500 kVA worked example | S7 | NOT RUN |
 | F06 | repeated outages, reserve carried forward | S8 | NOT RUN |
 | F07 | lifecycle cost, discounting and no-crossover | S9 | NOT RUN |
@@ -596,6 +596,110 @@ Rollback: `git revert a9e1731`. No migrations; nothing is written to storage.
 ### 7. Decision
 
 **READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S5 — jouleWise ergOS EMS.**
+
+---
+
+## S5 — jouleWise ergOS EMS
+
+**State:** READY FOR ACCEPTANCE — review pending
+**Revision:** `9d13f92`
+**Depends on:** S4 (READY FOR ACCEPTANCE)
+
+### 1. Scope
+
+Delivered: the supervisory layer, the comparison, and F04.
+
+- **`src/sim/ems.ts`** — five policies: manual, peak shaving, self-consumption, backup reserve and
+  a price schedule. Each decides only on what it needs, and each returns a goal, an action, the
+  rule that fired, the values it fired on and one plain sentence — the five rows §11.3 fixes for
+  the always-visible card. An absence is never a silent zero: a policy handed no telemetry holds
+  and names what is missing rather than shaving against an assumed nothing.
+- **Stale telemetry and the fallback.** The timeout and the fallback are configuration on the
+  policy, not constants in the engine, because §11.3 says there is no universal response and none
+  will be claimed. Two are supported — stop, or hold the last setpoint — and every decision records
+  the telemetry's age and whether the fallback applied.
+- **The setpoint cadence**, kept separate from the integration step and from the reporting
+  interval. A step between decisions says it held the previous setpoint rather than pretending to
+  have decided again.
+- **`localIslandControl`** — while the grid is absent the policy is not consulted at all. The
+  converter forms the island and follows the site load and the plant's own auxiliaries, locally.
+  This is what makes §11.2's no-break claim checkable rather than asserted: there is no code path
+  from the load to the battery that passes through the supervisory layer.
+- **`src/sim/compare.ts`** — a fixed schedule against an ergOS policy on the same day, both keeping
+  every converter limit and every battery protection. Peak import, self-consumption, curtailment,
+  delivered and stored energy, ending charge and an illustrative cost. The ending charge is
+  disclosed whether or not anybody asked, valued at the closing price, and carried across before
+  any benefit is attributed.
+- **The engine gained site-level accounting** — site load, generation, grid import and export kept
+  apart, and curtailment named. None of §11.4's metrics can be read from the plant's own terminals.
+- **`src/app/pages/Lessons.tsx`** — the ergOS card, with **Why?** opening the rule, the policy
+  version, the telemetry age, whether the setpoint was held, and the ceilings restated as power.
+
+Deferred by design: the lesson cards that these policies are for are S6. The comparison is an
+engine capability with unit coverage here; it gets its screen in S6 alongside lessons 2 to 5.
+
+### 2. Environment
+
+As S4. TypeScript engine in the browser, per the departure recorded in the S2 packet. No new
+runtime dependency.
+
+### 3. Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **517 passed** (+34) | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | 48 passed | **PASS** |
+| Static export | `npm run build` | 17 routes | 17 routes | **PASS** |
+| **F04** reserve holds under normal economics | unit | a 2 MW discharge request at the reserve boundary consumes none of the protected energy | nothing discharged; charge never below the reserve by more than 1e-9 | **PASS** |
+| **F04** an outage may use the emergency reserve | unit | to its allowed minimum, and no further | falls below the 50% reserve, stops at the 10% emergency floor | **PASS** |
+| **F04** the transition is explained | unit | logged, both ways | `grid-lost` at 18:00 naming the emergency floor; `grid-restored` naming what is protected again | **PASS** |
+| Every explanation resolves to logged values | unit | goal, action, rule and reason on every decision of every policy | holds across all six policies over a full day | **PASS** |
+| No figure quoted that nobody measured | unit | an absent profile holds the policy rather than reading as zero | every decision `peak-shaving/no-load-telemetry`, nothing dispatched | **PASS** |
+| Reserve respected | unit | under every policy | charge never below the floor in any run in the suite | **PASS** |
+| Infeasible dispatch reduced | unit | the policy reduces before issuing | 9 MW asked, 2.5075 MW issued, action `reduce`, reduction logged as an EMS event | **PASS** |
+| BMS remains authoritative | unit | over every policy, not only the manual one | at 60 °C ambient every policy stays inside the cell's voltage window and 0–100% charge | **PASS** |
+| Stale telemetry follows the specified fallback | unit | as configured, and recorded | `fallback/stop` from the timeout onward, age recorded; `hold-last-setpoint` holds 400 kW | **PASS** |
+| Setpoint cadence distinct from the step | unit | one decision per cadence, the rest held | 24 decisions and 264 held steps at an hourly cadence over a day at 5-minute steps | **PASS** |
+| Comparison uses identical inputs | unit | proven, not asserted | scenario hash with the policy pointer normalised away, plant and parameter hashes identical | **PASS** |
+| Comparison discloses ending SOC | unit | always, and reconciles before attributing | reconciled delta = raw delta − stored energy at the closing price, to 1e-6 | **PASS** |
+| A worse outcome is reported as worse | unit | no flattering the candidate | a backwards schedule comes back costing more, and the disclosure says so | **PASS** |
+| **No-break control does not depend on the EMS** | unit | the load is served through an outage with the supervisory telemetry gone | telemetry lost at noon, grid lost at 18:00; load served for the whole island, every decision `local/island` | **PASS** |
+| An empty island is reported, not papered over | unit | the shortfall is named | charge stops at the emergency floor and the unserved load is recorded | **PASS** |
+| Island only where the topology supports it | unit | a plant with no transfer equipment cannot island | the event says so and the site goes dark | **PASS** |
+| Browser: the ergOS card | browser | goal, observed, action, requested/delivered, reason | all five present, action *discharge*, 1,000 kW requested → 1,000 kW delivered | **PASS** |
+| Browser: Why? opens the rule | browser | rule, policy version, telemetry age, setpoint, ceilings | `manual/relay`, `manual-1`, 0 s, issued this step, three ceilings in kW | **PASS** |
+| Browser: the policy's own refusal | browser | named, and said once | action *hold*, constraint *Reserve held back*, no duplicated sentence | **PASS** |
+| Browser: attribution | browser | a ceiling's refusal is not read as an ergOS decision | charging a full battery reads action *charge*, constraint *State of charge ceiling* | **PASS** |
+| No page or console errors | browser | none | none | **PASS** |
+
+### 4. Browser walkthrough
+
+`scratchpad/s5.mjs` — the lesson at three settings, reading the ergOS card off the page: the five
+rows, the **Why?** disclosure opened, the policy's own refusal at the reserve, and a ceiling's
+refusal while charging a full battery.
+
+### 5. Defects
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D37 | An island was limited as though its export limit were zero, so a plant that *could* form an island dispatched nothing into it. The no-break test found it immediately — which is the argument for writing that test. | **critical** — an unfixed version would have shown backup power failing at the moment it was needed | **fixed**; an island is limited by its own balance: the site load plus the plant's auxiliaries, less its generation. |
+| D38 | A declared outage islanded any plant, whether or not it had the transfer equipment to do it with. §15 lesson 4 asks for a supported topology and this ignored the question. | major | **fixed**; `islandCapable` decides, the event says which case it is, and the site going dark is recorded as unserved load rather than silently served. |
+| D39 | The island carried the site load but not the plant's own auxiliaries, which are on the island too. 22 kW went unserved every step of every outage. | major | **fixed**; local control follows the whole island balance. |
+| D40 | The action on the ergOS card read *reduce* whenever anything held the plant back, crediting ergOS with refusals the battery management system had made. | major | **fixed**; the action is what the policy decided; what became of it is the requested-against-delivered row and the named constraint. |
+| D41 | Where the policy was itself the reason there was no dispatch, the engine appended its own suffix to the policy's sentence: "the reserve held back held it to 0 kW". | minor | **fixed**; the suffix belongs to a request that was made and then held back downstream. |
+| D42 | `presets` claimed to be the list a test could walk instead of trusting a hand-written one, and was itself a hand-written list missing the new plant, four policies and every scenario. Every check written against it passed for the wrong reason. | minor | **fixed**; the list is derived, and now includes scenarios. |
+
+### 6. Demonstration and rollback
+
+Demo: **Projects** → any project → **Lessons** → *Charge and discharge*. The ergOS card sits under
+the four-box stack; **Why?** opens the rule it fired, the values it fired on and the ceilings
+underneath it. Drop the starting charge to 10% and the policy refuses in its own words.
+Rollback: `git revert 9d13f92`. No migrations; nothing is written to storage.
+
+### 7. Decision
+
+**READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S6 — Lessons 1–6.**
 
 ---
 
