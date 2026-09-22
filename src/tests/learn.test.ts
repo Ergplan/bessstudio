@@ -61,3 +61,16 @@ describe('the mechanical assumptions', () => {
     for (const key of Object.keys(assumptionNotes)) expect(keys, `stale note for "${key}"`).toContain(key);
   });
 });
+
+describe('the equipment and usable-AC inputs', () => {
+  it('explains every one the studio offers', async () => {
+    const { configSchema } = await import('../config/schema');
+    const { equipmentNotes, usableNotes } = await import('../domain/learn');
+    const shape = configSchema.shape;
+    for (const [group, notes] of [['equipment', equipmentNotes], ['usable', usableNotes]] as const) {
+      const keys = Object.keys((shape[group] as unknown as { shape: Record<string, unknown> }).shape);
+      for (const key of keys) expect(notes[key], `no note for ${group}.${key}`).toBeTruthy();
+      for (const key of Object.keys(notes)) expect(keys, `stale note for ${group}.${key}`).toContain(key);
+    }
+  });
+});

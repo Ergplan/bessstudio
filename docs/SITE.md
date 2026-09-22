@@ -589,7 +589,8 @@ a square rather than a single long line. The explorer lists the units and the co
 statistics strip speaks for the fleet, and double-clicking a unit steps inside it. A unit is drawn
 as a shell, not as 4,992 cells, so a twenty-two unit site stays under a thousand boxes.
 
-**Assumptions.** Each of the fifteen mechanical assumptions explains itself as it is edited — what
+**Assumptions.** Every input in the Configure tab — the fifteen mechanical assumptions, the three
+equipment ratings and the five usable-AC figures — explains itself as it is edited — what
 it is, where the figure came from, and what moves in the container when it changes. A test reads
 the assumption keys out of the schema and fails if one has no explanation, or an explanation has no
 assumption.

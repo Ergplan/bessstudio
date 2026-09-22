@@ -278,6 +278,20 @@ export const remedyFor = (code: string): Remedy | undefined =>
  * came from or what they drive. Somebody learning the product should be able to change one and know
  * in advance what it will do to the container.
  */
+export const equipmentNotes: Record<string, string> = {
+  maxVoltage: 'The highest DC voltage the converter will accept. The string reaches its maximum when every cell is at its own maximum at the same moment, which is the end of a charge — not the nominal voltage. Opening a project fills this in from the converter it selected.',
+  minVoltage: 'The lowest DC voltage the converter will still work at. Below it the system stops, whatever charge is left in the cells, so anything under this is energy you paid for and cannot reach.',
+  maxCurrent: 'The DC current the converter can take. A constant power demand draws its most current at the lowest voltage, so this is checked at the bottom of the range rather than at nominal.',
+};
+
+export const usableNotes: Record<string, string> = {
+  soc: 'The fraction of nameplate energy the operating window actually uses, across the depth of discharge. Batteries are not run to either end: the last few percent at each end costs disproportionate life.',
+  efficiency: 'One-way discharge efficiency, not round-trip. Round-trip is roughly this squared, and putting a round-trip figure here overstates what comes out by about the same factor again.',
+  auxKW: 'Average auxiliary load — thermal management, controls, lighting. It runs whether or not the battery is working, and it comes out of delivered energy rather than being added on top.',
+  acKW: 'The AC output the system is being asked to hold. With the auxiliaries, this is what the batteries actually have to supply, divided by the discharge efficiency.',
+  constantDCKW: 'A constant DC demand, if the system serves one directly. Constant power means rising current as voltage falls, so feasibility is decided at minimum voltage.',
+};
+
 export const assumptionNotes: Record<string, string> = {
   cellWidth: 'The cell face. Supplied as 173.5–174 mm, so this is a tolerance, not a choice. Eight of these across set the pack width, and the pack width sets the rack pitch and the container length.',
   cellHeight: 'Cell height, supplied as 206.8–207.2 mm. It sets the pack height, and four packs stacked set the rack height and the container height.',
