@@ -204,3 +204,8 @@
 /* Presentation mode carried the same viewport assumption as the workspace; under the flex layout
    it has to take its height from the row it is in. */
 @media (min-width:901px){.app.presentation main{height:auto;min-height:0}}
+/* The one-time offer of the guided walk, beside the control that starts it. */
+.app .walk-offer{position:absolute;bottom:58px;right:24px;z-index:3;display:inline-flex;align-items:center;gap:8px;padding:6px 7px 6px 12px;background:rgba(10,14,19,.94);border:1px solid rgba(147,190,73,.3);backdrop-filter:blur(7px);color:var(--s-muted);font-size:12px;white-space:nowrap}
+.app .walk-offer button{background:none;border:0;padding:0;color:var(--s-accent);font-size:12px;text-decoration:underline;min-height:0}
+.app .walk-offer button:hover{background:none;color:#B4D877}
+.app .walk-offer button.dismiss{color:var(--s-dim);text-decoration:none;padding:2px}
