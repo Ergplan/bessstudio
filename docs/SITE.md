@@ -78,9 +78,18 @@ Seven roles. One is external.
 `LIVE` — the matrix lives in one place (`src/platform/types.ts`) and both the interface and the
 Firestore rules are written from it. Eighteen tests cover the parts that must not drift.
 
-**How a role is assigned today:** `GAP` — by writing the member document by hand. Self-signup makes
-you the owner of a new workspace, which is wrong for a customer arriving from the website. The
-invite flow is the largest missing piece; see [§10](#10-known-gaps).
+**How a role is assigned:** `LIVE` — three ways, and no fourth.
+
+1. **Invitation.** An owner or administrator creates one for an email address at a named role, and
+   sends the link. There is no mail server on the free plan, so the link is copied to the clipboard
+   to be sent by hand. Single-use, expires in 14 days, revocable.
+2. **Customer self-registration.** If the workspace has opted in, anyone may register themselves —
+   as `customer`, never as anything else.
+3. **An administrator changing it** in Settings → Team & roles.
+
+Nobody can mint a role. An invitation names it, or it is `customer`. The Firestore rules check the
+same two things, so the client cannot talk its way past them. Nobody may invite above their own
+rank either — an administrator cannot create an owner.
 
 ---
 
@@ -99,6 +108,11 @@ invite flow is the largest missing piece; see [§10](#10-known-gaps).
 6. **Submit for a formal quotation** hands it to sales. Status becomes *With our sales team*.
 7. Watches it progress — *Being prepared* → *Being approved* → *Formal quotation issued*.
 
+**How they get an account:** either **Create an account** on the sign-in page — which registers
+them into the supplier's workspace as a customer, if that workspace has opened itself to public
+registration — or an invitation link from the sales team. Never by creating a workspace of their
+own.
+
 **The gate:** steps 1–4 work without an account. Step 5 onwards needs a signed-in, **email-verified**
 account. Until the address is verified, prices show as `Locked` and a banner explains why.
 
@@ -114,6 +128,9 @@ be asked to sign in only to *save* it? Today it requires sign-in.
 4. **Send for approval**.
 5. If returned, the approver's reason is shown at the top of the quotation.
 6. Once approved, **Issue to customer**, then **Mark won** or **Mark lost**.
+
+Sales can also invite a customer directly — Settings → Team & roles, role **Customer** — which is
+how a named account gets in when public registration is off.
 
 `GAP:` there is no queue view, no assignment, no SLA. Submitted enquiries sit in the main quote
 list and have to be spotted.
@@ -188,9 +205,32 @@ says so.
 Split screen: dark brand panel left, form right. Email/password, Google, and **Open the demo
 workspace** — which runs entirely on local storage and touches nothing in Firebase.
 
-`GAP:` no password reset, no invite acceptance, no separate customer registration.
+This form opens a **new supplier workspace**. It is not the way a customer arrives; that is §4.5.
 
-### 4.5 Dashboard — `/app` `LIVE`
+`GAP:` no password reset.
+
+### 4.5 Joining — `/join` and `/register` `LIVE`
+
+One screen, two doors, because the shape is identical: look up what is being joined, say plainly
+what it means, then sign in or create an account and write the membership.
+
+**`/join/?org=…&token=…`** — accepting an invitation. Shows which workspace, which role and what
+that role can do, and who invited you. The email is fixed to the invited address and cannot be
+edited. A link that is invalid, withdrawn, already used or expired says which, rather than failing
+silently. Someone already signed in joins on arrival without a form.
+
+**`/register/?org=…`** — customer self-registration, only where the workspace has enabled it.
+Refused with an explanation otherwise. Produces the `customer` role and no other.
+
+Both note that pricing appears once the email address is verified, so the gate is not a surprise
+later.
+
+**Settings → Team & roles** holds the other half: create an invitation, copy its link, see its
+state — pending, accepted, revoked, expired — and revoke it. Plus the switch that opens the
+workspace to public customer registration, off by default, with the registration link to publish
+and the environment variable to set.
+
+### 4.6 Dashboard — `/app` `LIVE`
 
 Staff only; customers get a reduced *Overview*.
 
@@ -200,12 +240,12 @@ Staff only; customers get a reduced *Overview*.
 - **Projects by application** — bar chart.
 - **Recent quotations** and **Activity** (last 120 entries).
 
-### 4.6 Customers — `/app/customers` `LIVE`
+### 4.7 Customers — `/app/customers` `LIVE`
 
 Staff only. List with segment, stage, owner, project and quote counts. Detail holds contacts,
 country/city/website, notes, and the customer's projects and quotations.
 
-### 4.7 Projects — `/app/projects` `LIVE`
+### 4.8 Projects — `/app/projects` `LIVE`
 
 The core screen. Four tiles across the top — rated power, contracted usable, installed DC,
 delivered equipment price — then five tabs.
@@ -235,7 +275,7 @@ flow; full cash-flow table.
 Every control is a slider with a typed value beside it. Edits commit on idle or blur, not per
 keystroke.
 
-### 4.8 Quotes — `/app/quotes` `LIVE`
+### 4.9 Quotes — `/app/quotes` `LIVE`
 
 Tiles: quotation number and status, customer, total, valid until. Lifecycle buttons come from the
 shared state machine, so the interface never offers a step the rules would refuse.
@@ -254,19 +294,19 @@ warranty years, validity.
 
 Exports: JSON, standalone offer HTML, print to PDF.
 
-### 4.9 Catalogue — `/app/catalog` `LIVE`
+### 4.10 Catalogue — `/app/catalog` `LIVE`
 
 Read-only reference: cells, packs, power conversion systems, transformers. Each row carries its
 provenance — `supplied`, `indicative` or `assumed` — so an assumption is never mistaken for a
 datasheet figure.
 
-### 4.10 Settings — `/app/settings` `LIVE`
+### 4.11 Settings — `/app/settings` `LIVE`
 
 Organization identity and branding, with a live preview of what the customer sees. Landed cost
 build-up. Commercial rates. Direct equipment rates. Services, operations and energy. Members and
 what each role can do. Deployment notes.
 
-### 4.11 3D Studio — `/app/studio` `LIVE`
+### 4.12 3D Studio — `/app/studio` `LIVE`
 
 See §5. `/studio` redirects here.
 
@@ -391,17 +431,19 @@ membership check per path.
 
 Ordered by how much they block the workflow above.
 
-1. **No invite or registration flow** `GAP` — self-signup makes you an owner. A customer arriving
-   from the website cannot get a customer role without manual intervention. **This blocks 3.1.**
-2. **Firestore rules unproven** `PARTIAL` — reviewed and written from the same matrix as the
-   client, but never exercised against a real project. Run the emulator before trusting them.
+1. **Firestore rules unproven** `PARTIAL` — reviewed and written from the same matrix as the
+   client, but never exercised against a real project. The invitation rules in particular do real
+   work now. Run `npm run emulators` before trusting them.
+2. **Invitations are sent by hand** `PARTIAL` — no mail server on the Spark plan, so the link is
+   copied to the clipboard for the inviter to send. Automatic mail needs Cloud Functions, which
+   needs the Blaze plan.
 3. **No notifications** `GAP` — submission, approval request and approval are all silent.
 4. **No sales queue** `GAP` — submitted enquiries are not separated from the quote list.
-5. **No role switcher** `GAP` — roles are changed by editing the member document.
-6. **No password reset** `GAP`.
-7. **Customer registration is not separated from staff sign-in** `GAP` — one form for both.
-8. **Offer document is single-template** `PARTIAL` — no per-tenant layout variation.
-9. **Activity trail reads 120 entries** — deliberate, to stay inside the free tier.
+5. **No password reset** `GAP`.
+6. **`NEXT_PUBLIC_PUBLIC_ORG_ID` must be set** before "Create an account" appears on the sign-in
+   page. Until then a customer needs an explicit `?org=` link, which Settings provides.
+7. **Offer document is single-template** `PARTIAL` — no per-tenant layout variation.
+8. **Activity trail reads 120 entries** — deliberate, to stay inside the free tier.
 
 ---
 

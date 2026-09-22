@@ -74,8 +74,76 @@ export const can = (role: Role | null, permission: Permission) => !!role && gran
 export const canSeeFinancials = (role: Role | null, emailVerified: boolean) =>
   can(role, 'finance.view') && emailVerified;
 
-export type Member = { uid: string; email: string; displayName: string; role: Role; addedAt: string };
-export type Organization = { id: string; name: string; branding: Branding; currency: Currency; plan: 'trial' | 'standard' | 'enterprise'; createdAt: string; createdBy: string };
+export type Member = {
+  uid: string; email: string; displayName: string; role: Role; addedAt: string;
+  /** The invitation this membership was created from, which is what authorised its role. */
+  inviteToken?: string | null;
+};
+export type Organization = {
+  id: string; name: string; branding: Branding; currency: Currency;
+  plan: 'trial' | 'standard' | 'enterprise'; createdAt: string; createdBy: string;
+  /**
+   * Whether a stranger arriving from the website may register themselves into this workspace as a
+   * customer. Off by default: opening a tenant to the public is a decision, not an accident.
+   */
+  customerSignupEnabled?: boolean;
+};
+
+/**
+ * An invitation to join an organization at a named role.
+ *
+ * There is no mail server on the free plan, so the invitation is a link the inviter sends however
+ * they like, and the document id is the token in it. Knowing the token is therefore what proves
+ * you were invited — which is why it is long, single-use and expiring, and why acceptance also
+ * requires the signed-in address to match the one invited.
+ */
+export type Invite = {
+  token: string; orgId: string; email: string; role: Role;
+  createdAt: string; createdBy: string; createdByUid: string;
+  expiresAt: string;
+  /**
+   * The same instant in epoch milliseconds. The rules language cannot parse an ISO string, so
+   * expiry has to be comparable as a number for the check to happen where it counts.
+   */
+  expiresAtMs: number;
+  acceptedAt?: string | null; acceptedByUid?: string | null;
+  revokedAt?: string | null;
+  note?: string;
+};
+
+export type InviteState = 'pending' | 'accepted' | 'revoked' | 'expired';
+
+/** Where an invitation stands right now, which is not always what its fields say on their own. */
+export function inviteState(invite: Invite, now = new Date()): InviteState {
+  if (invite.revokedAt) return 'revoked';
+  if (invite.acceptedAt) return 'accepted';
+  return new Date(invite.expiresAt) <= now ? 'expired' : 'pending';
+}
+
+/**
+ * Whether this signed-in address may accept this invitation.
+ *
+ * Returns the reason it cannot rather than a bare false, because every one of these is something
+ * the person at the keyboard needs told plainly — a link that silently does nothing is worse than
+ * one that says it expired.
+ */
+export function invitationProblem(invite: Invite | null, email: string | null, now = new Date()): string | null {
+  if (!invite) return 'That invitation link is not valid. Ask whoever sent it for a new one.';
+  const state = inviteState(invite, now);
+  if (state === 'revoked') return 'That invitation has been withdrawn. Ask whoever sent it for a new one.';
+  if (state === 'accepted') return 'That invitation has already been used. Sign in instead.';
+  if (state === 'expired') return 'That invitation has expired. Ask whoever sent it for a new one.';
+  if (!email) return 'Sign in with the address the invitation was sent to.';
+  if (email.trim().toLowerCase() !== invite.email.trim().toLowerCase())
+    return `This invitation was sent to ${invite.email}. You are signed in as ${email}.`;
+  return null;
+}
+
+/** Roles an inviter of this role may hand out. Nobody may invite above themselves. */
+export const invitableRoles = (inviter: Role | null): Role[] => {
+  if (!inviter || !can(inviter, 'org.manage')) return [];
+  return roles.filter(r => roleRank[r] <= roleRank[inviter]);
+};
 
 export type Contact = { id: string; name: string; title: string; email: string; phone: string; primary: boolean };
 export type CustomerStage = 'lead' | 'qualified' | 'proposal' | 'negotiation' | 'won' | 'lost';

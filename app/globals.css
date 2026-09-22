@@ -243,3 +243,5 @@ table.data td b{color:var(--ink);font-weight:600}
 .locked-block{display:flex;align-items:center;gap:13px;padding:18px;border:1px dashed var(--line);color:var(--slate-light)}
 .locked-block b{display:block;font-size:13.5px;color:var(--ink)}
 .locked-block p{margin:3px 0 0;font-size:12.5px}
+.check-row{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--slate)}
+.check-row input{accent-color:var(--green);width:auto}

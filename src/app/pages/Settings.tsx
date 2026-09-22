@@ -4,7 +4,9 @@ import { Card, Tabs, TextInput, NumberInput, SelectInput, Slider, Badge, KV, Fie
 import { useSession } from '../../platform/auth';
 import { useWorkspace } from '../../platform/workspace';
 import { repository, usingFirestore } from '../../platform/repo';
-import { can, roles, type Member, type Role } from '../../platform/types';
+import { can, inviteState, invitableRoles, roleDescriptions, roleLabels, roles, type Invite, type Member, type Role } from '../../platform/types';
+import { INVITE_DAYS, inviteLink, newInvite, registerLink } from '../../platform/joining';
+import { Link as LinkIcon, UserPlus } from 'lucide-react';
 import {
   currencies, defaultLandedCost, landedCost, formatMoney,
   type ChargeSource, type CostingMode, type Currency, type PriceBook, type SupplyScope,
@@ -19,11 +21,42 @@ export function Settings() {
   const { priceBook, savePriceBook } = useWorkspace();
   const [tab, setTab] = useState<Tab>('branding');
   const [members, setMembers] = useState<Member[]>([]);
+  const [invites, setInvites] = useState<Invite[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<Role>('customer');
+  const [inviteNote, setInviteNote] = useState('');
+  const [inviting, setInviting] = useState(false);
   const [draft, setDraft] = useState<PriceBook>(priceBook);
   const manage = can(role, 'org.manage');
 
   useEffect(() => setDraft(priceBook), [priceBook]);
   useEffect(() => { if (org) void repository().listMembers(org.id).then(setMembers); }, [org]);
+  useEffect(() => { if (org && manage) void repository().listInvites(org.id).then(setInvites).catch(() => setInvites([])); }, [org, manage]);
+
+  const createInvite = async () => {
+    if (!org || !user) return;
+    setInviting(true);
+    try {
+      const invite = newInvite({ orgId: org.id, email: inviteEmail, role: inviteRole, by: { uid: user.uid, displayName: user.displayName } });
+      await repository().saveInvite(invite);
+      setInvites(list => [invite, ...list]);
+      setInviteEmail('');
+      // There is no mail server on this plan, so the link is handed back to be sent by hand.
+      await navigator.clipboard?.writeText(inviteLink(invite)).catch(() => {});
+      setInviteNote(`Invitation created and the link copied. Send it to ${invite.email} — it expires in ${INVITE_DAYS} days.`);
+    } catch (e) { setInviteNote(e instanceof Error ? e.message : 'The invitation could not be created.'); }
+    finally { setInviting(false); }
+  };
+  const copyLink = async (invite: Invite) => {
+    await navigator.clipboard?.writeText(inviteLink(invite)).catch(() => {});
+    setInviteNote(`Link for ${invite.email} copied.`);
+  };
+  const revoke = async (invite: Invite) => {
+    const next = { ...invite, revokedAt: new Date().toISOString() };
+    await repository().saveInvite(next);
+    setInvites(list => list.map(i => (i.token === invite.token ? next : i)));
+    setInviteNote(`Invitation for ${invite.email} withdrawn.`);
+  };
 
   if (!org) return null;
   const b = org.branding;
@@ -182,17 +215,79 @@ export function Settings() {
               ))}</tbody>
             </table>
           </Card>
-          <Card title="What each role can do">
-            <KV label="Owner / admin">Everything, including branding, price book and member roles</KV>
-            <KV label="Engineer">Customers, projects, sizing and quotations</KV>
-            <KV label="Sales">Customers, projects and quotations</KV>
-            <KV label="Viewer">Read-only access to the whole workspace</KV>
-            <p className="muted" style={{ marginTop: 12 }}>
-              {usingFirestore()
-                ? 'Invite a colleague by having them sign up with their work email, then add their account to this organization in the Firebase console. Security rules check membership on every read and write.'
-                : 'Member management becomes available once a Firebase project is configured. The demo workspace runs as a single owner.'}
-            </p>
-          </Card>
+          <div className="grid" style={{ gap: 16 }}>
+            <Card title="Invitations" subtitle="Send someone a link to join at a named role" tight>
+              {manage ? (
+                <>
+                  <div className="body" style={{ paddingBottom: 6 }}>
+                    <div className="grid cols-2" style={{ gap: 0, columnGap: 12 }}>
+                      <TextInput label="Email to invite" value={inviteEmail} onChange={setInviteEmail} />
+                      <Field label="Role">
+                        <select value={inviteRole} onChange={e => setInviteRole(e.target.value as Role)}>
+                          {invitableRoles(role).map(r => <option key={r} value={r}>{roleLabels[r]}</option>)}
+                        </select>
+                      </Field>
+                    </div>
+                    <p className="muted" style={{ margin: '0 0 12px' }}>{roleDescriptions[inviteRole]}</p>
+                    <button className="btn accent" disabled={!inviteEmail.includes('@') || inviting}
+                      onClick={() => void createInvite()}><UserPlus size={14} /> Create invitation</button>
+                    {inviteNote && <p className="muted" style={{ marginTop: 10 }}>{inviteNote}</p>}
+                  </div>
+                  <table className="data">
+                    <thead><tr><th>Invited</th><th>Role</th><th>State</th><th /></tr></thead>
+                    <tbody>{invites.length ? invites.map(i => {
+                      const state = inviteState(i);
+                      return (
+                        <tr key={i.token}>
+                          <td><b>{i.email}</b><br /><small className="muted">by {i.createdBy}</small></td>
+                          <td>{roleLabels[i.role]}</td>
+                          <td><Badge tone={state === 'pending' ? 'info' : state === 'accepted' ? 'good' : 'neutral'}>{state}</Badge></td>
+                          <td className="num">
+                            {state === 'pending' && <>
+                              <button className="btn sm" onClick={() => void copyLink(i)}><LinkIcon size={12} /> Copy link</button>{' '}
+                              <button className="btn sm danger" onClick={() => void revoke(i)}>Revoke</button>
+                            </>}
+                          </td>
+                        </tr>
+                      );
+                    }) : <tr><td colSpan={4} className="muted">No invitations yet.</td></tr>}</tbody>
+                  </table>
+                </>
+              ) : <p className="muted">Only an owner or administrator can invite people.</p>}
+            </Card>
+
+            <Card title="Customer self-registration" subtitle="Whether strangers from your website may open an account here">
+              <label className="check-row">
+                <input type="checkbox" checked={!!org.customerSignupEnabled} disabled={!manage}
+                  onChange={async e => { await repository().saveOrganization({ ...org, customerSignupEnabled: e.target.checked }); await refreshOrg(); }} />
+                <span>Allow anyone to register as a customer</span>
+              </label>
+              <p className="muted" style={{ marginTop: 8 }}>
+                They can design, size and price a plant indicatively, submit it for a formal quotation, and see nothing
+                but their own records. Pricing still requires a verified email address. Off by default — opening a
+                workspace to the public is a decision, not an accident.
+              </p>
+              {org.customerSignupEnabled && (
+                <div style={{ marginTop: 12 }}>
+                  <span className="label">Registration link</span>
+                  <div className="row" style={{ marginTop: 6 }}>
+                    <code className="mono" style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>{registerLink(org.id)}</code>
+                    <button className="btn sm" onClick={() => void navigator.clipboard?.writeText(registerLink(org.id)).then(() => setInviteNote('Registration link copied.'))}>
+                      <LinkIcon size={12} /> Copy
+                    </button>
+                  </div>
+                  <p className="muted" style={{ marginTop: 8 }}>
+                    To make this the destination of “Create an account” on the public site, set
+                    <code className="mono"> NEXT_PUBLIC_PUBLIC_ORG_ID={org.id}</code> before building.
+                  </p>
+                </div>
+              )}
+            </Card>
+
+            <Card title="What each role can do">
+              {roles.map(r => <KV key={r} label={roleLabels[r]}>{roleDescriptions[r]}</KV>)}
+            </Card>
+          </div>
         </div>
       )}
 

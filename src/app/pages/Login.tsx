@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { brand, defaultBranding } from '../../brand/brand';
 import { describeAuthError, useSession } from '../../platform/auth';
 import { firebaseEnabled } from '../../platform/firebase';
+import { publicOrgId } from '../../platform/joining';
+import Link from 'next/link';
 
 export function Login() {
   const { signIn, signUp, signInWithGoogle, signInAsDemo } = useSession();
@@ -67,10 +69,21 @@ export function Login() {
               Open the demo workspace
             </button>
             <p className="muted" style={{ textAlign: 'center', marginTop: 16, fontSize: 12 }}>
-              {mode === 'in' ? 'No workspace yet?' : 'Already have one?'}{' '}
+              {mode === 'in' ? 'Setting up a new supplier workspace?' : 'Already have one?'}{' '}
               <button className="btn ghost sm" style={{ padding: 0, color: 'var(--blue)' }} onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setError(''); }}>
                 {mode === 'in' ? 'Create one' : 'Sign in'}
               </button>
+            </p>
+            {/* Two different arrivals. This form opens a new supplier workspace; a customer coming
+                from the website joins an existing one, and an invited colleague follows their link. */}
+            {publicOrgId() && (
+              <p className="muted" style={{ textAlign: 'center', marginTop: 4, fontSize: 12 }}>
+                Here as a customer?{' '}
+                <Link href="/register/" style={{ color: 'var(--blue)' }}>Create an account</Link>
+              </p>
+            )}
+            <p className="muted" style={{ textAlign: 'center', marginTop: 4, fontSize: 12 }}>
+              Invited by a colleague? Follow the link in your invitation.
             </p>
           </div>
         </div>

@@ -4,7 +4,7 @@ import {
   query, setDoc, type Firestore,
 } from 'firebase/firestore';
 import { firebase, firebaseEnabled } from './firebase';
-import { nowIso, type Activity, type Customer, type Member, type Organization, type OrgSettings, type Project, type Quote } from './types';
+import { nowIso, type Activity, type Customer, type Invite, type Member, type Organization, type OrgSettings, type Project, type Quote } from './types';
 
 /**
  * Data access for the platform. Both adapters expose the same surface so the UI never branches:
@@ -26,6 +26,10 @@ export type CollectionName = keyof Collections;
 
 export interface Repository {
   readonly kind: 'firestore' | 'local';
+  listInvites(orgId: string): Promise<Invite[]>;
+  /** Read one invitation by its token. The token is the credential, so no membership is required. */
+  getInvite(orgId: string, token: string): Promise<Invite | null>;
+  saveInvite(invite: Invite): Promise<void>;
   listOrganizations(uid: string): Promise<Organization[]>;
   getOrganization(orgId: string): Promise<Organization | null>;
   saveOrganization(org: Organization): Promise<void>;
@@ -66,6 +70,12 @@ class FirestoreRepository implements Repository {
   async listMembers(orgId: string) { const snap = await getDocs(this.path(orgId, 'members')); return snap.docs.map(d => ({ uid: d.id, ...d.data() }) as Member); }
   async saveMember(orgId: string, member: Member) { await setDoc(doc(this.db, 'organizations', orgId, 'members', member.uid), stripUndefined(member), { merge: true }); }
   async removeMember(orgId: string, uid: string) { await deleteDoc(doc(this.db, 'organizations', orgId, 'members', uid)); }
+  async listInvites(orgId: string) { const snap = await getDocs(this.path(orgId, 'invites')); return snap.docs.map(d => ({ token: d.id, ...d.data() }) as Invite); }
+  async getInvite(orgId: string, token: string) {
+    const snap = await getDoc(doc(this.db, 'organizations', orgId, 'invites', token));
+    return snap.exists() ? ({ token: snap.id, ...snap.data() } as Invite) : null;
+  }
+  async saveInvite(invite: Invite) { await setDoc(doc(this.db, 'organizations', invite.orgId, 'invites', invite.token), stripUndefined(invite), { merge: true }); }
 
   async list<K extends CollectionName>(orgId: string, name: K) {
     const snap = await getDocs(query(this.path(orgId, name), orderBy(sortKey(name), 'desc'), limit(pageSize(name))));
@@ -91,8 +101,8 @@ class FirestoreRepository implements Repository {
 }
 
 const KEY = 'bess-studio-local-v1';
-type LocalShape = { organizations: Record<string, Organization>; members: Record<string, Record<string, Member>>; settings: Record<string, OrgSettings>; data: Record<string, Record<string, Record<string, unknown>>> };
-const emptyLocal = (): LocalShape => ({ organizations: {}, members: {}, settings: {}, data: {} });
+type LocalShape = { organizations: Record<string, Organization>; members: Record<string, Record<string, Member>>; invites: Record<string, Record<string, Invite>>; settings: Record<string, OrgSettings>; data: Record<string, Record<string, Record<string, unknown>>> };
+const emptyLocal = (): LocalShape => ({ organizations: {}, members: {}, invites: {}, settings: {}, data: {} });
 
 export class LocalRepository implements Repository {
   readonly kind = 'local' as const;
@@ -127,6 +137,9 @@ export class LocalRepository implements Repository {
   async listMembers(orgId: string) { return Object.values(this.read().members[orgId] ?? {}); }
   async saveMember(orgId: string, member: Member) { const s = this.read(); (s.members[orgId] ??= {})[member.uid] = member; this.write(s); }
   async removeMember(orgId: string, uid: string) { const s = this.read(); delete s.members[orgId]?.[uid]; this.write(s); }
+  async listInvites(orgId: string) { return Object.values(this.read().invites?.[orgId] ?? {}); }
+  async getInvite(orgId: string, token: string) { return this.read().invites?.[orgId]?.[token] ?? null; }
+  async saveInvite(invite: Invite) { const s = this.read(); ((s.invites ??= {})[invite.orgId] ??= {})[invite.token] = invite; this.write(s); }
 
   async list<K extends CollectionName>(orgId: string, name: K) { return this.rows(this.read(), orgId, name) as Collections[K][]; }
   async get<K extends CollectionName>(orgId: string, name: K, id: string) { return (this.read().data[orgId]?.[name]?.[id] as Collections[K]) ?? null; }

@@ -23,6 +23,25 @@ service cloud.firestore {
     function ownsExisting() { return resource.data.ownerUid == request.auth.uid; }
     function ownsIncoming() { return request.resource.data.ownerUid == request.auth.uid; }
     function unchanged(field) { return request.resource.data[field] == resource.data[field]; }
+    function orgDoc(orgId) { return get(/databases/$(database)/documents/organizations/$(orgId)); }
+    function inviteDoc(orgId, token) { return get(/databases/$(database)/documents/organizations/$(orgId)/invites/$(token)); }
+    /**
+     * Whether this membership write is a valid acceptance of the invitation it names.
+     *
+     * The role must be the invited one, the address must be the invited one, and the invitation
+     * must be unused, unrevoked and unexpired. Possession of the link alone is therefore not
+     * enough — the signed-in address has to match it too.
+     */
+    function acceptingInvite(orgId) {
+      return 'inviteToken' in request.resource.data
+        && request.resource.data.inviteToken != null
+        && exists(/databases/$(database)/documents/organizations/$(orgId)/invites/$(request.resource.data.inviteToken))
+        && inviteDoc(orgId, request.resource.data.inviteToken).data.role == request.resource.data.role
+        && inviteDoc(orgId, request.resource.data.inviteToken).data.email == request.auth.token.email
+        && inviteDoc(orgId, request.resource.data.inviteToken).data.acceptedAt == null
+        && inviteDoc(orgId, request.resource.data.inviteToken).data.revokedAt == null
+        && request.time.toMillis() < inviteDoc(orgId, request.resource.data.inviteToken).data.expiresAtMs;
+    }
     // A record may not be moved to a different tenant by writing a foreign orgId.
     function staysInOrg(orgId) { return !('orgId' in request.resource.data) || request.resource.data.orgId == orgId; }
 
@@ -33,7 +52,9 @@ service cloud.firestore {
     match /organizations/{orgId} {
       // The first member is written in the same client session that creates the organization.
       allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
-      allow read: if isMember(orgId);
+      // A signed-in visitor following an invitation or a registration link has to be able to see
+      // which workspace it belongs to before deciding to join it.
+      allow read: if isMember(orgId) || signedIn();
       allow update: if canManage(orgId);
       allow delete: if hasRole(orgId, ['owner']);
 
@@ -41,11 +62,42 @@ service cloud.firestore {
         // A customer may read their own membership — that is how the client learns its role —
         // but not the supplier's staff list.
         allow read: if isStaff(orgId) || (signedIn() && request.auth.uid == uid);
-        // Bootstrap: the organization creator may add themselves as owner.
+
+        // Three ways a membership comes into being, and no fourth. None of them lets the caller
+        // choose a role freely: an administrator names it, an invitation named it, or it is
+        // `customer` in a workspace that has opened itself to the public.
         allow create: if canManage(orgId)
+          // Bootstrap: the organization creator may add themselves as owner.
           || (signedIn() && request.auth.uid == uid
-              && get(/databases/$(database)/documents/organizations/$(orgId)).data.createdBy == request.auth.uid);
-        allow update, delete: if canManage(orgId);
+              && get(/databases/$(database)/documents/organizations/$(orgId)).data.createdBy == request.auth.uid)
+          // Accepting an invitation. The token is in the membership being written, which is what
+          // lets the rule find the invitation that authorises the role being claimed.
+          || (signedIn() && request.auth.uid == uid && acceptingInvite(orgId))
+          // Registering as a customer. Never any other role.
+          || (signedIn() && request.auth.uid == uid
+              && request.resource.data.role == 'customer'
+              && orgDoc(orgId).data.customerSignupEnabled == true);
+
+        // A member may not promote themselves; role changes are an administrator's.
+        allow update: if canManage(orgId)
+          || (signedIn() && request.auth.uid == uid && unchanged('role'));
+        allow delete: if canManage(orgId);
+      }
+
+      // Invitations. The document id is the token and the token is the credential, so a read is
+      // allowed to anyone who can name one — guessing is what the 128 bits are for. Listing the
+      // collection is a different matter and stays with administrators.
+      match /invites/{token} {
+        allow get: if signedIn();
+        allow list: if canManage(orgId);
+        allow create, delete: if canManage(orgId);
+        // An administrator may change an invitation. The invited party may only burn it, and only
+        // the one addressed to them.
+        allow update: if canManage(orgId)
+          || (signedIn()
+              && resource.data.email == request.auth.token.email
+              && request.resource.data.acceptedByUid == request.auth.uid
+              && unchanged('role') && unchanged('email') && unchanged('expiresAtMs'));
       }
 
       match /settings/{docId} {

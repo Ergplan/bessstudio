@@ -27,6 +27,12 @@ export type Session = {
   refreshVerification(): Promise<boolean>;
   signIn(email: string, password: string): Promise<void>;
   signUp(email: string, password: string, displayName: string, orgName: string): Promise<void>;
+  /**
+   * Create an account without creating a workspace for it, for someone joining an existing one.
+   * The caller writes the membership afterwards; until it exists the account belongs nowhere,
+   * which is deliberate — an invitation or a registration is what places it.
+   */
+  signUpWithoutWorkspace(email: string, password: string, displayName: string): Promise<SessionUser>;
   signInWithGoogle(): Promise<void>;
   signInAsDemo(): Promise<void>;
   signOutUser(): Promise<void>;
@@ -186,6 +192,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // A new account cannot see a price until the address is proved, so the mail goes out with
       // the sign-up rather than waiting for them to find the banner.
       try { await sendEmailVerification(credential.user); } catch { /* the banner offers it again */ }
+    },
+    async signUpWithoutWorkspace(email, password, displayName) {
+      setDemoMode(false);
+      const fb = firebase();
+      if (!fb) throw new Error('Joining a workspace needs a configured Firebase project.');
+      const credential = await createUserWithEmailAndPassword(fb.auth, email, password);
+      if (displayName) await updateProfile(credential.user, { displayName });
+      try { await sendEmailVerification(credential.user); } catch { /* the banner offers it again */ }
+      return { uid: credential.user.uid, email, displayName: displayName || email.split('@')[0], photoURL: null, emailVerified: false };
     },
     async signInWithGoogle() {
       setDemoMode(false);
