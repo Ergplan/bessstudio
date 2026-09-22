@@ -550,14 +550,25 @@ See §5. `/studio` redirects here.
 
 A parametric container assembly in three.js, lazy-loaded so the first page of the site stays light.
 
-**Layout.** Project explorer left (assembly tree down to individual packs, and a visibility tab);
-canvas centre; component inspector right; statistics strip below.
+**Layout.** Project explorer left (a find box, the assembly tree down to individual packs, and a
+visibility tab); canvas centre; component inspector right; statistics strip below.
+
+**Finding a component.** The tree stops at packs, so reaching one of 4,992 cells meant hunting a
+numbered button in a grid of a hundred. The find box takes an identifier and lands on it exactly,
+a fragment and ranks what starts with it, or a bare number the way a component schedule reads —
+`42` finds `C042`. Choosing a hit opens whatever contains it and selects it there, so the canvas
+shows the component in its context.
+
+**Selection.** Whatever is selected carries a box around it, built from twelve bars sized against
+the component, because WebGL ignores line width and a hairline round one of 4,992 cells is not a
+selection. It is clipped by the section plane like everything else.
 
 **Views.** Isometric, top, front, side, reset. Orbit, zoom, pan.
 
 **Keyboard.** Every scene control has a key: `1`–`4` for the views, `R`/`W`/`L`/`N`/`D` for the
 layers, `E` and `C` for the two traces, `S` and `A` for the section, `[` and `]` for explode, `G`
-for the walk, `P` for presentation, `Backspace` to step out one level, `?` for the list. Typing in
+for the walk, `P` for presentation, `F` to frame the selection, `/` to find a component,
+`Backspace` to step out one level, `?` for the list. Typing in
 a field is typing; modified presses belong to the browser; the walk keeps the arrow keys and
 Escape while it is running. A test holds the list and the bindings to each other, so neither an
 undiscoverable binding nor an entry that does nothing can survive.

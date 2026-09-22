@@ -237,3 +237,17 @@
 .app .keys-list span{color:var(--s-muted);font-size:12.5px}
 .app .keys>.muted{margin:0;padding:0 18px 16px;font-size:11.5px}
 @media (max-width:640px){.app .keys-list{grid-template-columns:1fr}}
+/* Finding a component. A container holds 4,992 cells; the tree only goes down to packs. */
+.app .explorer-find{display:flex;align-items:center;gap:8px;margin:0 14px 10px;padding:7px 9px;background:rgba(255,255,255,.04);border:1px solid var(--s-line)}
+.app .explorer-find svg{color:var(--s-dim);flex:none}
+.app .explorer-find input{flex:1;min-width:0;background:none;border:0;color:var(--s-text);font-size:12.5px;outline:none}
+.app .explorer-find input::placeholder{color:var(--s-dim)}
+.app .explorer-find button{background:none;border:0;padding:2px;color:var(--s-dim);min-height:0}
+.app .explorer-find button:hover{color:var(--s-text);background:none}
+.app .find-results{flex:1;overflow:auto;padding:0 8px 8px}
+.app .find-results button{display:block;width:100%;text-align:left;background:none;border:0;border-radius:0;padding:7px 8px;min-height:0}
+.app .find-results button:hover{background:rgba(255,255,255,.05)}
+.app .find-results button.selected{background:rgba(147,190,73,.14)}
+.app .find-results b{display:block;color:var(--s-text);font-family:var(--s-mono);font-size:11.5px;letter-spacing:.04em}
+.app .find-results span{display:block;color:var(--s-dim);font-size:11px;margin-top:2px}
+.app .find-results .muted{padding:10px 8px;font-size:12px}

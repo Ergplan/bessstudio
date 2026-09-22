@@ -18,6 +18,8 @@ export type Action =
   | { kind: 'walk' }
   | { kind: 'present' }
   | { kind: 'up' }
+  | { kind: 'frame' }
+  | { kind: 'find' }
   | { kind: 'shortcuts' };
 
 export const shortcuts: { keys: string; label: string; action: Action }[] = [
@@ -37,6 +39,8 @@ export const shortcuts: { keys: string; label: string; action: Action }[] = [
   { keys: '[  ]', label: 'Explode', action: { kind: 'explode', by: 0.1 } },
   { keys: 'G', label: 'Guided walk', action: { kind: 'walk' } },
   { keys: 'P', label: 'Presentation mode', action: { kind: 'present' } },
+  { keys: 'F', label: 'Frame the selection', action: { kind: 'frame' } },
+  { keys: '/', label: 'Find a component', action: { kind: 'find' } },
   { keys: 'Backspace', label: 'Up one level', action: { kind: 'up' } },
   { keys: '?', label: 'This list', action: { kind: 'shortcuts' } },
 ];
@@ -47,6 +51,7 @@ export function actionFor(e: { key: string; ctrlKey: boolean; metaKey: boolean; 
   if (e.key === '[') return { kind: 'explode', by: -0.1 };
   if (e.key === ']') return { kind: 'explode', by: 0.1 };
   if (e.key === 'Backspace') return { kind: 'up' };
+  if (e.key === '/') return { kind: 'find' };
   if (e.key === '?') return { kind: 'shortcuts' };
   const hit = shortcuts.find(s => s.keys.length === 1 && s.keys.toLowerCase() === e.key.toLowerCase());
   return hit && hit.action.kind !== 'explode' ? hit.action : null;

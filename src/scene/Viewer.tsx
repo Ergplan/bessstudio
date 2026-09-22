@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import {useStudio} from '../state/store';
 import {primitives,type Primitive,belongs,displacement} from '../geometry/primitives';
 import {planSite,sitePrimitives} from '../geometry/site';
-import {keeps,type Cut} from './section';
+import {centreOf,keeps,type Cut} from './section';
 import {type Model,type Vec,add} from '../domain/model';
 import {brand} from '../brand/brand';
 import {qualification} from '../config/schema';
@@ -39,6 +39,32 @@ function SectionPlane({cut}:{cut:Cut}){
   },[cut,invalidate]);
   useEffect(()=>()=>{sectionPlane.constant=PARKED;},[]);
   return null;
+}
+
+/**
+ * A box around whatever is selected.
+ *
+ * Selection was a slight tint on the component's own colour, which is legible when the component
+ * fills the canvas and invisible when it is one of four thousand. WebGL ignores line width, so the
+ * box is built from twelve thin bars sized against the component — a cell gets an outline it can
+ * carry and a container does not get a hairline. Clipped by the section plane like everything else.
+ */
+function SelectionBox({node}:{node:{position:Vec;size:Vec;kind?:string}|null}){
+  const material=useMemo(()=>new THREE.MeshBasicMaterial({color:'#c6ed5a',clippingPlanes:[sectionPlane],toneMapped:false}),[]);
+  useEffect(()=>()=>material.dispose(),[material]);
+  const bars=useMemo(()=>{
+    if(!node)return [];
+    const [x,y,z]=node.size.map(v=>v*1.07) as Vec;
+    const t=Math.max(.004,Math.min(x,y,z)*.075);
+    const out:{key:string;position:Vec;scale:Vec}[]=[];
+    for(const sy of [-1,1])for(const sz of [-1,1])out.push({key:`x${sy}${sz}`,position:[0,sy*y/2,sz*z/2],scale:[x+t,t,t]});
+    for(const sx of [-1,1])for(const sz of [-1,1])out.push({key:`y${sx}${sz}`,position:[sx*x/2,0,sz*z/2],scale:[t,y+t,t]});
+    for(const sx of [-1,1])for(const sy of [-1,1])out.push({key:`z${sx}${sy}`,position:[sx*x/2,sy*y/2,0],scale:[t,t,z+t]});
+    return out;
+  },[node]);
+  if(!node)return null;
+  return <group position={centreOf(node)}>{bars.map(b=>
+    <mesh key={b.key} geometry={boxGeo} material={material} position={b.position} scale={b.scale}/>)}</group>;
 }
 
 const enclosureBox=(e:Vec)=>new THREE.Box3(new THREE.Vector3(-e[0]/2,0,-e[2]/2),new THREE.Vector3(e[0]/2,e[1],e[2]/2));
@@ -83,6 +109,14 @@ function Scene({model,api}:{model:Model;api:React.Ref<ViewerHandle>}){const {sco
    return {axis:section.axis,at:min-pad+(max-min+2*pad)*section.at};
  },[section,bounds]);
  const inCut=keeps(cut);
+ // Only when something inside the current scope is picked out — outlining the scope itself would
+ // just draw a box round the whole canvas.
+ const selectedNode=useMemo(()=>{
+   if(selected===scope)return null;
+   if(scope==='SITE')return plan?.placements.find(p=>p.id===selected)??null;
+   const n=model.nodes.find(n=>n.id===selected);
+   return n?{position:n.position,size:n.size,kind:n.kind}:null;
+ },[selected,scope,plan,model]);
  const fit=()=>{const center=bounds.getCenter(new THREE.Vector3()),extent=bounds.getSize(new THREE.Vector3()),distance=Math.max(...extent.toArray())*1.7+1;const views:Record<string,Vec>={iso:[1,.78,1.15],top:[0,1,.0001],front:[0,.12,1],side:[1,.12,0]};camera.position.copy(center).add(new THREE.Vector3(...views[config.camera.view]).normalize().multiplyScalar(distance));camera.up.set(0,1,0);camera.lookAt(center);if(camera instanceof THREE.OrthographicCamera){camera.updateMatrixWorld(true);let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){const p=new THREE.Vector3(x,y,z).applyMatrix4(camera.matrixWorldInverse);minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);}const headroom=config.presentation?90:210;camera.zoom=Math.min(size.width*.82/Math.max(.3,maxX-minX),Math.max(120,size.height-headroom)/Math.max(.3,maxY-minY));camera.updateProjectionMatrix();}controls.current?.target.copy(center);controls.current?.update();invalidate();};
  useEffect(fit,[scope,revision,config.preset,config.presentation,config.camera.view,size.width,size.height,model.dimensions.pack.join(),model.dimensions.enclosure.join()]);
  useEffect(()=>{if(config.camera.position&&config.camera.target){camera.position.set(...config.camera.position);controls.current?.target.set(...config.camera.target);if(camera instanceof THREE.OrthographicCamera){camera.zoom=config.camera.zoom;camera.updateProjectionMatrix();}controls.current?.update();}},[]);
@@ -93,6 +127,7 @@ function Scene({model,api}:{model:Model;api:React.Ref<ViewerHandle>}){const {sco
  {!config.presentation&&config.visibility.labels&&(scope==='SITE'?(plan?.placements.filter(p=>p.kind==='container')??[]).map(p=>({id:p.id,kind:'container' as const,position:p.position,size:p.size})):scope==='BESS'?model.racks:scope.includes('/C')?model.cells.filter(n=>n.id===scope):model.packs.filter(n=>belongs(n.id,scope))).filter(inCut).map(n=><Html key={n.id} center position={add(add(n.position,[0,n.size[1]+.1,0]),displacement(n,model))} distanceFactor={undefined}><button className="scene-label" onClick={()=>select(n.id)} onDoubleClick={()=>useStudio.getState().focus(n.id)}>{n.id}</button></Html>)}
  {!config.presentation&&config.visibility.labels&&scope!=='BESS'&&model.packs.filter(p=>belongs(p.id,scope)&&inCut(p)).flatMap(p=>['+','-'].map(pol=><Html key={`${p.id}${pol}`} center position={add(model.electrical.ports[`${p.id}:${pol}`].position,displacement(p,model))}><span className="polarity-label">{pol}</span></Html>))}
  <SectionPlane cut={cut}/>
+ <SelectionBox node={selectedNode}/>
 {config.visibility.dimensions&&<Dimensions bounds={scope==='BESS'?enclosureBox(model.dimensions.enclosure):bounds}/>}
  <OrbitControls ref={controls} onEnd={()=>useStudio.getState().update(c=>{c.camera.position=camera.position.toArray() as Vec;c.camera.target=controls.current.target.toArray() as Vec;c.camera.zoom=camera.zoom;})} makeDefault enableDamping dampingFactor={.12} minZoom={3} maxZoom={2800}/></>;
 }

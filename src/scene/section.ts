@@ -11,8 +11,8 @@ export type Cut = { axis: 0 | 1 | 2; at: number } | null;
  * consistent — a rack and a pack sit on their base, a cell on its centre — so the test is made
  * against the point the eye judges the component by.
  */
-export const keeps = (cut: Cut) => (n: { position: Vec; size: Vec; kind?: string }): boolean => {
-  if (!cut) return true;
-  const centre = [n.position[0], n.kind === 'cell' ? n.position[1] : n.position[1] + n.size[1] / 2, n.position[2]];
-  return centre[cut.axis] <= cut.at;
-};
+export const centreOf = (n: { position: Vec; size: Vec; kind?: string }): Vec =>
+  [n.position[0], n.kind === 'cell' ? n.position[1] : n.position[1] + n.size[1] / 2, n.position[2]];
+
+export const keeps = (cut: Cut) => (n: { position: Vec; size: Vec; kind?: string }): boolean =>
+  !cut || centreOf(n)[cut.axis] <= cut.at;

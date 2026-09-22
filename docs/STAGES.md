@@ -77,6 +77,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | A path trace lights only the path that was asked for | `src/geometry/primitives.ts` | unit tests |
 | A component clipped away by the section keeps no label | `src/scene/section.ts` | unit tests |
 | Every listed shortcut works, and every binding is listed | `src/scene/shortcuts.ts` | unit tests |
+| A full identifier finds exactly one component | `src/domain/find.ts` | unit tests |
 | The site never overlaps two units, and everything placed sits inside the plot | `src/geometry/site.ts` | unit tests |
 | The site is laid out at the selected product's dimensions, modelled interior or not | `src/geometry/site.ts`, `src/app/pages/Studio.tsx` | unit tests |
 | Augmentation units have a reserved pad on the plot from day one | `src/geometry/site.ts` | unit tests |
@@ -87,7 +88,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 Baseline commands:
 
 ```bash
-npm run test        # 206 unit tests
+npm run test        # 212 unit tests
 npm run test:rules  # 41 Firestore rules tests, against the emulator
 npm run build       # static export
 ```
