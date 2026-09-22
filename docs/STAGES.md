@@ -3,9 +3,8 @@
 The live record of the build defined in [`docs/SITE.md` §17](./SITE.md#17-how-this-gets-built).
 `SITE.md` is the contract; this file is what actually happened.
 
-> **S0 through S8 are built and ready for acceptance.** S9 onward are `PLANNED` — not built, not
-> tested. Fixtures F01 to F06 have been run and passed; F07 and F08 have not, and belong to stages
-> that have not started. Writing a check into this file is not evidence that it passed.
+> **S0 through S9 are built and ready for acceptance.** S11 and S12 are the two that remain; S10 is
+> deferred by decision. Fixtures F01 to F07 have been run and passed; F08 belongs to S11. Writing a check into this file is not evidence that it passed.
 >
 > **One check cannot be passed by testing.** §17.2 asks S6 for an observed beginner walkthrough or
 > an explicit note that usability validation is pending. Nobody has watched a beginner use this,
@@ -38,14 +37,14 @@ when a prerequisite or a mandatory check fails.
 | **S6** | Lessons 1–6 | S5 | **`READY FOR ACCEPTANCE`** *(usability validation pending)* | review pending | [packet](#s6--lessons-1-to-6) |
 | **S7** | Contract-demand UPS sizing | S6 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s7--contract-demand-ups-sizing) |
 | **S8** | Lead-acid versus LFP | S7 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s8--lead-acid-against-lithium) |
-| **S9** | Indian conditions and lifecycle cost | S8 | `BUILDING` | — | — |
+| **S9** | Indian conditions and lifecycle cost | S8 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s9--indian-conditions-and-lifecycle-cost) |
 | **S10** | Synchronised 3D | S9 | **`DEFERRED`** by decision — 2D first | — | — |
-| **S11** | Project and quotation integration | **S9** *(revised by the S10 deferral)* | `PLANNED` | — | — |
+| **S11** | Project and quotation integration | **S9** *(revised by the S10 deferral)* | `BUILDING` | — | — |
 | **S12** | Release readiness | S11 | `PLANNED` | — | — |
 
 ## Fixtures
 
-Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F06 have run and passed; the rest belong to stages that have not started.
+Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F07 have run and passed; the rest belong to stages that have not started.
 
 | ID | Covers | Owner stage | State |
 | --- | --- | --- | --- |
@@ -55,7 +54,7 @@ Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F06 have run and
 | F04 | backup reserve and the outage-mode transition | S5 | **PASS** — `src/tests/sim.s5.test.ts` |
 | F05 | UPS sizing, the 500 kVA worked example | S7 | **PASS** — `src/tests/sim.ups.test.ts` |
 | F06 | repeated outages, reserve carried forward | S8 | **PASS** — `src/tests/sim.chemistry.test.ts` |
-| F07 | lifecycle cost, discounting and no-crossover | S9 | NOT RUN |
+| F07 | lifecycle cost, discounting and no-crossover | S9 | **PASS** — `src/tests/sim.india.test.ts` |
 | F08 | cross-tenant access and provenance | S11 | NOT RUN |
 
 ## What is already true, and must stay true
@@ -984,6 +983,105 @@ Rollback: `git revert c2b11e5`. No migrations; nothing is written to storage.
 
 **READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S9 — Indian conditions and
 lifecycle cost.**
+
+---
+
+## S9 — Indian conditions and lifecycle cost
+
+**State:** READY FOR ACCEPTANCE — review pending
+**Revision:** `626bd83`
+**Depends on:** S8 (READY FOR ACCEPTANCE)
+
+### 1. Scope
+
+Delivered: three operating scenarios, the lifecycle ledger, and F07.
+
+- **`src/sim/india.ts`** — three illustrative Indian operating scenarios, and not one city name
+  between them: a conditioned office or IT room at 25 °C with an outage a month; a warm industrial
+  electrical room at 35 °C with one a day; and three interruptions an hour apart with a recharge
+  window too short to use. Each states the **room** temperature and the **battery** temperature
+  separately, with the rise between them declared as an exposed assumption. Teaching tariffs of ₹6,
+  ₹9 and ₹12 per kilowatt-hour, labelled as teaching values on every result.
+- **`src/sim/lifecycle.ts`** — a ledger of dated lines. A missing price is carried as unknown,
+  listed beside the total and never counted as zero; the total says it is incomplete. Tax is
+  explicit and nothing about it is assumed. Recurring costs escalate and capital ones do not.
+  Replacement timing comes from evidence where there is some — the float-life model's response to
+  temperature — and from declared sensitivity cases where there is none.
+- **The panels** — an operating-conditions selector, a horizon of 5, 10 or 15 years, the tariff, and
+  a switch between no prices entered and an illustrative quotation, all inside lesson 7's second
+  step rather than as beginner controls.
+
+Not claimed: any market price, any GST rate, any recycling arrangement, any avoided-outage benefit,
+and any lithium service life.
+
+### 2. Environment
+
+As S8. TypeScript engine in the browser, per the departure recorded in the S2 packet. No new
+runtime dependency.
+
+### 3. Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **636 passed** (+31) | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | 48 passed | **PASS** |
+| Static export | `npm run build` | 17 routes | 17 routes | **PASS** |
+| **F07** undiscounted total | unit | 1,000,000 + 400,000 + 500,000 − 100,000 | ₹1,800,000 exactly | **PASS** |
+| **F07** discounted total | unit | the closed-form sum at 10% real | ₹1,517,042.56, matching an independently computed annuity to 1e-6 | **PASS** |
+| **F07** zero discount rate | unit | equals the undiscounted total | equal to 1e-9 | **PASS** |
+| **F07** no crossover | unit | reported as none, not as a failure | null against a ledger cheaper in every year | **PASS** |
+| **F07** a crossover that exists | unit | the year named, checked by hand | year 9, where the cumulative totals actually cross | **PASS** |
+| Escalation applies to the right lines | unit | recurring escalates, capital does not | matches a hand-summed escalating annuity | **PASS** |
+| A missing price is not a zero | unit | listed, and the total marked incomplete | 16 unknown lines per option by default, total incomplete, nothing counted as free | **PASS** |
+| No market price claimed | unit | every price null until entered | battery, conversion, disposal, residual and both tax fields null | **PASS** |
+| No assumed tax | unit | rate and credit eligibility unstated | both null, with a note saying so | **PASS** |
+| Replacement on evidence | unit | temperature drives the lead-acid interval | 4.7 years at 26 °C against 2.0 at 38 °C; lithium on declared cases | **PASS** |
+| No fixed replacement rule | unit | nothing hard-codes three years or ten | the lithium evidence is `sensitivity`, and says why | **PASS** |
+| Room and battery kept apart | unit | two temperatures, with the rise declared | every preset states both and the basis for the difference | **PASS** |
+| No city, state or national average | unit | none anywhere in the presets | eight city names and two average phrasings all absent | **PASS** |
+| The day is an example, not a lifetime | unit | annual repetition stated explicitly | every preset says so | **PASS** |
+| Schedule independent of design autonomy | unit | more autonomy, same three outages | 3 outages asked at both 15 and 60 minutes; the equipment grows, the schedule does not | **PASS** |
+| Teaching tariffs labelled | unit | ₹6/₹9/₹12, not DISCOM tariffs | labelled on the constant and in every comparison's disclosures | **PASS** |
+| End of life not priced without an arrangement | unit | unknown, with the rules named | disposal unknown on both options; the Battery Waste Management Rules and the scrap-sale warning carried | **PASS** |
+| Avoided-outage losses excluded | unit | outside the base total | stated in every comparison | **PASS** |
+| Neither result forced | unit | one case each way | lead-acid cheaper in a conditioned room over 5 years; lithium carries more of the repeated-interruption day | **PASS** |
+| Crossover only where they cross | unit | sign changes at the named year | holds across all three presets | **PASS** |
+| 5, 10 and 15-year views | unit | same inputs, three horizons | all three complete with the right number of years | **PASS** |
+| Tariff moves only what a tariff touches | unit | monotone in the tariff | ₹6 < ₹9 < ₹12 on the same configuration | **PASS** |
+| Protected load charged to neither | unit | only the losses are charged | 1,000 kWh at 95% charges 50 kWh, and the basis says so | **PASS** |
+| Cooling not counted twice | unit | only beyond the auxiliaries | no cooling lines at zero incremental; ten at 500 kWh, with the reason | **PASS** |
+| Browser: no prices entered | browser | incomplete, and no crossover claimed | 16 unpriced lines each, "no crossover is stated, because the totals are incomplete" | **PASS** |
+| Browser: with a quotation | browser | complete totals and a verdict | ₹48.68 lakh against ₹2.36 cr, no crossover within 10 years | **PASS** |
+| Browser: the three presets | browser | temperature and readiness follow the preset | 25/26 °C, 35/38 °C, 30/32 °C; 1 of 3 outages carried by lead-acid against 3 of 3 | **PASS** |
+| Browser: horizon and tariff | browser | both change the totals | 10 → 15 years and ₹9 → ₹12 both move it, in the right direction | **PASS** |
+| No page or console errors | browser | none | none | **PASS** |
+
+### 4. Browser walkthrough
+
+`scratchpad/s9.mjs` — the default with nothing priced, then an illustrative quotation, then each of
+the three operating presets, then fifteen years, then ₹12/kWh, reading the ledger, the crossover
+statement and the unpriced lines at each step.
+
+### 5. Defects
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D58 | A crossover year was named from two totals that were each missing sixteen prices. It was the most confident figure on the screen and the least supported. | **major** | **fixed**; incomplete totals yield no crossover, and the panel says why rather than going quiet. |
+| D59 | The lithium configuration is several times the energy the duty needs, because the smallest unit in the catalogue is that size — so part of the cost difference was product granularity being read as chemistry. | major | **fixed**; where a configuration exceeds twice what the duty needs, the comparison says so and says what would change it. |
+
+### 6. Demonstration and rollback
+
+Demo: **Lessons** → *UPS support by contract demand* → scroll to **The conditions it runs in**.
+Switch to *Repeated interruptions, limited recharge* and read the outages carried; then switch
+prices from **None entered** to **Illustrative quotation** and watch the crossover statement change
+from a refusal into an answer.
+Rollback: `git revert 626bd83`. No migrations; nothing is written to storage.
+
+### 7. Decision
+
+**READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S11 — Project and quotation
+integration** (S10 deferred by decision).
 
 ---
 
