@@ -3,9 +3,13 @@
 The live record of the build defined in [`docs/SITE.md` §17](./SITE.md#17-how-this-gets-built).
 `SITE.md` is the contract; this file is what actually happened.
 
-> **S0 through S5 are built and ready for acceptance.** S6 onward are `PLANNED` — not built, not
+> **S0 through S6 are built and ready for acceptance.** S7 onward are `PLANNED` — not built, not
 > tested. Fixtures F01 to F04 have been run and passed; F05–F08 have not, and belong to stages
 > that have not started. Writing a check into this file is not evidence that it passed.
+>
+> **One check cannot be passed by testing.** §17.2 asks S6 for an observed beginner walkthrough or
+> an explicit note that usability validation is pending. Nobody has watched a beginner use this,
+> so it is **pending**, and S6 is ready for acceptance on everything else.
 >
 > **Two rounds of work have landed since S1 outside the numbered register** — the studio
 > experience, and then an audit of the maths, the documents and the interface. Neither opened a
@@ -31,8 +35,8 @@ when a prerequisite or a mandatory check fails.
 | **S3** | First charge/discharge lesson | S2 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s3--first-chargedischarge-lesson) |
 | **S4** | PCS and BMS behaviour | S3 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s4--pcs-and-bms-behaviour) |
 | **S5** | jouleWise ergOS EMS | S4 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s5--joulewise-ergos-ems) |
-| **S6** | Lessons 1–6 | S5 | `BUILDING` | — | — |
-| **S7** | Contract-demand UPS sizing | S6 | `PLANNED` | — | — |
+| **S6** | Lessons 1–6 | S5 | **`READY FOR ACCEPTANCE`** *(usability validation pending)* | review pending | [packet](#s6--lessons-1-to-6) |
+| **S7** | Contract-demand UPS sizing | S6 | `BUILDING` | — | — |
 | **S8** | Lead-acid versus LFP | S7 | `PLANNED` | — | — |
 | **S9** | Indian conditions and lifecycle cost | S8 | `PLANNED` | — | — |
 | **S10** | Synchronised 3D | S9 | **`DEFERRED`** by decision — 2D first | — | — |
@@ -700,6 +704,99 @@ Rollback: `git revert 9d13f92`. No migrations; nothing is written to storage.
 ### 7. Decision
 
 **READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S6 — Lessons 1–6.**
+
+---
+
+## S6 — Lessons 1 to 6
+
+**State:** READY FOR ACCEPTANCE — review pending. **Usability validation pending:** no beginner has
+been observed using this, and §17.2 asks for that to be said rather than assumed.
+**Revision:** `8268f6d`
+**Depends on:** S5 (READY FOR ACCEPTANCE)
+
+### 1. Scope
+
+Delivered: the six cards §15 names, and a player that knows nothing about any of them.
+
+A card now says what it runs, what the learner may move, which four figures to put at the top and
+which two charts to draw. The player draws whatever it is handed. That is what keeps §15.1's limits
+— three controls, four figures, two charts — the same for the sixth card as for the first, and a
+test walks every card rather than trusting that each was written carefully.
+
+| Card | The question | What the learner moves |
+| --- | --- | --- |
+| 1. Charge and discharge | Where does the energy go, and why does the charge level change? | direction, power, starting charge |
+| 2. Reduce the evening peak | How does storage cut the demand a site draws from the grid? | import target, starting charge |
+| 3. Use more solar | Why charge at noon and discharge later? | array size, starting charge |
+| 4. Keep backup ready | Why stop selling energy while there is still charge left? | reserve, outage length, starting charge |
+| 5. Follow a price schedule | Why does the timing of charging matter? | cheap window, how hard it buys, starting charge |
+| 6. When the battery says slow down | Who wins when a request exceeds a limit? | condition, power, starting charge |
+
+Cards 2 and 5 carry the §11.4 comparison: the site without storage, and a fixed schedule. Both
+baselines are policies the engine runs in full with every converter limit and every battery
+protection in force, and both disclose the ending charge before anything is attributed to anything.
+
+Card 7 — UPS sizing — says which stage brings it and cannot be opened. §17.1.
+
+### 2. Environment
+
+As S5. TypeScript engine in the browser, per the departure recorded in the S2 packet. No new
+runtime dependency.
+
+### 3. Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **535 passed** (+18) | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | 48 passed | **PASS** |
+| Static export | `npm run build` | 17 routes | 17 routes | **PASS** |
+| ≤3 controls, ≤4 metrics, ≤2 charts | unit | enforced on every built card | 6 of 6 inside the limits, and each draws exactly what it declared | **PASS** |
+| Every card runs on its own defaults | unit | complete, and something happens | all six complete; each moves energy and moves the charge level | **PASS** |
+| Outputs agree across diagram and plots | unit | the figures and the charts are two readings of one run | closing charge on the chart equals the run's closing charge to 1e-9; the peak figure equals the peak the chart reaches | **PASS** |
+| The diagram agrees with the text | unit | the lit subsystem is the one that bound | owner recorded by the run, not inferred; named for every named constraint and for nothing else | **PASS** |
+| Browser: lesson 1 | browser | plays, changes, resets | 0 → 16 min; charge level 40.8% → 76.1% at 100% starting charge; restored on reset | **PASS** |
+| Browser: lesson 2 | browser | the target is held, and the comparison shows against what | highest import 1,522 kW against a 1,500 kW target, held 100% of the day; without storage, 2,166 kW | **PASS** |
+| Browser: lesson 3 | browser | where the generation went | 12,000 kWh generated, 11,069 used as it was made, 931 stored, none thrown away | **PASS** |
+| Browser: lesson 4 | browser | the outage is carried on the reserve | 1.0 h of 1 h carried, nothing unserved, 50% → 50.7% | **PASS** |
+| Browser: lesson 5 | browser | buying and selling, against a fixed schedule | ₹91,598 against ₹91,710, both ending at 10% — reported as it came out | **PASS** |
+| Browser: lesson 6 | browser | a different subsystem refuses in each condition | the hot condition reaches the over-temperature protection; the normal one does not | **PASS** |
+| Browser: reset, every card | browser | back to exactly what it opened with | all six restore their opening figure | **PASS** |
+| Baseline comparison keeps every protection | unit | no "EMS off" baseline | both sides complete, charge inside 0–100%, disclosures carried | **PASS** |
+| Prices illustrative | unit | wherever one is quoted | every scheduling decision says so, and the card's expected outcomes say so | **PASS** |
+| Backup uses a supported topology | unit | the backup card runs on a plant that can island | `islandCapable`, with a declared outage | **PASS** |
+| Unbuilt card is visibly unavailable | unit + browser | says which stage, cannot be opened | card 7 marked *Not built yet*, 6 of 7 openable | **PASS** |
+| No page or console errors | browser | none across all six | none | **PASS** |
+| **Observed beginner walkthrough** | — | a beginner observed using it | not done | **PENDING** — recorded, not waived |
+
+### 4. Browser walkthrough
+
+`scratchpad/s6.mjs` — the catalogue reached from a project, then every card in turn: read the
+figures, the charts, the controls and the ergOS card; play; move the first control to its minimum;
+read the comparison; reset; confirm the opening figure came back. Six cards, one case each.
+
+### 5. Defects
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D43 | The grid import limit was applied to the plant as though it had the connection to itself. A plant charging at its rating while the site was already drawing two megawatts asked the connection for the sum, and the overflow came back as **load nobody served** — the site going dark because the battery was busy filling itself. Found in lesson 4, which reported both "outage carried in full" and "809 kWh unserved" on the same run. | **critical** | **fixed**; the connection is shared. What the plant may import is the limit less what the site is already drawing through it; what it may export is the limit plus whatever the site absorbs. |
+| D44 | The four-box diagram guessed which subsystem to light by pattern-matching the wording of the constraint printed beside it. Two readings of one decision, inferred separately. | major | **fixed**; the run records the owner, and the diagram reads it. A test asserts an owner for every named constraint and none for an idle step. |
+| D45 | Lesson 2 reported the target held for only 63% of the day while never exceeding it by more than 1.5%. The policy decides on the load at the start of an interval and the site climbs through it, so a plant holding a target perfectly reports a hair above it at every sample. | major — it taught the opposite of what was happening | **fixed**; within two per cent counts as held, and the figure says so. |
+| D46 | Lesson 3's last two figures read "Exported 0, Thrown away 0" on its own defaults, so half the card said nothing. | major | **fixed**; the four figures now account for every kilowatt-hour the array made: used as it was made, stored for later, exported. |
+| D47 | Lesson 4 opened on a two-hour outage its own default reserve could not carry, so the card's first impression was the site going dark. | minor | **fixed**; the default outage is one hour, which the default reserve carries. Making it longer is one of the three controls, and is the point. |
+| D48 | A price window said *when* but not *how hard*, so lesson 5's window control barely mattered: the plant filled at its rating inside ninety minutes whatever the window. | minor | **fixed**; a window carries a power fraction, and the card has a control for it. |
+
+### 6. Demonstration and rollback
+
+Demo: **Projects** → any project → **Lessons**. Six cards. Open *Reduce the evening peak*, drag the
+target down to 600 kW and watch the battery empty before the evening does; open *Keep backup ready*
+and set the outage to five hours to see the same thing from the other end.
+Rollback: `git revert 8268f6d`. No migrations; nothing is written to storage.
+
+### 7. Decision
+
+**READY FOR ACCEPTANCE — review pending, with usability validation recorded as pending.** Next
+eligible stage: **S7 — Contract-demand UPS sizing.**
 
 ---
 
