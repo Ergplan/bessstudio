@@ -72,6 +72,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | The studio checks against the project's converter, not a placeholder | `src/platform/studioBridge.ts` | unit tests |
 | A studio lesson reads the live model, never fixed copy | `src/domain/learn.ts`, `src/domain/tour.ts` | unit tests |
 | Every design-review finding has an explanation | `src/domain/learn.ts` | unit test reads the codes out of the model |
+| Every mechanical assumption has an explanation | `src/domain/learn.ts` | unit test reads the keys out of the schema |
 | The guided walk never narrates conductors while the view hides them | `src/domain/tour.ts` | unit tests |
 | The site never overlaps two units, and everything placed sits inside the plot | `src/geometry/site.ts` | unit tests |
 | The site is laid out at the selected product's dimensions, modelled interior or not | `src/geometry/site.ts`, `src/app/pages/Studio.tsx` | unit tests |
@@ -83,7 +84,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 Baseline commands:
 
 ```bash
-npm run test        # 190 unit tests
+npm run test        # 191 unit tests
 npm run test:rules  # 41 Firestore rules tests, against the emulator
 npm run build       # static export
 ```

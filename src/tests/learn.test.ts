@@ -47,3 +47,17 @@ describe('the studio learning layer', () => {
     }
   });
 });
+
+describe('the mechanical assumptions', () => {
+  it('explains every one the studio offers', async () => {
+    // The Configure tab lists them from the schema; an assumption with no explanation is a number
+    // in millimetres that nobody can act on.
+    const { assumptionsSchema } = await import('../config/schema');
+    const { assumptionNotes } = await import('../domain/learn');
+    const keys = Object.keys(assumptionsSchema.shape)
+      .filter(k => !['manual', 'length', 'width', 'height'].includes(k));   // the manual envelope, not assumptions
+    expect(keys.length).toBeGreaterThan(10);
+    for (const key of keys) expect(assumptionNotes[key], `no note for "${key}"`).toBeTruthy();
+    for (const key of Object.keys(assumptionNotes)) expect(keys, `stale note for "${key}"`).toContain(key);
+  });
+});

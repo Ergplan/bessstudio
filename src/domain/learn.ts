@@ -270,3 +270,28 @@ export const remedyFor = (code: string): Remedy | undefined =>
     meaning: 'The enclosure chosen is smaller in this direction than the racks and service bays need, so the assembly penetrates its own walls.',
     remedy: 'Either turn off the manual enclosure and let the studio size it, or increase that dimension until it clears the required envelope.',
   } : undefined);
+
+/**
+ * What each mechanical assumption is, and what moves when it changes.
+ *
+ * The Configure tab offers fifteen numbers in millimetres with no indication of where any of them
+ * came from or what they drive. Somebody learning the product should be able to change one and know
+ * in advance what it will do to the container.
+ */
+export const assumptionNotes: Record<string, string> = {
+  cellWidth: 'The cell face. Supplied as 173.5–174 mm, so this is a tolerance, not a choice. Eight of these across set the pack width, and the pack width sets the rack pitch and the container length.',
+  cellHeight: 'Cell height, supplied as 206.8–207.2 mm. It sets the pack height, and four packs stacked set the rack height and the container height.',
+  cellGap: 'Space between neighbouring cells in a row. It lets air and adhesive in and gives the cells somewhere to swell; twelve of them add up across the pack depth.',
+  rowGap: 'Space between rows of cells. Seven gaps across eight rows; it is the width you pay for eight times over in every pack.',
+  compression: 'The end-plate allowance at each end of the cell stack. Prismatic cells swell as they cycle and have to be held at a defined pressure, or the electrode layers separate and resistance climbs.',
+  wall: 'Pack enclosure wall. Structure and ingress protection, top and bottom as well as the sides.',
+  coldPlate: 'The liquid cold plate under the cells. Thicker plate, more coolant and more even temperature — and a taller pack, so a taller rack and a taller container.',
+  terminalClearance: 'Headroom above the cells for terminals and busbars, and for the creepage and clearance distances the voltage demands.',
+  connector: 'Room at the end of the pack for cables to leave and turn. It must be at least twice the bend radius or the cable is damaged by its own routing.',
+  rackGap: 'Space between neighbouring racks: frame, cable routing and hands. It multiplies by the number of racks in a bank, so it is one of the two strongest drivers of container length.',
+  verticalGap: 'Space between packs in a rack, for the inter-pack cable to turn and for a person to reach. It multiplies by the string depth into rack height.',
+  aisle: 'The service walkway between the two banks. It sets the container width, together with the pack depth on each side.',
+  requiredAisle: 'The access width the design has to provide. Usually a code requirement rather than a preference; the studio raises a finding when the aisle falls below it.',
+  endBay: 'The service bay at one end for the combiner, the thermal unit and the controller. Below 700 mm the equipment and its clearance no longer fit.',
+  bendRadius: 'The tightest radius the power cable may be bent to. It sets the minimum connector allowance and the minimum rack gap; bending tighter damages the insulation.',
+};

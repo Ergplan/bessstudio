@@ -214,3 +214,5 @@
 .app .local-tag.edited{color:var(--s-accent)}
 /* Says, on the canvas and in anything exported from it, that this is not the product quoted. */
 .app .standin-chip{margin-left:8px;padding:3px 8px;background:rgba(232,142,63,.12);border:1px solid rgba(232,142,63,.34);color:#E7AC72;font-family:var(--s-mono);font-size:9.5px;letter-spacing:.09em;white-space:nowrap}
+/* What the assumption under the cursor actually drives, while it is being edited. */
+.app .field-note{margin:10px 0 0;padding:9px 11px;background:rgba(147,190,73,.08);border-left:2px solid rgba(147,190,73,.45);color:var(--s-muted);font-size:12.2px;line-height:1.55}
