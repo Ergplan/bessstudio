@@ -3,6 +3,7 @@ import { defaultSizingInput, sizeSystem, type SizingInput } from '../sizing/engi
 import { annualBenefitUsd, chargingEnergyMWh, costLines, evaluateFinance } from '../sizing/finance';
 import { defaultPriceBook, type PriceBook } from '../catalog/pricing';
 import { applications } from '../sizing/applications';
+import { energySchedule, offerTotals } from '../quoting/offer';
 
 /**
  * The finance model, checked against itself.
@@ -214,6 +215,47 @@ describe('revenue and charging, for every duty the platform offers', () => {
       const bought = chargingEnergyMWh(s, s.years[1]);
       expect(bought, `${cyclesPerDay} cycles a day`).toBeGreaterThan(previous);
       previous = bought;
+    }
+  });
+});
+
+describe('the performance table a customer is handed', () => {
+  /**
+   * Each column has to multiply into the next. A reader who takes the annual cycles beside the
+   * energy dispatched in one of them must arrive at the energy supplied — otherwise the first
+   * thing anyone checks on the document is the first thing that fails.
+   */
+  it('multiplies out, on every duty and both augmentation strategies', () => {
+    for (const app of applications) for (const augmentation of ['none', 'periodic', 'oversize-day1'] as const) {
+      const s = sizeSystem({ ...defaultSizingInput(app.id), augmentation });
+      for (const r of energySchedule(s).filter(r => r.year > 0)) {
+        const byHand = r.cycles! * r.usablePerCycleMWh / 1000;
+        // The cycle count is printed as a whole number, so the reader's arithmetic can differ by
+        // the half cycle that rounding moved — on a standby duty of seventeen cycles a year that
+        // is three percent, and it is the only difference there is allowed to be.
+        const slack = 0.5 * r.usablePerCycleMWh / 1000;
+        expect(Math.abs(byHand - r.suppliedGWh), `${app.name} / ${augmentation} year ${r.year}`).toBeLessThanOrEqual(slack + 1e-9);
+      }
+    }
+  });
+
+  it('adds its own columns to the totals it prints', () => {
+    const s = sizeSystem({ ...defaultSizingInput(), augmentation: 'periodic' });
+    const rows = energySchedule(s).filter(r => r.year > 0), totals = offerTotals(s);
+    expect(totals.cycles).toBe(rows.reduce((t, r) => t + r.cycles!, 0));
+    expect(totals.suppliedGWh).toBeCloseTo(rows.reduce((t, r) => t + r.suppliedGWh, 0), 9);
+    expect(totals.chargingGWh).toBeCloseTo(rows.reduce((t, r) => t + r.chargingGWh, 0), 9);
+    // Nobody puts less in than they take out.
+    expect(totals.chargingGWh).toBeGreaterThan(totals.suppliedGWh);
+  });
+
+  it('never dispatches more per cycle than the plant can usably hold', () => {
+    for (const augmentation of ['none', 'periodic', 'oversize-day1'] as const) {
+      const s = sizeSystem({ ...defaultSizingInput(), augmentation, powerMW: 8, durationH: 3 });
+      for (const y of s.years.filter(y => y.year > 0)) {
+        expect(y.deliveredPerCycleMWh, `${augmentation} year ${y.year}`).toBeLessThanOrEqual(Math.max(y.usableMWh, s.requiredUsableMWh) + 1e-9);
+        expect(y.deliveredPerCycleMWh, `${augmentation} year ${y.year}`).toBeGreaterThan(0);
+      }
     }
   });
 });

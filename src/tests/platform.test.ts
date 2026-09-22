@@ -624,7 +624,11 @@ describe('offer document', () => {
     expect(schedule[0].cycles).toBeNull();
     expect(schedule[1].retention).toBeCloseTo(0.95, 6);
     const totals = offerTotals(sizing);
-    expect(totals.cycles).toBe(sizing.input.projectYears * Math.round(sizing.input.cyclesPerDay * sizing.input.daysPerYear));
+    // Cycles are counted after availability, because that is the count the supplied energy beside
+    // them was built from; the nominal duty appears in the section note instead.
+    const derate = sizing.input.losses.availabilityFactor * sizing.input.availability;
+    expect(totals.cycles).toBe(sizing.input.projectYears * Math.round(sizing.input.cyclesPerDay * sizing.input.daysPerYear * derate));
+    expect(totals.cycles).toBeLessThan(sizing.input.projectYears * sizing.input.cyclesPerDay * sizing.input.daysPerYear);
     expect(totals.suppliedGWh).toBeCloseTo(schedule.slice(1).reduce((s, r) => s + r.suppliedGWh, 0), 6);
   });
 

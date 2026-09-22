@@ -289,7 +289,7 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
       {/* ---------------------------------------------------------------- energy */}
       <Page n={3} org={org} content={content} title="Technical & Commercial Proposal">
         <Section n={5} title={`Year-Wise Energy Performance — ${sizing.input.projectYears} Years`}
-          note={`Modelled at plant level for ${sizing.units} enclosures, ${Math.round(sizing.input.cyclesPerDay * sizing.input.daysPerYear)} cycles per year, at the AC delivery point.`}>
+          note={`Modelled at plant level for ${sizing.units} enclosures at the AC delivery point. A duty of ${num(sizing.input.cyclesPerDay * sizing.input.daysPerYear)} cycles a year at ${num(L.availabilityFactor * sizing.input.availability * 100, 1)}% combined availability gives the annual cycles below; each column multiplies into the next.`}>
           <div className="chip-row">
             {[
               ['DC round-trip efficiency', `${(L.chargeEfficiencyDc * L.dischargeEfficiencyDc * 100).toFixed(1)}%`],
@@ -304,7 +304,7 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
           <table className="offer-table">
             <thead><tr>
               <th>Year</th><th className="num">Annual cycles</th><th className="num">Capacity retention</th>
-              <th className="num">Max DC energy stored (MWh)</th><th className="num">Usable AC energy per cycle (MWh)</th>
+              <th className="num">Max DC energy stored (MWh)</th><th className="num">AC energy dispatched per cycle (MWh)</th>
               <th className="num">Energy supplied to customer (GWh/yr)</th><th className="num">Charging energy required (GWh/yr)</th>
             </tr></thead>
             <tbody>{rows.map(r => (

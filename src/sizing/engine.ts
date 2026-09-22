@@ -53,6 +53,10 @@ export type SizingInput = {
 export type SizingWarning = { code: string; level: 'error' | 'warning' | 'info'; text: string };
 export type YearRow = {
   year: number; retention: number; installedDcMWh: number; storedDcMWh: number; usableMWh: number;
+  /** AC energy actually dispatched in one cycle: the plant's usable energy, capped at what it is contracted to deliver. */
+  deliveredPerCycleMWh: number;
+  /** Annual cycles after the availability factor and contracted availability are both applied. */
+  effectiveCycles: number;
   deliveredMWh: number; chargeMWh: number; gridChargeMWh: number; augmentedMWh: number; shortfall: boolean;
 };
 export type Cohort = { year: number; dcMWh: number; units: number };
@@ -263,7 +267,9 @@ export function sizeSystem(raw: SizingInput): SizingResult {
     const chargeMWh = y === 0 ? 0 : (dcPerCycle / Math.max(chargePathEfficiency, 0.1)) * scale + auxChargePerUnit * unitsAt(y) * input.daysPerYear * L.availabilityFactor * input.availability;
 
     years.push({
-      year: y, retention: weighted, installedDcMWh, storedDcMWh, usableMWh, deliveredMWh, chargeMWh,
+      year: y, retention: weighted, installedDcMWh, storedDcMWh, usableMWh,
+      deliveredPerCycleMWh: acPerCycle, effectiveCycles: y === 0 ? 0 : scale,
+      deliveredMWh, chargeMWh,
       gridChargeMWh: chargeMWh / Math.max(1 - L.openAccessLoss, 0.05), augmentedMWh,
       shortfall: y > 0 && usableMWh + 1e-9 < requiredUsableMWh,
     });

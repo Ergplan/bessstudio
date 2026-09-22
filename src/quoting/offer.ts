@@ -128,10 +128,20 @@ export function plantConfiguration(sizing: SizingResult) {
 }
 
 /** Twenty-year table for the energy page, in the columns the issued proposal uses. */
+/**
+ * The year-by-year performance table as the customer reads it.
+ *
+ * The columns have to multiply out. Printing the nominal duty cycle beside the plant's full usable
+ * capacity and then the energy actually supplied invited a reader to multiply the first two and
+ * find a third to fifty percent more than the third — the gap being the availability the duty is
+ * derated by, and, on an oversized plant, the capacity held back above what is contracted. Both
+ * columns are now the figures the supplied energy is actually built from: cycles after
+ * availability, and the energy dispatched in one of them.
+ */
 export const energySchedule = (sizing: SizingResult) => sizing.years.map(y => ({
-  year: y.year, cycles: y.year === 0 ? null : Math.round(sizing.input.cyclesPerDay * sizing.input.daysPerYear),
+  year: y.year, cycles: y.year === 0 ? null : Math.round(y.effectiveCycles),
   retention: y.retention, storedMWh: y.storedDcMWh,
-  usablePerCycleMWh: y.usableMWh, suppliedGWh: y.deliveredMWh / 1000, chargingGWh: y.gridChargeMWh / 1000,
+  usablePerCycleMWh: y.deliveredPerCycleMWh, suppliedGWh: y.deliveredMWh / 1000, chargingGWh: y.gridChargeMWh / 1000,
 }));
 
 export const offerTotals = (sizing: SizingResult) => {
