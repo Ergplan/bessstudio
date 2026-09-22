@@ -165,7 +165,9 @@ table.data td b{color:var(--ink);font-weight:600}
 
 .notice{border:1px solid var(--line-soft);border-left:2px solid var(--slate-light);padding:11px 14px;margin-bottom:9px;
   background:rgba(255,255,255,.025)}
-.notice>b{display:block;font-size:12px;color:var(--ink);text-transform:capitalize;margin-bottom:3px}
+/* The heading is a written sentence now, not a code with its hyphens removed, so capitalising
+   every word of it would give "String Voltage Above The Converter Input". */
+.notice>b{display:block;font-size:12px;color:var(--ink);margin-bottom:3px}
 .notice p b{color:var(--ink);text-transform:none}
 .notice p{margin:0;font-size:12.5px;color:var(--slate);line-height:1.55}
 .notice.error{border-left-color:var(--rose);background:rgba(226,104,94,.07)}
