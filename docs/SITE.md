@@ -555,21 +555,46 @@ canvas centre; component inspector right; statistics strip below.
 
 **Views.** Isometric, top, front, side, reset. Orbit, zoom, pan.
 
-**Scene controls.** Roof off · cutaway · explode (0–100 %) · electrical path.
+**Scene controls.** Roof off · cutaway · explode (0–100 %) · electrical path · guided walk.
+
+**Guided walk.** Six narrated steps down from the enclosure to a single cell and back out through
+the electrical path — container, banks and aisle, string, pack, cell, path out. Each step sets the
+view (roof, walls, lids, routing, explode, highlight) and narrates it with the figures the current
+design produced, so a different topology narrates differently. Auto-advances with a progress bar;
+pauses; steps with the arrow keys; leaves on Escape. Manual from the start for anyone who has asked
+for reduced motion. Leaving restores the visibility, explode and highlight settings that were in
+place beforehand.
 
 **Inspector.** System overview — topology preset, cell equivalent, operating voltage, aggregate
 capacity, string current, nominal duration. Calculated DC performance. Dimensions. Cooling and
 controls — cold plates, dry-break ports. Protection — combiner, external PCS. Input provenance,
 including any discrepancy between sources.
 
-**Validation.** Live warnings against equipment limits — for example *maximum voltage exceeds
-equipment limit, 1,518.4 V max / 1,500 V equipment*.
+**Learn.** A tab that explains whatever is selected — container, string, pack, cell or ancillary:
+what it is, the engineering reasoning in plain English, the numbers that follow from this design,
+and what moves if it changes. Every figure is read from the live model. A ladder at the foot of the
+panel moves between scales.
+
+**Validation.** Live warnings against the equipment window of the converter the project selected —
+for example *maximum voltage exceeds equipment limit, 1,518.4 V max / 1,500 V equipment*, which is
+a finding of the supplied data: the reference container's string reaches 1,518.4 V at full cell
+voltage and every converter in its class stops at 1,500 V. Each finding opens for what it means and
+what to do about it.
+
+**Project limits.** Opening a project carries its converter's DC window, current share per
+enclosure, loss chain and auxiliary load into the studio, and the toolbar names what the design is
+being checked against. Without a project the studio shows the reference assembly.
 
 **Exports.** PNG at chosen resolution · JSON configuration in and out · component schedule CSV ·
 assembled model GLB · device performance profile.
 
-**Project integration.** **Capture for offer** puts the current view on the quotation cover.
-**Save to project** writes the configuration back.
+**Project integration.** A project picker in the toolbar moves between the reference assembly and
+any project in the workspace. Where a project needs more than one unit, the explorer says which of
+the fleet is drawn. **Capture for offer** puts the current view on the quotation cover. **Save to
+project** writes the configuration back.
+
+**Branding.** The container flank, the PNG header, the logo upload, the GLB metadata and every
+export filename follow the organization's branding.
 
 ### 5.2 Proposed: the real hierarchy, and one clock `GAP`
 

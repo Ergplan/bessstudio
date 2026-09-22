@@ -69,11 +69,17 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | A role cannot be minted — invitation names it, or it is `customer` | `firestore.rules` | rules tests |
 | Audit trail append-only, under the writer's own name | `firestore.rules` | rules tests |
 | Sizing reproduces the supplied workbooks | `src/sizing/`, `src/catalog/pricing.ts` | 103 unit tests |
+| The studio checks against the project's converter, not a placeholder | `src/platform/studioBridge.ts` | unit tests |
+| A studio lesson reads the live model, never fixed copy | `src/domain/learn.ts`, `src/domain/tour.ts` | unit tests |
+| Every design-review finding has an explanation | `src/domain/learn.ts` | unit test reads the codes out of the model |
+| The guided walk never narrates conductors while the view hides them | `src/domain/tour.ts` | unit tests |
+| Nothing white-labelled says the demonstration tenant's name | `src/state/store.ts`, `src/scene/Viewer.tsx` | code; browser walkthrough |
+| The studio fits the viewport on a 1440×800 laptop | `app/globals.css`, `src/style.css` | browser measurement |
 
 Baseline commands:
 
 ```bash
-npm run test        # 170 unit tests
+npm run test        # 181 unit tests
 npm run test:rules  # 41 Firestore rules tests, against the emulator
 npm run build       # static export
 ```
