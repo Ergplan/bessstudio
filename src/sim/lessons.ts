@@ -1,12 +1,18 @@
 import {
-  sealWith, learningTemplateSchema, scenarioSchema, emsPolicySchema,
+  sealWith, learningTemplateSchema, scenarioSchema, emsPolicySchema, plantConfigurationSchema,
   type LearningTemplate, type Scenario, type EmsPolicy, type PlantConfiguration, type Profile,
 } from './records';
 import {
-  backupPlant, backupReservePolicy, dayScenario, fixedSchedulePolicy, hotCondition, manualPolicy,
-  normalCondition, peakShavingPolicy, priceSchedulePolicy, selfConsumptionPolicy, siteLoadProfile,
-  solarProfile, teachingPlant, weakCellCondition,
+  backupPlant, backupReservePolicy, dayScenario, fixedSchedulePolicy, hotCondition, lfpParameterSet,
+  manualPolicy, normalCondition, peakShavingPolicy, priceSchedulePolicy, selfConsumptionPolicy,
+  siteLoadProfile, solarProfile, teachingPlant, weakCellCondition, illustrative,
 } from './presets';
+import {
+  backupDurations, contractDemands, defaultAssumptions, heldOption, hold, optionsFor, protectedShares,
+  readiness, requirementFrom, shortfalls, stringVoltage,
+  type HeldSystem, type UpsAssumptions, type UpsOption, type UpsRequirement,
+} from './ups';
+import { byId, enclosures, packSpecs, pcsUnits } from '../catalog/products';
 
 /**
  * The lesson catalogue.
@@ -82,6 +88,21 @@ export type LessonCard = {
   baseline?: { policy: EmsPolicy; label: string };
   /** What the learner should take away, restated for the comparison card. */
   compareOn?: 'peak' | 'cost' | 'self-consumption';
+  /**
+   * The sizing panels §15.3 puts beside the run: the requirement, the configurations the catalogue
+   * offers for it, whether the readiness assumed can meet the duration, and the assumptions strip
+   * every figure came from. Data only — the player decides how to draw it.
+   */
+  sizing?: (values: Record<string, number>) => {
+    requirement: UpsRequirement;
+    options: UpsOption[];
+    problems: string[];
+    assumptions: UpsAssumptions;
+    readiness: ReturnType<typeof readiness>;
+    /** Set while a system is being tested rather than resized, with whatever it fails to meet. */
+    held: { option: UpsOption; shortfalls: string[] } | null;
+    continuity: string;
+  };
 };
 
 /**
@@ -593,6 +614,231 @@ export const batteryLimits: LessonCard = {
   ],
 };
 
+/* ------------------------------------------ 7. UPS from contract demand ---- */
+
+/**
+ * The plant a selected configuration actually is, built from the catalogue entry rather than
+ * described by it: the cells in series that make its string voltage, the strings in parallel that
+ * make its energy, and the converters that were chosen for it.
+ *
+ * §15.3 forbids invented ratings, so every number here is multiplied out of a real catalogue row.
+ */
+export function plantFromOption(option: UpsOption): PlantConfiguration {
+  const pack = byId(packSpecs, option.enclosure.packSpecId);
+  const seriesCells = pack.series * option.enclosure.packsInSeries;
+  const stringsPerUnit = Math.max(1, Math.round((option.enclosure.racks * option.enclosure.packsPerRack) / option.enclosure.packsInSeries));
+  const parallelStrings = stringsPerUnit * option.enclosureCount;
+  const dc = stringVoltage(option.enclosure);
+  const ratedW = option.pcsCount * option.pcs.ratedKW * 1000;
+  return sealWith(plantConfigurationSchema, {
+    id: `plant-ups-${option.enclosure.id}-${option.enclosureCount}-${option.pcs.id}-${option.pcsCount}`,
+    label: `${option.enclosureCount} × ${option.enclosure.model} with ${option.pcsCount} × ${option.pcs.model}`,
+    kind: 'PlantConfiguration',
+    cellTopology: { series: pack.series, parallel: 1 },
+    packTopology: { series: option.enclosure.packsInSeries, parallel: parallelStrings },
+    parameterSetId: lfpParameterSet.id,
+    converter: {
+      model: `${option.pcsCount} × ${option.pcs.model}`,
+      ratedW,
+      // The catalogue states active power only. Nothing is invented here: the apparent rating is
+      // taken as equal to it, which is the conservative reading, and the caveat says so.
+      ratedVA: ratedW,
+      dcMinV: Math.max(option.pcs.dcMinV, Math.floor(dc.minV)),
+      dcMaxV: Math.min(option.pcs.dcMaxV, Math.ceil(dc.maxV)),
+      dcMaxA: option.pcs.dcMaxA * option.pcsCount,
+      chargeEfficiency: option.pcs.efficiency,
+      dischargeEfficiency: option.pcs.efficiency,
+      standbyW: 200 * option.pcsCount,
+      rampWPerSecond: ratedW,
+      deratingStartC: 45,
+      deratingPerC: 0.02,
+      provenance: illustrative(
+        `Ratings, DC window and current limit from the catalogue entry for ${option.pcs.model}; standby, ramp and derating are illustrative teaching values.`,
+        [
+          'The catalogue states active power only, so the apparent-power rating is taken as equal to it.',
+          'No catalogue entry here is qualified for UPS duty, and none is assumed to be.',
+        ],
+      ),
+    },
+    gridImportLimitW: ratedW * 2,
+    gridExportLimitW: ratedW,
+    auxiliaryW: 500 * option.enclosureCount,
+    coolingCapacityW: 5_000 * option.enclosureCount,
+    coolingInputW: 2_000 * option.enclosureCount,
+    ambientC: 30,
+    // The transfer equipment is part of this illustrative configuration. Whether the transfer is
+    // fast enough for the load is a separate question, and one arithmetic cannot answer: the
+    // continuity status beside it says so in every panel.
+    islandCapable: true,
+  });
+}
+
+const upsAssumptions = (values: Record<string, number>): UpsAssumptions => ({
+  ...defaultAssumptions(),
+  startSoc: values.readiness ?? defaultAssumptions().startSoc,
+});
+
+const upsInput = (values: Record<string, number>) => ({
+  contract: { value: contractDemands[Math.round(values.contract ?? 2)] ?? 500, unit: 'kVA' as const },
+  protectedFraction: protectedShares[Math.round(values.share ?? 1)] ?? 0.5,
+  durationMinutes: backupDurations[Math.round(values.duration ?? 1)] ?? 15,
+  assumptions: upsAssumptions(values),
+});
+
+/** The system being held still, where the learner chose to test one rather than resize it. */
+const heldFrom = (values: Record<string, number>): HeldSystem | null =>
+  values.held === 1 && enclosures[Math.round(values.heldEnclosure ?? -1)] && pcsUnits[Math.round(values.heldPcs ?? -1)]
+    ? {
+      enclosureId: enclosures[Math.round(values.heldEnclosure)].id,
+      enclosureCount: Math.max(1, Math.round(values.heldEnclosureCount ?? 1)),
+      pcsId: pcsUnits[Math.round(values.heldPcs)].id,
+      pcsCount: Math.max(1, Math.round(values.heldPcsCount ?? 1)),
+    }
+    : null;
+
+/** The configuration a given setting actually runs on: the one held, or the one sized for it. */
+export function upsConfiguration(values: Record<string, number>) {
+  const input = upsInput(values);
+  const requirement = requirementFrom(input);
+  const { options, problems } = optionsFor(requirement);
+  const held = heldFrom(values);
+  const option = held ? heldOption(held, requirement) : options[0];
+  return { input, requirement, options, problems, held, option };
+}
+
+const upsScenario = (values: Record<string, number>, protectedKW: number, plantId: string): Scenario => {
+  const minutes = backupDurations[Math.round(values.duration ?? 1)] ?? 15;
+  // Grid healthy, grid fails, protected load carried, grid returns: the sequence §15.3 animates.
+  // A quarter of the run before the outage and a quarter after it, so both transitions are visible.
+  const outageSeconds = minutes * 60;
+  const durationSeconds = Math.round(outageSeconds * 2);
+  const stepSeconds = Math.max(5, Math.round(durationSeconds / 120 / 5) * 5);
+  const steps = Math.round(durationSeconds / stepSeconds);
+  const from = Math.round(durationSeconds * 0.25 / stepSeconds) * stepSeconds;
+  return sealWith(scenarioSchema, {
+    id: 'lesson-7-ups', label: 'UPS support from contract demand', kind: 'Scenario',
+    plantId, policyId: 'policy-ups-reserve',
+    initialSoc: values.readiness ?? 1, initialCellTempC: 25, ambientC: null,
+    durationSeconds, stepSeconds,
+    siteLoad: { name: 'Protected load', unit: 'W', samples: Array.from({ length: steps }, () => Math.round(protectedKW * 1000)) },
+    generation: null, price: null,
+    outage: { fromSeconds: from, toSeconds: Math.min(durationSeconds, from + outageSeconds) },
+    injected: { weakCell: null, coolingFailsAtSeconds: null, communicationLostAtSeconds: null, telemetryLostAtSeconds: null },
+    reactiveVar: 0, controls: [],
+  });
+};
+
+const upsPolicy = (values: Record<string, number>): EmsPolicy => sealWith(emsPolicySchema, {
+  ...backupReservePolicy,
+  id: 'policy-ups-reserve', label: 'Hold the whole battery for the outage',
+  // A UPS reserve is the whole usable window: an economic policy may spend none of it, which is
+  // §15.3's "prevents economic dispatch from eating the required reserve".
+  reserveSoc: Math.min(1, values.readiness ?? 1),
+  emergencyReserveSoc: defaultAssumptions().minSoc,
+});
+
+export const upsSizing: LessonCard = {
+  arrivesIn: null,
+  template: sealWith(learningTemplateSchema, {
+    id: 'lesson-7', label: 'UPS support by contract demand', kind: 'LearningTemplate',
+    question: 'How much protected power and energy does my site need?',
+    objective: 'Start from the contract demand on your electricity bill, decide how much of the site to protect and for how long, and see what that asks of the equipment — and what it does not tell you.',
+    expectedOutcomes: [
+      'Contract demand estimates site demand. It does not measure critical load, and it is not the UPS rating.',
+      'Protecting more of the site raises the power requirement; a longer outage raises the energy without raising the inverter.',
+      'The energy the load takes is not the battery to buy: the path losses and the usable window come first.',
+      'A short outage at high power is limited by discharge rate, not by energy.',
+      'No arithmetic here verifies continuity. A no-break claim needs equipment evidence.',
+    ],
+    scenarioId: 'lesson-7-ups', estimatedMinutes: 5,
+    metrics: ['Protected load', 'Required UPS rating', 'Battery nameplate estimate', 'Runtime achieved'],
+    charts: ['Charge level through the outage', 'Protected demand against served power'],
+  }),
+  controls: [
+    {
+      kind: 'choice', id: 'contract', label: 'Contract demand', start: 2,
+      options: contractDemands.map((v, i) => ({ value: i, label: `${v.toLocaleString()} kVA` })),
+      hint: 'The figure on the electricity bill. It estimates what the site draws, not what must be protected.',
+    },
+    {
+      kind: 'choice', id: 'share', label: 'Load to protect', start: 1,
+      options: protectedShares.map((v, i) => ({ value: i, label: `${v * 100}%` })),
+      hint: 'How much of the estimated site load has to stay up. A measured schedule of critical loads replaces this.',
+    },
+    {
+      kind: 'choice', id: 'duration', label: 'Backup duration', start: 1,
+      options: backupDurations.map((v, i) => ({ value: i, label: `${v} min` })),
+      hint: 'How long it has to stay up for. Longer needs more energy; it does not need a bigger inverter.',
+    },
+  ],
+  runWith: values => {
+    const { requirement, option } = upsConfiguration(values);
+    const plant = option ? plantFromOption(option) : teachingPlant;
+    return {
+      scenario: upsScenario(values, requirement.protectedKW, plant.id),
+      policy: upsPolicy(values), plant, manualRequestW: 0,
+    };
+  },
+  sizing: values => {
+    const { requirement, options, problems, held, option } = upsConfiguration(values);
+    const a = upsAssumptions(values);
+    const minutes = backupDurations[Math.round(values.duration ?? 1)] ?? 15;
+    // While a system is held, the first card is that system — not a configuration sized for this
+    // duty, which is equipment nobody has. What the duty *would* need is shown beside it, which is
+    // the comparison the learner asked for by pressing Test rather than Resize.
+    const shown: UpsOption[] = held && option
+      ? [{ ...option, role: 'under-test' }, ...(options[0] ? [{ ...options[0], role: 'would-need' as const }] : [])]
+      : options;
+    return {
+      requirement, options: shown, problems, assumptions: a,
+      readiness: readiness(option, requirement, a, minutes),
+      held: held && option ? { option, shortfalls: shortfalls(option, requirement, a, minutes) } : null,
+      continuity: 'Continuity not verified — an energy model cannot establish zero-break transfer, voltage quality or protection coordination.',
+    };
+  },
+  readout: r => {
+    const { requirement, option } = upsConfiguration(r.values);
+    const minutes = backupDurations[Math.round(r.values.duration ?? 1)] ?? 15;
+    const step = r.series.timeSeconds[1] - r.series.timeSeconds[0];
+    const carried = r.series.unservedLoadW.filter((w, i) => w < 1 && r.series.achievedPowerW[i] > 1).length * step;
+    return [
+      {
+        label: 'Protected load', value: requirement.protectedKW.toFixed(0), unit: 'kW',
+        foot: `${requirement.protectedKVA.toFixed(0)} kVA at ${requirement.fromMeasuredLoad ? 'the measured' : 'an assumed 0.90'} power factor`,
+      },
+      {
+        label: 'Required UPS rating', value: requirement.requiredKW.toFixed(0), unit: 'kW',
+        foot: `${requirement.requiredKVA.toFixed(0)} kVA, after 20% headroom and before derating`,
+      },
+      {
+        label: 'Battery nameplate estimate', value: requirement.nominalBatteryKWh.toFixed(0), unit: 'kWh',
+        foot: `The load itself takes ${requirement.loadEnergyKWhAc.toFixed(1)} kWh — that is not the battery`,
+      },
+      {
+        label: 'Runtime achieved', value: (carried / 60).toFixed(0), unit: 'min',
+        foot: option ? `Of ${minutes} min asked for, on ${option.enclosureCount} × ${option.enclosure.model}` : 'No configuration selected',
+      },
+    ];
+  },
+  plots: r => [
+    {
+      title: 'Charge level through the outage', subtitle: 'From readiness down to the floor the outage may use',
+      format: n => `${n.toFixed(0)}%`, yMin: 0,
+      rule: { y: defaultAssumptions().minSoc * 100, label: 'Floor' },
+      lines: [{ name: 'Charge level', colour: 0, values: r.series.soc.map(v => v * 100) }],
+    },
+    {
+      title: 'Protected demand against served power', subtitle: 'What the load asked for, what the plant supplied, and anything it did not',
+      format: n => `${n.toFixed(0)} kW`,
+      lines: [
+        { name: 'Protected demand', colour: 4, dashed: true, values: r.series.siteLoadW.map(w => w / 1000) },
+        { name: 'Served by the plant', colour: 0, values: r.series.achievedPowerW.map(w => w / 1000) },
+        { name: 'Unserved', colour: 2, values: r.series.unservedLoadW.map(w => w / 1000) },
+      ],
+    },
+  ],
+};
+
 /* ------------------------------------------------------- the catalogue ---- */
 
 /** A card for a lesson that has not been built, so the catalogue is honest about what exists. */
@@ -616,8 +862,25 @@ export const lessons: LessonCard[] = [
   keepBackupReady,
   followPrice,
   batteryLimits,
-  planned(7, 'UPS support by contract demand', 'How much protected power and energy does my site need?', 'S7'),
+  upsSizing,
 ];
+
+/** Hold the configuration a lesson has just sized, so the next duty tests it rather than resizing it. */
+export const holdSystem = (values: Record<string, number>): Record<string, number> => {
+  const { option } = upsConfiguration(values);
+  if (!option) return values;
+  const h = hold(option);
+  return {
+    ...values, held: 1,
+    heldEnclosure: enclosures.findIndex(e => e.id === h.enclosureId),
+    heldEnclosureCount: h.enclosureCount,
+    heldPcs: pcsUnits.findIndex(p => p.id === h.pcsId),
+    heldPcsCount: h.pcsCount,
+  };
+};
+
+/** Let it size itself again for whatever is being asked of it now. */
+export const resizeSystem = (values: Record<string, number>): Record<string, number> => ({ ...values, held: 0 });
 
 export const lessonById = (id: string): LessonCard | undefined => lessons.find(l => l.template.id === id);
 

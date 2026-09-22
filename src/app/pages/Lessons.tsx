@@ -6,7 +6,10 @@ import { ArrowLeft, Pause, Play, RotateCcw, Zap } from 'lucide-react';
 import { Card, Stat, Badge, Empty, Slider, KV, type Tone } from '../components/ui';
 import { LineChart, series as chartSeries } from '../components/viz';
 import { useWorkspace } from '../../platform/workspace';
-import { lessons, lessonById, defaultControls, type LessonCard, type Metric, type Readout } from '../../sim/lessons';
+import {
+  lessons, lessonById, defaultControls, holdSystem, resizeSystem,
+  type LessonCard, type Metric, type Readout,
+} from '../../sim/lessons';
 import { lfpParameterSet } from '../../sim/presets';
 import { accounting, simulate } from '../../sim/engine';
 import { comparePolicies } from '../../sim/compare';
@@ -146,8 +149,11 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
       <Card title={card.template.label} subtitle={card.template.question}>
         <p className="lesson-goal">{card.template.objective}</p>
         <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn accent" onClick={() => { if (!playing && at >= steps - 1) setCursor(0); setPlaying(p => !p); }} aria-label={playing ? 'Pause' : 'Play'}>
-            {playing ? <><Pause size={15} /> Pause</> : <><Play size={15} /> Play</>}
+          {/* The accessible name has to be the words on the button. A control labelled "Simulate
+              grid failure" that announces itself as "Play" cannot be asked for by name. */}
+          <button className="btn accent" onClick={() => { if (!playing && at >= steps - 1) setCursor(0); setPlaying(p => !p); }}
+            aria-label={playing ? 'Pause' : card.sizing ? 'Simulate grid failure' : 'Play'}>
+            {playing ? <><Pause size={15} /> Pause</> : <><Play size={15} /> {card.sizing ? 'Simulate grid failure' : 'Play'}</>}
           </button>
           <button className="btn" onClick={reset}><RotateCcw size={15} /> Reset</button>
           <input aria-label="Position in the run" type="range" min={0} max={Math.max(0, steps - 1)} value={at}
@@ -222,6 +228,12 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
         <Comparison card={card} setup={setup} />
       )}
 
+      {card.sizing && (
+        <Sizing card={card} values={values}
+          onHold={() => { setValues(v => holdSystem(v)); setPrevious(null); }}
+          onResize={() => { setValues(v => resizeSystem(v)); setPrevious(null); }} />
+      )}
+
       <div className="grid cols-2">
         <Card title="What each subsystem is in" subtitle="The state the converter and the battery management system are in at this moment" tight>
           <StateRow
@@ -257,6 +269,87 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
             more than {out.run.solver.maxSubStepSeconds} s at a time. {out.run.engine} {out.run.engineVersion}.</li>
         </ul>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * The sizing panels §15.3 puts beside the run.
+ *
+ * Three result cards, an assumptions strip, and two actions that are deliberately not the same
+ * action: **Test this system** holds the equipment still and asks whether it carries a different
+ * duty; **Resize system** sizes the equipment for the duty on the screen. An interface that
+ * silently does the second when the learner meant the first answers a question nobody asked.
+ */
+function Sizing({ card, values, onHold, onResize }: {
+  card: LessonCard; values: Record<string, number>; onHold: () => void; onResize: () => void;
+}) {
+  const s = card.sizing!(values);
+  const titles: Record<string, string> = {
+    selected: 'Selected requirement', 'next-power': 'Next supported power size', 'longer-runtime': 'Longer runtime option',
+    'under-test': 'The system under test', 'would-need': 'What this duty would need',
+  };
+  return (
+    <div className="grid" style={{ gap: 14 }}>
+      <Card title="What this asks of the equipment"
+        subtitle={s.held ? 'Testing the system already selected against this duty' : 'Sized for the duty on the screen'} tight>
+        <div className="notice warning">
+          <b>Indicative sizing from contract demand</b>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+            {s.requirement.warnings.map(w => <li key={w}>{w}</li>)}
+          </ul>
+        </div>
+        {s.held && s.held.shortfalls.length > 0 && (
+          <div className="notice error" style={{ marginTop: 10 }}>
+            <b>This system does not carry that duty</b>
+            <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+              {s.held.shortfalls.map(f => <li key={f}>{f}</li>)}
+            </ul>
+          </div>
+        )}
+        <div className="notice info" style={{ marginTop: 10 }}>
+          <b>{s.readiness.ready ? 'Ready' : 'Insufficient readiness'}</b>
+          <p>{s.readiness.reason}</p>
+        </div>
+        <div className="row" style={{ marginTop: 12 }}>
+          <button className="btn sm" onClick={onHold} disabled={!!s.held}>Test this system</button>
+          <button className="btn sm" onClick={onResize} disabled={!s.held}>Resize system</button>
+          <div className="spacer" />
+          <span className="muted">{s.held ? 'Equipment held; the duty is what changes.' : 'Equipment follows the duty.'}</span>
+        </div>
+        <details className="ergos-why" style={{ marginTop: 12 }}>
+          <summary>Explore deeper — every assumption these figures came from</summary>
+          <ul className="muted" style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.8 }}>
+            {s.requirement.basis.map(b => <li key={b}>{b}</li>)}
+          </ul>
+        </details>
+      </Card>
+
+      {s.problems.length > 0 && (
+        <Card title="Commercial selection pending" tight>
+          {s.problems.map(p => <p key={p} className="muted" style={{ margin: 0 }}>{p}</p>)}
+        </Card>
+      )}
+
+      {s.options.length > 0 && (
+        <div className={`grid cols-${Math.min(3, s.options.length)}`}>
+          {s.options.map(o => (
+            <Card key={o.role} title={titles[o.role] ?? o.role} subtitle={`${o.enclosureCount} × ${o.enclosure.model}`} tight>
+              <KV label="Energy">{o.energyKWh.toLocaleString(undefined, { maximumFractionDigits: 0 })} kWh</KV>
+              <KV label="Continuous">{o.continuousKW.toLocaleString(undefined, { maximumFractionDigits: 0 })} kW</KV>
+              <KV label="Converters">{o.pcsCount} × {o.pcs.model}</KV>
+              <KV label="Limited by">{o.binding === 'power' ? 'discharge rate, not energy' : 'energy'}</KV>
+              <KV label="Rate asked of it">{o.requiredCRate.toFixed(2)} C</KV>
+              <details className="ergos-why" style={{ marginTop: 8 }}>
+                <summary>What is illustrative about this</summary>
+                <ul className="muted" style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                  {o.caveats.map(c => <li key={c}>{c}</li>)}
+                </ul>
+              </details>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

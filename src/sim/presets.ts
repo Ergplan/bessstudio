@@ -24,7 +24,7 @@ import type { Provenance } from './provenance';
  * None of these is a product specification and the badge says so.
  */
 
-const illustrative = (source: string, assumptions: string[] = []): Provenance => ({
+export const illustrative = (source: string, assumptions: string[] = []): Provenance => ({
   badge: 'illustrative',
   source,
   reviewedOn: null,

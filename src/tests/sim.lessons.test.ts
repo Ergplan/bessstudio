@@ -36,8 +36,10 @@ describe('the catalogue', () => {
   });
 
   it('says which cards are not built yet, and gives them no controls to pretend with', () => {
-    expect(built()).toHaveLength(6);
-    expect(built().map(l => l.template.id)).toEqual(['lesson-1', 'lesson-2', 'lesson-3', 'lesson-4', 'lesson-5', 'lesson-6']);
+    // All seven are built now. The mechanism that says so stays, because §17.1 requires it of
+    // anything added later, and a catalogue that cannot say "not yet" will one day need to.
+    expect(built()).toHaveLength(7);
+    expect(built().map(l => l.template.id)).toEqual(['lesson-1', 'lesson-2', 'lesson-3', 'lesson-4', 'lesson-5', 'lesson-6', 'lesson-7']);
     for (const later of lessons.filter(l => l.arrivesIn)) {
       expect(later.controls, `${later.template.label}`).toHaveLength(0);
       expect(later.arrivesIn).toMatch(/^S\d+$/);
@@ -149,12 +151,20 @@ describe('the lesson loop', () => {
 
   it('resets to exactly what it opened with', () => {
     for (const card of built()) {
+      // Move whichever control this card actually has, rather than one it might not.
+      const moved = card.controls.find(c => c.kind === 'choice' ? c.options.some(o => o.value !== c.start) : true)!;
+      const other = moved.kind === 'choice'
+        ? moved.options.find(o => o.value !== moved.start)!.value
+        : moved.start * 0.5 || moved.min / (moved.scale || 1);
       const opened = run(card, defaultControls(card));
-      const fiddled = run(card, { ...defaultControls(card), initialSoc: 0.42 });
+      const fiddled = run(card, { ...defaultControls(card), [moved.id]: other });
       const reset = run(card, defaultControls(card));
       expect(reset.run.scenarioHash, card.template.label).toBe(opened.run.scenarioHash);
       expect(reset.series.soc, card.template.label).toEqual(opened.series.soc);
-      expect(fiddled.run.scenarioHash, `${card.template.label} really did change in between`).not.toBe(opened.run.scenarioHash);
+      // Not every control is part of the scenario — what the learner asks of the plant is not the
+      // day it is asked on — so the check is that the *run* moved, whichever of the two changed.
+      expect(fiddled.series.achievedPowerW, `${card.template.label} really did change in between`)
+        .not.toEqual(opened.series.achievedPowerW);
     }
   });
 
