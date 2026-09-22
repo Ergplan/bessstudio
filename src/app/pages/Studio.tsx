@@ -124,7 +124,7 @@ export function Studio() {
           </button>
         )}
       </div>
-      <div style={{ flex: 1, minHeight: 0 }} ref={canvasHost}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }} ref={canvasHost}>
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#5E6C79' }}>Loading the 3D assembly…</div>}>
           <Studio3D brandName={(org?.branding.displayName ?? brand.vendorShort).toUpperCase()} brandLogo={org?.branding.logo ?? null} projectName={project?.name} unitCount={units} />
         </Suspense>

@@ -180,3 +180,24 @@
 /* The base sheet's generic button hover is a class-plus-pseudo selector and would otherwise outrank
    the walk's primary action, greying it out under the cursor. */
 .app .walk-next:hover,.app .walk-next:focus-visible{background:#A6CE5C;border-color:transparent;color:#101A08}
+
+/* The studio assumed it owned the viewport — `calc(100dvh - 115px)` on the workspace plus a 650px
+   floor. Embedded in the platform it sits below a top bar and a project toolbar, so on a 1440×800
+   laptop the statistics strip and the footer fell off the bottom of the page and the whole app
+   scrolled. Above the stacking breakpoint it now fills whatever height it is given instead. */
+@media (min-width:851px){
+  .app{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+  .app>header,.app>footer{flex:0 0 auto}
+  .app .workspace{flex:1 1 auto;height:auto;min-height:0}
+  .app .hierarchy,.app .inspector,.app main{min-height:0}
+}
+/* The studio's own header repeats the workspace top bar two inches above it. Embedded, it can be
+   half the height and still carry the wordmark for a presentation capture. */
+@media (min-width:901px){
+  .app>header{height:54px}
+  .app>header .brand{gap:16px}
+  .app .brand img{max-height:34px;width:140px}
+  .app .brand>div{font-size:15px}
+  .app .brand small{margin-top:3px}
+  .app .brand i{height:26px}
+}

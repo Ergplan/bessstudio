@@ -262,3 +262,11 @@ table.data td b{color:var(--ink);font-weight:600}
 .notif-item.unread{border-left:2px solid var(--green)}
 .notif-item.unread b{color:var(--ink)}
 .notif-empty{padding:18px 14px;margin:0;text-align:center}
+
+/* A bleed page — the 3D studio — owns the viewport: its own panes scroll, the page does not. The
+   shell otherwise grows to the tallest column, which on a laptop pushed the studio's statistics
+   strip and footer below the fold and scrolled the whole application instead. */
+@media (min-width:901px){
+  .shell:has(> .main > .page.bleed){height:100dvh;min-height:0;overflow:hidden}
+  .shell:has(> .main > .page.bleed) > .main{min-height:0;overflow:hidden}
+}
