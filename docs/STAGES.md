@@ -72,6 +72,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | Sizing reproduces the supplied workbooks | `src/sizing/`, `src/catalog/pricing.ts` | 103 unit tests |
 | Every catalogue figure agrees with the cell it is built from | `src/catalog/products.ts` | first-principles audit |
 | Energy is conserved: charge covers discharge and the losses | `src/sizing/engine.ts` | first-principles audit |
+| A fleet well above its contract accounts for every megawatt-hour of the difference | `src/sizing/engine.ts` | unit tests |
 | NPV, IRR and LCOS mean what they say | `src/sizing/finance.ts` | first-principles audit |
 | The studio geometry is the sum of its stated allowances | `src/domain/model.ts` | first-principles audit |
 | The studio checks against the project's converter, not a placeholder | `src/platform/studioBridge.ts` | unit tests |
@@ -95,7 +96,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 Baseline commands:
 
 ```bash
-npm run test        # 273 unit tests
+npm run test        # 276 unit tests
 npm run test:rules  # 41 Firestore rules tests, against the emulator
 npm run build       # static export
 ```

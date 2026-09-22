@@ -507,3 +507,37 @@ describe('site conditions reaching the answer', () => {
     expect(hot.cellTempC).toBeGreaterThan(cool.cellTempC);
   });
 });
+
+describe('explaining the headroom', () => {
+  it('accounts for every megawatt-hour between installed and contracted', () => {
+    // Frequency regulation cycles shallowly to preserve life, so it installs four times the energy
+    // it contracts. That is right, and a proposal that shows it without saying why invites the
+    // reader to assume padding.
+    const s = sizeSystem({ ...defaultSizingInput('frequency-regulation'), powerMW: 8, durationH: 1 });
+    expect(s.installedDcMWh / s.requiredUsableMWh).toBeGreaterThan(3);
+    const note = s.warnings.find(w => w.code === 'headroom');
+    expect(note, 'a fleet this far above its contract has to explain itself').toBeTruthy();
+    for (const figure of [
+      s.installedDcMWh.toFixed(2), s.requiredUsableMWh.toFixed(2),
+      `${Math.round(s.input.dod * 100)}%`, `${Math.round(s.input.losses.usableDcWindow * 100)}%`,
+    ]) expect(note!.text, `should quote ${figure}`).toContain(figure);
+  });
+
+  it('stays quiet when the fleet is close to its contract', () => {
+    const tight = sizeSystem({ ...defaultSizingInput('peak-shaving'), powerMW: 2.5, durationH: 4 });
+    if (tight.installedDcMWh / tight.requiredUsableMWh <= 1.6)
+      expect(tight.warnings.some(w => w.code === 'headroom')).toBe(false);
+  });
+
+  it('reconciles: the factors it names really do get from installed to contracted', () => {
+    const s = sizeSystem({ ...defaultSizingInput('frequency-regulation'), powerMW: 8, durationH: 1 });
+    const L = s.input.losses;
+    const stored = s.installedDcMWh * L.usableDcWindow * s.input.dod;
+    const afterPath = stored * s.years[1].retention * s.dischargePathEfficiency;
+    const delivered = afterPath - s.auxMWhPerDay / 2;     // the discharge half of the daily auxiliary
+    expect(delivered).toBeGreaterThanOrEqual(s.requiredUsableMWh - 1e-6);
+    // and not wastefully more: one unit fewer would fall short
+    const perUnit = s.day1UsableMWh / s.units;
+    expect((s.units - 1) * perUnit).toBeLessThan(s.requiredUsableMWh);
+  });
+});

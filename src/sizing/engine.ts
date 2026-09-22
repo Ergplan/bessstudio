@@ -276,6 +276,19 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   if (input.cyclesPerDay * input.dod > app.cyclesPerDay * app.dod * 1.5) warnings.push({ code: 'duty-cycle', level: 'info', text: `Duty cycle is heavier than the ${app.name} preset. Confirm the operating profile with the customer.` });
   const oversizeRatio = day1UsableMWh / Math.max(requiredUsableMWh, 1e-6);
   if (input.augmentation === 'oversize-day1' && oversizeRatio > 1.6) warnings.push({ code: 'oversize', level: 'warning', text: `Day-one capacity is ${oversizeRatio.toFixed(2)}× the contracted usable energy in order to carry ${input.projectYears} years unaided. Periodic augmentation is usually cheaper at this duty cycle.` });
+  const headroom = installedDcMWh / Math.max(requiredUsableMWh, 1e-9);
+  if (headroom > 1.6) warnings.push({
+    code: 'headroom', level: 'info',
+    text: (() => {
+      const stored = installedDcMWh * L.usableDcWindow * input.dod;
+      const afterPath = stored * designRetention * dischargePathEfficiency;
+      const aux = auxDischargePerUnit * units;
+      return `${installedDcMWh.toFixed(2)} MWh installed delivers ${requiredUsableMWh.toFixed(2)} MWh to the meter — ${headroom.toFixed(1)}× the contracted energy, and here is where it goes. `
+        + `${Math.round(input.dod * 100)}% depth of discharge across a ${Math.round(L.usableDcWindow * 100)}% usable window leaves ${stored.toFixed(2)} MWh. `
+        + `${Math.round(designRetention * 100)}% retention in the design year and ${(dischargePathEfficiency * 100).toFixed(1)}% on the discharge path leave ${afterPath.toFixed(2)} MWh. `
+        + `${aux.toFixed(2)} MWh of auxiliaries leave ${(afterPath - aux).toFixed(2)} MWh, against ${requiredUsableMWh.toFixed(2)} MWh contracted; the margin is the last whole unit rounding up.`;
+    })(),
+  });
   if (unitsForPower > unitsForEnergy) warnings.push({ code: 'power-limited', level: 'info', text: `Fleet size is set by the ${enclosure.ratedKW} kW system rating, not by the energy requirement: ${unitsForPower} units are needed for ${ratedPowerMW.toFixed(2)} MW against ${unitsForEnergy} for the energy alone.` });
   if (pcsCount * pcs.ratedKW > ratedPowerMW * 1000 * 1.25) warnings.push({ code: 'pcs-granularity', level: 'info', text: `Installed conversion capacity ${(pcsCount * pcs.ratedKW / 1000).toFixed(2)} MW exceeds the ${ratedPowerMW.toFixed(2)} MW requirement because of unit granularity. A smaller PCS may reduce cost.` });
   if (!L.idtOnDischarge && transformer) warnings.push({ code: 'idt-discharge', level: 'info', text: 'Transformer loss is excluded on discharge, matching the supplied sizing sheet. Including it on both directions is the physically consistent treatment and costs about 1% of delivered energy.' });
