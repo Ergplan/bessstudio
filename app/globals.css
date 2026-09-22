@@ -15,8 +15,8 @@
   --green:#93BE49; --green-deep:#A5CE5C; --teal:#21A087; --blue:#4FA8DA; --gold:#C8A415; --rose:#E2685E;
   --amber:#E88E3F;
   --radius:0; --radius-lg:0; --shadow:none;
-  --font:'Inter','Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
-  --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  --font:var(--font-sans),'Inter','Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,sans-serif;
+  --mono:var(--font-mono),'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
   color-scheme:dark;
 }
 *{box-sizing:border-box}
