@@ -11,3 +11,8 @@ dist/
 out/
 next-env.d.ts
 *.tsbuildinfo
+
+# Firebase emulator artefacts
+firestore-debug.log
+ui-debug.log
+firebase-debug.log

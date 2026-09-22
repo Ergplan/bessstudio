@@ -88,7 +88,8 @@ Firestore rules are written from it. Eighteen tests cover the parts that must no
 3. **An administrator changing it** in Settings → Team & roles.
 
 Nobody can mint a role. An invitation names it, or it is `customer`. The Firestore rules check the
-same two things, so the client cannot talk its way past them. Nobody may invite above their own
+same two things, so the client cannot talk its way past them — proved by 35 tests against the
+real rules engine, each of which was confirmed to fail when the rule it covers is removed. Nobody may invite above their own
 rank either — an administrator cannot create an owner.
 
 ---
@@ -414,11 +415,15 @@ consumed in order.
 
 ```bash
 npm install
-npm run dev        # http://localhost:3400
-npm run test       # 83 tests
-npm run emulators  # local Firebase with the real rules engine
+npm run dev         # http://localhost:3400
+npm run test        # 103 tests — engines, access rules, lifecycle, invitations
+npm run test:rules  # 35 tests — the Firestore rules, against the emulator
+npm run emulators   # the emulator on its own, with the UI at :4000
 npm run login && npm run deploy   # → https://bessstudio-e55e1.web.app
 ```
+
+`test:rules` needs Java, which the Firestore emulator runs on. It starts the emulator, runs the
+suite against the real rules engine and shuts it down.
 
 Firebase Spark (free): Hosting, Auth, Firestore. No Cloud Functions, no Cloud Storage.
 
@@ -431,10 +436,7 @@ membership check per path.
 
 Ordered by how much they block the workflow above.
 
-1. **Firestore rules unproven** `PARTIAL` — reviewed and written from the same matrix as the
-   client, but never exercised against a real project. The invitation rules in particular do real
-   work now. Run `npm run emulators` before trusting them.
-2. **Invitations are sent by hand** `PARTIAL` — no mail server on the Spark plan, so the link is
+1. **Invitations are sent by hand** `PARTIAL` — no mail server on the Spark plan, so the link is
    copied to the clipboard for the inviter to send. Automatic mail needs Cloud Functions, which
    needs the Blaze plan.
 3. **No notifications** `GAP` — submission, approval request and approval are all silent.
