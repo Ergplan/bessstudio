@@ -9,6 +9,7 @@ import { useWorkspace } from '../../platform/workspace';
 import { useStudio } from '../../state/store';
 import { configSchema } from '../../config/schema';
 import { sizeSystem } from '../../sizing/engine';
+import { limitsFromSizing } from '../../platform/studioBridge';
 import { byId, enclosures } from '../../catalog/products';
 
 // The 3D studio pulls in three.js and its own stylesheet, so it is loaded only when opened.
@@ -33,7 +34,8 @@ export function Studio() {
   const canvasHost = useRef<HTMLDivElement>(null);
 
   // Carry the project into the assembly: a saved studio configuration wins, otherwise the
-  // enclosure's topology preset is applied so the viewer matches what was sized.
+  // enclosure's topology preset is applied so the viewer matches what was sized, and the limits the
+  // studio checks against come from the converter the project actually selected.
   useEffect(() => {
     if (!project) return;
     const { config, import: importConfig, update } = useStudio.getState();
@@ -42,12 +44,21 @@ export function Studio() {
       if (parsed.success) { importConfig(parsed.data); setNote(''); return; }
     }
     const enclosure = byId(enclosures, project.sizing.enclosureId);
-    if (!enclosure.studioPreset) {
-      setNote(`${enclosure.model} is not modelled in 3D yet — the reference 5 MWh assembly is shown instead.`);
-      return;
+    let limitNote = '';
+    try {
+      const limits = limitsFromSizing(sizeSystem(project.sizing));
+      update(c => {
+        if (enclosure.studioPreset) c.preset = enclosure.studioPreset;
+        c.equipment = limits.equipment;
+        c.usable = limits.usable;
+      });
+      limitNote = `Checked against ${limits.label}.`;
+    } catch {
+      if (enclosure.studioPreset && config.preset !== enclosure.studioPreset) update(c => { c.preset = enclosure.studioPreset!; });
     }
-    if (config.preset !== enclosure.studioPreset) update(c => { c.preset = enclosure.studioPreset!; });
-    setNote('');
+    setNote(enclosure.studioPreset
+      ? limitNote
+      : `${enclosure.model} is not modelled in 3D yet — the reference 5 MWh assembly is shown instead. ${limitNote}`.trim());
   }, [project]);
 
   let context = '';
