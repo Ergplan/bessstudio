@@ -3,6 +3,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { repository, logActivity } from './repo';
 import { useSession } from './auth';
 import { can } from './types';
+import { restage } from './stages';
 import { defaultPriceBook, type PriceBook } from '../catalog/pricing';
 import { nowIso, type Activity, type Customer, type Project, type Quote, type ActivityKind } from './types';
 
@@ -85,9 +86,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (!org) return;
       const next = { ...quoteValue, orgId: org.id, updatedAt: nowIso() };
       await repository().save(org.id, 'quotes', next);
+      const after = [next, ...quotes.filter(q => q.id !== next.id)];
       setQuotes(list => [next, ...list.filter(q => q.id !== next.id)]);
       if (note) await record('quote', next.id, `${next.number} r${next.version}`, kind, note);
       setToast(`Quote ${next.number} saved.`);
+
+      // The funnel used to read a field nothing wrote. Hooked here rather than at each call site
+      // so no path that moves a quotation can forget to move the customer with it.
+      const customer = customers.find(c => c.id === next.customerId);
+      const moved = customer ? restage(customer, after) : null;
+      if (moved) {
+        await repository().save(org.id, 'customers', moved);
+        setCustomers(list => [moved, ...list.filter(c => c.id !== moved.id)]);
+        await record('customer', moved.id, moved.name, 'updated', `${moved.name} moved to ${moved.stage}.`);
+      }
     },
     async removeRecord(name, id) {
       if (!org) return;

@@ -448,6 +448,21 @@ Staff only; customers get a reduced *Overview*.
 
 ### 4.7 Customers — `/app/customers` `LIVE`
 
+**The stage follows the work.** It used to be set to `lead` at creation and never written again, so
+the dashboard funnel read a field nothing moved. Saving a quotation now restages its customer:
+
+| Their quotations | Stage |
+| --- | --- |
+| one being worked on — draft, submitted, in review | **qualified** |
+| a price in front of them — awaiting approval, approved, issued | **proposal** |
+| one won | **won** |
+
+Two rules keep it out of a salesperson's way. **It only advances** — somebody moved forward by hand
+is never dragged back because a quotation is still a draft. And **it never decides `lost` or
+`negotiation`**: neither is inferable, a lost quotation may be one of several, and a negotiation
+happens on the telephone. Both stay a human judgement, and a customer marked lost stays there unless
+they win something.
+
 Staff only. List with segment, stage, owner, project and quote counts. Detail holds contacts,
 country/city/website, notes, and the customer's projects and quotations.
 
