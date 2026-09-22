@@ -3,17 +3,22 @@ import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { Card, Badge, Empty, quoteTone, date } from '../components/ui';
 import { useWorkspace } from '../../platform/workspace';
-import { formatMoney } from '../../catalog/pricing';
+import { useSession } from '../../platform/auth';
+import { formatMoney, restate } from '../../catalog/pricing';
 import { quoteStatuses, type QuoteStatus } from '../../platform/types';
 
 export function Quotes() {
-  const { quotes } = useWorkspace();
+  const { quotes, priceBook } = useWorkspace();
+  const { org } = useSession();
   const [filter, setFilter] = useState(''), [statusFilter, setStatusFilter] = useState<'all' | QuoteStatus>('all');
   const rows = useMemo(() => quotes.filter(q =>
     (statusFilter === 'all' || q.status === statusFilter) &&
     (!filter || `${q.number} ${q.customerName} ${q.projectName}`.toLowerCase().includes(filter.toLowerCase()))
   ), [quotes, filter, statusFilter]);
-  const total = rows.reduce((s, q) => s + q.total, 0);
+  // The list can hold quotations in several currencies at once. Adding their totals and labelling
+  // the sum with whichever one sorted first reports an amount that is not money in any of them.
+  const currency = org?.currency ?? priceBook.currency;
+  const total = rows.reduce((s, q) => s + restate(q.total, q.currency, currency, priceBook), 0);
 
   return (
     <div className="grid" style={{ gap: 16 }}>
@@ -25,7 +30,7 @@ export function Quotes() {
           <option value="all">All statuses</option>{quoteStatuses.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <div className="spacer" />
-        <span className="muted">{rows.length} quotation{rows.length === 1 ? '' : 's'} · {rows.length ? formatMoney(total, rows[0].currency, true) : '—'}</span>
+        <span className="muted">{rows.length} quotation{rows.length === 1 ? '' : 's'} · {rows.length ? formatMoney(total, currency, true) : '—'}</span>
       </div>
       <Card tight>
         {rows.length ? (

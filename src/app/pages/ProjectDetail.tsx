@@ -18,7 +18,7 @@ import {
 import { evaluateFinance } from '../../sizing/finance';
 import { createQuote, nextQuoteNumber } from '../../quoting/quote';
 import { enclosures, pcsUnits, transformers, cellOf, packOf } from '../../catalog/products';
-import { convert, formatMoney } from '../../catalog/pricing';
+import { formatMoney, localRate } from '../../catalog/pricing';
 import type { ApplicationId } from '../../sizing/applications';
 
 type Tab = 'requirements' | 'losses' | 'design' | 'performance' | 'economics';
@@ -46,7 +46,10 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
   const [tab, setTab] = useState<Tab>('requirements');
   const project = projects.find(p => p.id === projectId);
   const currency = org?.currency ?? priceBook.currency;
-  const money = (usd: number, compact = true) => formatMoney(convert(usd, currency), currency, compact);
+  // The same rate the quotation will be raised at, not a reference table. A capex of ₹1.39 cr on
+  // this page and ₹1.53 cr on the quotation raised from it are the same dollars at two different
+  // exchange rates, and nobody reading them side by side can tell which one to believe.
+  const money = (usd: number, compact = true) => formatMoney(usd * localRate(priceBook, currency), currency, compact);
 
   const computed = useMemo(() => {
     if (!project) return null;

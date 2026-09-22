@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { brand } from '../../brand/brand';
 import { cellOf, packOf } from '../../catalog/products';
-import { defaultPriceBook, formatMoney } from '../../catalog/pricing';
+import { defaultPriceBook, formatMoney, localRate } from '../../catalog/pricing';
 import { evaluateFinance } from '../../sizing/finance';
 import { application } from '../../sizing/applications';
 import type { SizingResult } from '../../sizing/engine';
@@ -53,7 +53,10 @@ export function BuildSequence({ sizing, saving, onDone }: { sizing: SizingResult
     const pack = packOf(sizing.enclosure), cell = cellOf(pack);
     const finance = evaluateFinance(sizing, defaultPriceBook);
     const currency = defaultPriceBook.currency;
-    const capex = finance.capexUsd * (defaultPriceBook.landed.exchangeRateInrPerUsd || 1);
+    // The price book's own rate for the currency it is written in, rather than its rupee rate
+    // applied to whatever currency happens to be asked for.
+    const rate = localRate(defaultPriceBook, currency);
+    const capex = finance.capexUsd * rate;
     const perKWh = capex / Math.max(sizing.installedDcMWh * 1000, 1);
     const mwhPerUnit = sizing.installedDcMWh / Math.max(sizing.units, 1);
     return [
@@ -108,7 +111,7 @@ export function BuildSequence({ sizing, saving, onDone }: { sizing: SizingResult
         value: capex, render: n => formatMoney(n, currency, true), unit: 'day-one capital cost, indicative',
         rows: [
           ['Per kWh installed', formatMoney(perKWh, currency)],
-          ['Levelised storage cost', `${formatMoney(finance.lcosPerMWhUsd * (defaultPriceBook.landed.exchangeRateInrPerUsd || 1), currency)} / MWh`],
+          ['Levelised storage cost', `${formatMoney(finance.lcosPerMWhUsd * rate, currency)} / MWh`],
           ['Day-one usable', `${round(sizing.day1UsableMWh, 2)} MWh`],
           ['Lifetime throughput', `${round(sizing.lifetimeThroughputMWh)} MWh`],
         ],

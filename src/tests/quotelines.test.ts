@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addCustomLine, buildQuoteLines, convertQuote, quoteTotals, removeLine, uplift } from '../quoting/quote';
-import { atRate, currencies, defaultPriceBook, fromLanded, landedCost, localRate, type Currency } from '../catalog/pricing';
+import { atRate, currencies, defaultPriceBook, fromLanded, landedCost, localRate, restate, type Currency } from '../catalog/pricing';
 import { defaultSizingInput, sizeSystem } from '../sizing/engine';
 import { evaluateFinance } from '../sizing/finance';
 import type { Quote, QuoteLine } from '../platform/types';
@@ -208,6 +208,31 @@ describe('the offer’s price build-up against its own order value', () => {
       const perEnclosure = fromLanded(landed.deliveredInr, pb.landed, c);
       const battery = buildQuoteLines(sizing, finance, c, pb).find(l => l.id === 'battery')!;
       expect(perEnclosure / battery.unitPrice, `${c} per enclosure`).toBeCloseTo(1, 4);
+    }
+  });
+});
+
+describe('totalling a workspace that quotes in more than one currency', () => {
+  it('restates each amount before adding it to the next', () => {
+    const pb = defaultPriceBook;
+    // ₹9,700 and $100 are the same money at the offer's rate, so a workspace holding both has a
+    // pipeline of $200 — not 9,800 of anything.
+    const rows: { total: number; currency: Currency }[] = [{ total: 9_700, currency: 'INR' }, { total: 100, currency: 'USD' }];
+    const inUsd = rows.reduce((s, q) => s + restate(q.total, q.currency, 'USD', pb), 0);
+    expect(inUsd).toBeCloseTo(200, 6);
+    const inInr = rows.reduce((s, q) => s + restate(q.total, q.currency, 'INR', pb), 0);
+    expect(inInr).toBeCloseTo(19_400, 6);
+    expect(inInr / inUsd).toBeCloseTo(localRate(pb, 'INR'), 6);
+  });
+
+  it('leaves an amount alone when it is already in the currency asked for', () => {
+    for (const c of Object.keys(currencies) as Currency[]) expect(restate(1234.56, c, c, defaultPriceBook)).toBe(1234.56);
+  });
+
+  it('round-trips through any currency', () => {
+    for (const c of Object.keys(currencies) as Currency[]) {
+      const there = restate(1_000_000, 'INR', c, defaultPriceBook);
+      expect(restate(there, c, 'INR', defaultPriceBook)).toBeCloseTo(1_000_000, 6);
     }
   });
 });

@@ -5,7 +5,7 @@ import { Card, Stat, Badge, Empty, stageTone, quoteTone, date } from '../compone
 import { CompositionBar, Funnel, BarChart, series } from '../components/viz';
 import { useWorkspace } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
-import { formatMoney } from '../../catalog/pricing';
+import { formatMoney, restate } from '../../catalog/pricing';
 import { customerStages } from '../../platform/types';
 import { sizeSystem } from '../../sizing/engine';
 
@@ -17,8 +17,11 @@ export function Dashboard() {
 
   const open = quotes.filter(q => ['draft', 'internal-review', 'sent'].includes(q.status));
   const won = quotes.filter(q => q.status === 'won');
-  const pipelineValue = open.reduce((s, q) => s + q.total, 0);
-  const wonValue = won.reduce((s, q) => s + q.total, 0);
+  // Quotations are raised in the currency the customer asked for, so a total across them has to
+  // restate each one before it is added to the next.
+  const inOrgCurrency = (rows: typeof quotes) => rows.reduce((s, q) => s + restate(q.total, q.currency, currency, priceBook), 0);
+  const pipelineValue = inOrgCurrency(open);
+  const wonValue = inOrgCurrency(won);
   const winRate = won.length + quotes.filter(q => q.status === 'lost').length > 0
     ? won.length / (won.length + quotes.filter(q => q.status === 'lost').length) : 0;
 

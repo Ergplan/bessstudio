@@ -126,6 +126,16 @@ export const fromLanded = (inr: number, l: LandedCost, currency: Currency) =>
   (currency === 'INR' ? inr : convert(inr / Math.max(l.exchangeRateInrPerUsd, 1e-6), currency));
 
 /**
+ * An amount raised in one currency, restated in another at the price book's own rates.
+ *
+ * A workspace quoting in more than one currency holds records in each of them. Adding those
+ * numbers together and labelling the sum with one currency — or with whichever record happened to
+ * sort first — reports a pipeline that is not any amount of money at all.
+ */
+export const restate = (amount: number, from: Currency, to: Currency, pb: PriceBook) =>
+  (from === to ? amount : amount * localRate(pb, to) / localRate(pb, from));
+
+/**
  * A rate as it will be printed.
  *
  * A quotation has to multiply out. Carrying a unit price to full precision and rounding it only

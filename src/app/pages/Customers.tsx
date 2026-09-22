@@ -8,7 +8,7 @@ import { newProject as makeProject } from '../../platform/projects';
 import { useWorkspace, projectsOf, quotesOf } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
 import { can, customerStages, segments, uid, nowIso, type Customer, type CustomerStage, type Segment } from '../../platform/types';
-import { formatMoney } from '../../catalog/pricing';
+import { formatMoney, restate } from '../../catalog/pricing';
 import { defaultSizingInput } from '../../sizing/engine';
 
 const blank = (orgId: string, ownerUid: string, ownerName: string): Customer => ({
@@ -45,7 +45,7 @@ function CustomerForm({ value, onChange }: { value: Customer; onChange: (c: Cust
 }
 
 export function Customers() {
-  const { customers, projects, quotes, saveCustomer } = useWorkspace();
+  const { customers, projects, quotes, priceBook, saveCustomer } = useWorkspace();
   const { org, user, role } = useSession();
   const [draft, setDraft] = useState<Customer | null>(null);
   const [filter, setFilter] = useState(''), [stage, setStage] = useState<'all' | CustomerStage>('all');
@@ -75,7 +75,10 @@ export function Customers() {
           <table className="data">
             <thead><tr><th>Customer</th><th>Segment</th><th>Location</th><th>Stage</th><th>Owner</th><th className="num">Projects</th><th className="num">Quoted</th><th>Updated</th></tr></thead>
             <tbody>{rows.map(c => {
-              const value = quotesOf(quotes, 'customerId', c.id).reduce((s, q) => s + q.total, 0);
+              // Each quotation is restated into the workspace currency before it is added to the
+              // next: a customer quoted in dollars and in rupees has no single total otherwise.
+              const value = quotesOf(quotes, 'customerId', c.id)
+                .reduce((s, q) => s + restate(q.total, q.currency, org?.currency ?? priceBook.currency, priceBook), 0);
               return (
                 <tr key={c.id}>
                   <td><Link href={`/app/customers?id=${c.id}`}><b>{c.name}</b></Link></td>
@@ -84,7 +87,7 @@ export function Customers() {
                   <td><Badge tone={stageTone[c.stage]}>{c.stage}</Badge></td>
                   <td className="muted">{c.ownerName}</td>
                   <td className="num">{projectsOf(projects, c.id).length}</td>
-                  <td className="num">{value ? formatMoney(value, org?.currency ?? 'USD', true) : '—'}</td>
+                  <td className="num">{value ? formatMoney(value, org?.currency ?? priceBook.currency, true) : '—'}</td>
                   <td className="muted">{date(c.updatedAt)}</td>
                 </tr>
               );
@@ -116,7 +119,7 @@ export function Customers() {
 
 export function CustomerDetail({ id: customerId }: { id: string }) {
   const router = useRouter();
-  const { customers, projects, quotes, activities, saveCustomer, saveProject, removeRecord } = useWorkspace();
+  const { customers, projects, quotes, activities, priceBook, saveCustomer, saveProject, removeRecord } = useWorkspace();
   const { org, user, role } = useSession();
   const customer = customers.find(c => c.id === customerId);
   const [edit, setEdit] = useState<Customer | null>(null);
@@ -158,7 +161,7 @@ export function CustomerDetail({ id: customerId }: { id: string }) {
               </div>
               <div>
                 <KV label="Projects">{mine.length}</KV>
-                <KV label="Quoted value">{formatMoney(theirQuotes.reduce((s, q) => s + q.total, 0), org?.currency ?? 'USD', true)}</KV>
+                <KV label="Quoted value">{formatMoney(theirQuotes.reduce((s, q) => s + restate(q.total, q.currency, org?.currency ?? priceBook.currency, priceBook), 0), org?.currency ?? priceBook.currency, true)}</KV>
                 <KV label="Added">{date(customer.createdAt)}</KV>
               </div>
             </div>
