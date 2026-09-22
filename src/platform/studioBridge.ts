@@ -29,7 +29,7 @@ export function limitsFromSizing(sizing: SizingResult): StudioLimits {
       acKW: round(sizing.ratedPowerMW * 1000 / fleet, 3),
       constantDCKW: null,
     },
-    label: `${pcs.model} · ${pcs.dcMinV.toLocaleString()}–${pcs.dcMaxV.toLocaleString()} V, ${Math.round(currentPerUnit).toLocaleString()} A per unit`,
+    label: `${pcs.model}, ${pcs.dcMinV.toLocaleString()}–${pcs.dcMaxV.toLocaleString()} V`,
   };
 }
 

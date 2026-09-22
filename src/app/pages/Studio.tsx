@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Camera, Save } from 'lucide-react';
 import { brand } from '../../brand/brand';
@@ -26,6 +26,7 @@ const captureCanvas = (root: HTMLElement | null) => new Promise<string | null>(r
 
 export function Studio() {
   const params = useSearchParams();
+  const router = useRouter();
   const { org } = useSession();
   const { projects, saveProject } = useWorkspace();
   const project = projects.find(p => p.id === params.get('project'));
@@ -62,11 +63,13 @@ export function Studio() {
   }, [project]);
 
   let context = '';
+  let units = 0;
   if (project) {
     try {
       const s = sizeSystem(project.sizing);
-      context = `${project.customerName} · ${project.name} — ${s.units} × ${s.enclosure.model} (${s.installedDcMWh.toFixed(2)} MWh DC, ${s.ratedPowerMW.toFixed(2)} MW)`;
-    } catch { context = `${project.customerName} · ${project.name}`; }
+      units = s.units;
+      context = `${s.installedDcMWh.toFixed(2)} MWh DC · ${s.ratedPowerMW.toFixed(2)} MW`;
+    } catch { context = project.customerName; }
   }
 
   const saveToProject = () => {
@@ -94,8 +97,17 @@ export function Studio() {
           <ArrowLeft size={15} /> Back to {project ? 'project' : 'workspace'}
         </Link>
         <span style={{ opacity: .55 }}>|</span>
-        <span style={{ flex: 1, opacity: .9 }}>
-          {context || 'Parametric enclosure assembly — open a project to carry its configuration into the workbench.'}
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+          <span style={{ opacity: .5, fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', fontFamily: 'var(--mono)' }}>Project</span>
+          <select aria-label="Project" value={project?.id ?? ''}
+            onChange={e => router.push(e.target.value ? `/app/studio?project=${e.target.value}` : '/app/studio')}
+            style={{ background: 'rgba(255,255,255,.05)', color: '#F2F5F7', border: '1px solid rgba(255,255,255,.18)', padding: '4px 8px', fontSize: 12.5, maxWidth: 260 }}>
+            <option value="">Reference assembly</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.customerName} · {p.name}</option>)}
+          </select>
+        </label>
+        <span title={[context, note].filter(Boolean).join(' · ')} style={{ flex: 1, minWidth: 0, opacity: .9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {context || 'Parametric enclosure assembly, not yet tied to a project.'}
           {note && <em style={{ opacity: .75 }}> · {note}</em>}
         </span>
         {status && <em style={{ opacity: .85 }}>{status}</em>}
@@ -111,11 +123,10 @@ export function Studio() {
             <Save size={14} /> Save to project
           </button>
         )}
-        <a href={brand.vendorUrl} target="_blank" rel="noreferrer" style={{ color: brand.goldLight, fontSize: 11.5 }}>{brand.credit}</a>
       </div>
       <div style={{ flex: 1, minHeight: 0 }} ref={canvasHost}>
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#5E6C79' }}>Loading the 3D assembly…</div>}>
-          <Studio3D brandName={(org?.branding.displayName ?? brand.vendorShort).toUpperCase()} brandLogo={org?.branding.logo ?? null} projectName={project?.name} />
+          <Studio3D brandName={(org?.branding.displayName ?? brand.vendorShort).toUpperCase()} brandLogo={org?.branding.logo ?? null} projectName={project?.name} unitCount={units} />
         </Suspense>
       </div>
     </div>
