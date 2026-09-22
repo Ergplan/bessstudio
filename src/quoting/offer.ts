@@ -55,6 +55,12 @@ export function defaultOfferContent(args: {
     ],
     qualifications: [
       `Figures are derived from the ${b.displayName} BESS sizing model for a single ${(sizing.installedDcMWh / sizing.units).toFixed(3)} MWh enclosure, scaled linearly to ${sizing.units} enclosures.`,
+      // Two figures for energy appear on the document — what is installed and what is contracted —
+      // and on a power-limited duty they are a factor of four apart. Left unexplained, that reads
+      // as an over-specified plant rather than as the duty the customer asked for.
+      `Nameplate energy of ${sizing.installedDcMWh.toFixed(1)} MWh carries a contracted ${sizing.requiredUsableMWh.toFixed(0)} MWh, a factor of ${(sizing.installedDcMWh / Math.max(sizing.requiredUsableMWh, 1e-9)).toFixed(1)}. ${sizing.binding === 'power'
+        ? `The fleet is set by power, not energy: ${Math.max(sizing.ratedPowerMW, sizing.chargePowerMW).toFixed(1)} MW across enclosures rated ${(enc.ratedKW / 1000).toFixed(3)} MW takes ${sizing.unitsForPower} enclosures, where the contracted energy alone would take ${sizing.unitsForEnergy}.`
+        : `The fleet is set by the energy it must still deliver in its design year, which takes ${sizing.unitsForEnergy} enclosures against the ${sizing.unitsForPower} its rated power alone would need.`} Each cycle then uses ${Math.round(sizing.input.dod * sizing.input.losses.usableDcWindow * 100)}% of nameplate — ${Math.round(sizing.input.dod * 100)}% depth of discharge within a ${Math.round(sizing.input.losses.usableDcWindow * 100)}% usable DC window.`,
       `Capacity retention follows the modelled degradation curve at ${Math.round(sizing.input.cyclesPerDay * sizing.input.daysPerYear)} cycles per year and the stated operating window.`,
       'Energy supplied to the customer is measured at the AC delivery point after DC cable, conversion, AC cable and transformer losses and after auxiliary consumption.',
       `Charging energy required includes auxiliary consumption during charging. Where charging is from a generating plant over open access, the energy drawn at the generation end is grossed up for open-access losses, taken as ${(sizing.input.losses.openAccessLoss * 100).toFixed(2)}% in the model.`,

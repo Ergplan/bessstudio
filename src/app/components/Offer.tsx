@@ -155,7 +155,7 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
             [`${num(sizing.installedDcMWh, 1)} MWh`, 'Nameplate energy'],
             [`${num(sizing.units * enc.ratedKW / 1000, 1)} MW`, 'Nominal DC power'],
             [`${sizing.input.projectYears} years`, 'Design life modelled'],
-            [`≥ ${num(cell.cycleLife)}`, `Cycles at ${Math.round(sizing.input.dod * 100)}% DoD`],
+            [`≥ ${num(cell.cycleLife)}`, `Cycles at ${Math.round(cell.cycleLifeDod * 100)}% DoD`],
           ].map(([v, k]) => <div className="stat-tile" key={k} style={{ background: b.primary, borderBottomColor: b.accent }}><b>{v}</b><span>{k}</span></div>)}
         </div>
 
@@ -245,7 +245,7 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
                 <tr><td>Peak charge / discharge</td><td>{pack.maxA} A / {pack.maxA} A</td></tr>
                 <tr><td>Charging temperature</td><td>{cell.chargeTempC[0]} °C to +{cell.chargeTempC[1]} °C</td></tr>
                 <tr><td>Discharging temperature</td><td>{cell.dischargeTempC[0]} °C to +{cell.dischargeTempC[1]} °C</td></tr>
-                <tr><td>Cycle life</td><td>≥ {num(cell.cycleLife)} cycles at {Math.round(sizing.input.dod * 100)}% DoD, 25 °C</td></tr>
+                <tr><td>Cycle life</td><td>≥ {num(cell.cycleLife)} cycles to {Math.round(cell.cycleLifeRetention * 100)}% at {Math.round(cell.cycleLifeDod * 100)}% DoD, 25 °C</td></tr>
                 <tr><td>Protections</td><td>Over-charge, over-discharge, short circuit, over- and under-temperature</td></tr>
               </tbody>
             </table>
@@ -312,8 +312,11 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
                 <td>{r.year === 0 ? 'At commissioning' : r.year}</td>
                 <td className="num">{r.cycles ? num(r.cycles) : '—'}</td>
                 <td className="num">{Math.round(r.retention * 100)}%</td>
-                <td className="num">{num(r.storedMWh)}</td>
-                <td className="num">{num(r.usablePerCycleMWh)}</td>
+                {/* A decimal place: at whole megawatt-hours a fleet that fades a percent a year
+                    and steps up at each augmentation reads as a column of numbers going up and
+                    down at random. */}
+                <td className="num">{num(r.storedMWh, 1)}</td>
+                <td className="num">{r.year === 0 ? '—' : num(r.usablePerCycleMWh, 1)}</td>
                 <td className="num">{r.year === 0 ? '—' : num(r.suppliedGWh, 1)}</td>
                 <td className="num">{r.year === 0 ? '—' : num(r.chargingGWh, 1)}</td>
               </tr>

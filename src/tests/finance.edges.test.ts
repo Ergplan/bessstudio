@@ -4,6 +4,7 @@ import { annualBenefitUsd, chargingEnergyMWh, costLines, evaluateFinance } from 
 import { defaultPriceBook, type PriceBook } from '../catalog/pricing';
 import { applications } from '../sizing/applications';
 import { energySchedule, offerTotals } from '../quoting/offer';
+import { cellOf, packOf } from '../catalog/products';
 
 /**
  * The finance model, checked against itself.
@@ -257,5 +258,65 @@ describe('the performance table a customer is handed', () => {
         expect(y.deliveredPerCycleMWh, `${augmentation} year ${y.year}`).toBeGreaterThan(0);
       }
     }
+  });
+});
+
+describe('which constraint set the fleet', () => {
+  it('reports the constraint that actually won, on every application', () => {
+    for (const app of applications) {
+      const s = sizeSystem(defaultSizingInput(app.id));
+      expect(s.units, app.name).toBe(Math.max(1, s.unitsForPower, s.unitsForEnergy));
+      expect(s.binding, app.name).toBe(s.unitsForPower >= s.unitsForEnergy ? 'power' : 'energy');
+    }
+  });
+
+  it('calls a fifteen-minute burst power-limited and a long-duration plant energy-limited', () => {
+    // The reference enclosure is rated at half a C — 2.5 MW against 5 MWh — so power only binds
+    // on a duty shorter than about half an hour. Twenty megawatts for fifteen minutes takes eight
+    // enclosures for its power and two for its energy.
+    const burst = sizeSystem({ ...defaultSizingInput('frequency-regulation'), powerMW: 20, durationH: 0.25, dod: 0.95 });
+    expect(burst.binding).toBe('power');
+    expect(burst.unitsForPower).toBeGreaterThan(burst.unitsForEnergy);
+    const long = sizeSystem({ ...defaultSizingInput('backup-power'), powerMW: 2.5, durationH: 8 });
+    expect(long.binding).toBe('energy');
+    expect(long.unitsForEnergy).toBeGreaterThan(long.unitsForPower);
+  });
+
+  /**
+   * A shallow depth of discharge is the usual reason a plant carries far more energy than it is
+   * contracted for — a frequency-regulation duty cycling 40% of nameplate needs roughly two and a
+   * half times the batteries of one cycling it all, before any loss is counted.
+   */
+  it('carries more nameplate the shallower the cycle', () => {
+    let previous = Infinity;
+    for (const dod of [0.3, 0.5, 0.7, 0.9]) {
+      const s = sizeSystem({ ...defaultSizingInput(), dod });
+      const ratio = s.installedDcMWh / s.requiredUsableMWh;
+      expect(ratio, `${dod} DoD`).toBeLessThanOrEqual(previous);
+      previous = ratio;
+    }
+  });
+});
+
+describe('the warranty the plant is measured against', () => {
+  /**
+   * A throughput warranty is a quantity of energy the cell is rated to pass, fixed by its own
+   * data sheet. Scaling it by the customer's depth of discharge made the warranty shrink the more
+   * gently the plant was operated — so a shallow-cycling frequency-regulation duty, which is the
+   * kindest thing you can do to a cell, was reported as the closest to exceeding it.
+   */
+  it('holds the throughput warranty fixed whatever depth the customer cycles to', () => {
+    const at = (dod: number) => sizeSystem({ ...defaultSizingInput(), dod, augmentation: 'none' });
+    const shallow = at(0.4), deep = at(0.9);
+    const perMWhInstalled = (s: ReturnType<typeof sizeSystem>) => s.warrantyThroughputMWh / s.installedDcMWh;
+    expect(perMWhInstalled(shallow)).toBeCloseTo(perMWhInstalled(deep), 6);
+    expect(perMWhInstalled(deep)).toBeCloseTo(cellOf(packOf(deep.enclosure)).cycleLife * cellOf(packOf(deep.enclosure)).cycleLifeDod, 6);
+  });
+
+  it('works the cell harder the deeper it is cycled', () => {
+    const shallow = sizeSystem({ ...defaultSizingInput(), dod: 0.4, augmentation: 'none' });
+    const deep = sizeSystem({ ...defaultSizingInput(), dod: 0.9, augmentation: 'none' });
+    const used = (s: ReturnType<typeof sizeSystem>) => s.lifetimeThroughputMWh / s.warrantyThroughputMWh;
+    expect(used(deep)).toBeGreaterThan(used(shallow));
   });
 });

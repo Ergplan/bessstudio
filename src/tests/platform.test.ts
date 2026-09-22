@@ -499,7 +499,10 @@ describe('editable design inputs', () => {
     expect(supplied.endOfLifeRetention).toBeCloseTo(0.69, 6);
 
     const modelled = sizeSystem({ ...base(), degradation: { mode: 'model', retention: [] } });
-    expect(modelled.endOfLifeRetention).not.toBeCloseTo(0.69, 3);
+    // The modelled curve is derived from the cell's warranty anchors at this duty, not read from
+    // the schedule, so it is free to land anywhere — including, by coincidence, near the table's
+    // own end point. What has to hold is that the two are computed by different routes.
+    expect(modelled.years.map(y => y.retention)).not.toEqual(supplied.years.map(y => y.retention));
   });
 
   it('prices a quotation through whichever costing basis is selected', () => {

@@ -7,7 +7,14 @@ export type Cell = {
   id: string; model: string; chemistry: 'LFP' | 'NMC' | 'LTO' | 'Na-ion';
   nominalV: number; ah: number; maxV: number; minV: number;
   thicknessMm: number; widthMm: number; heightMm: number; massKg: number;
-  cycleLife: number; cycleLifeRetention: number; calendarYears: number; calendarRetention: number;
+  /**
+   * Cycle life, and the conditions it is quoted at. A cycle-life figure means nothing without the
+   * depth of discharge it was tested to: 8 000 cycles at 90% DoD is 7 200 equivalent full cycles,
+   * and quoting it against whatever depth a customer happens to operate at both overstates the
+   * cell and misrepresents the data sheet.
+   */
+  cycleLife: number; cycleLifeRetention: number; cycleLifeDod: number;
+  calendarYears: number; calendarRetention: number;
   chargeTempC: [number, number]; dischargeTempC: [number, number];
   approvedVendors: string[]; certifications: string[]; provenance: Provenance;
 };
@@ -47,7 +54,7 @@ export const cells: Cell[] = [
     id: 'cell-lfp-314', model: 'LFP 314 Ah prismatic', chemistry: 'LFP',
     nominalV: 3.2, ah: 314, maxV: 3.65, minV: 2.5,
     thicknessMm: 71.7, widthMm: 174, heightMm: 207, massKg: 5.62,
-    cycleLife: 8000, cycleLifeRetention: 0.8, calendarYears: 20, calendarRetention: 0.9,
+    cycleLife: 8000, cycleLifeRetention: 0.8, cycleLifeDod: 0.9, calendarYears: 20, calendarRetention: 0.9,
     chargeTempC: [0, 55], dischargeTempC: [-10, 55],
     approvedVendors: cellVendors, certifications: cellCerts, provenance: 'supplied',
   },
@@ -55,7 +62,7 @@ export const cells: Cell[] = [
     id: 'cell-lfp-100', model: 'LFP 100 Ah prismatic', chemistry: 'LFP',
     nominalV: 3.2, ah: 100, maxV: 3.65, minV: 2.5,
     thicknessMm: 36, widthMm: 130, heightMm: 200, massKg: 1.95,
-    cycleLife: 6000, cycleLifeRetention: 0.8, calendarYears: 15, calendarRetention: 0.88,
+    cycleLife: 6000, cycleLifeRetention: 0.8, cycleLifeDod: 0.9, calendarYears: 15, calendarRetention: 0.88,
     chargeTempC: [0, 55], dischargeTempC: [-10, 55],
     approvedVendors: cellVendors, certifications: cellCerts, provenance: 'supplied',
   },

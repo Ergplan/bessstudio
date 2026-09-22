@@ -50,7 +50,7 @@ export function Catalog() {
                 <tr key={c.id}><td><b>{c.model}</b><div className="muted" style={{ fontSize: 11 }}>{c.widthMm}×{c.heightMm}×{c.thicknessMm} mm · {c.massKg} kg · {c.chemistry}</div></td>
                   <td className="num">{c.ah} Ah @ {c.nominalV} V<div className="muted" style={{ fontSize: 11 }}>{(c.nominalV * c.ah / 1000).toFixed(3)} kWh</div></td>
                   <td className="num">{c.minV}–{c.maxV} V</td>
-                  <td className="num">{c.cycleLife.toLocaleString()} → {(c.cycleLifeRetention * 100).toFixed(0)}%<div className="muted" style={{ fontSize: 11 }}>{c.calendarYears} yr → {(c.calendarRetention * 100).toFixed(0)}%</div></td>
+                  <td className="num">{c.cycleLife.toLocaleString()} → {(c.cycleLifeRetention * 100).toFixed(0)}%<div className="muted" style={{ fontSize: 11 }}>at {(c.cycleLifeDod * 100).toFixed(0)}% DoD · {c.calendarYears} yr → {(c.calendarRetention * 100).toFixed(0)}%</div></td>
                   <td className="num">{c.chargeTempC[0]} to {c.chargeTempC[1]} °C<div className="muted" style={{ fontSize: 11 }}>discharge {c.dischargeTempC[0]} to {c.dischargeTempC[1]}</div></td>
                   <td className="muted" style={{ fontSize: 11.5 }}>{c.approvedVendors.join(', ')}<div>{c.certifications.join(' · ')}</div></td></tr>
               ))}</tbody>

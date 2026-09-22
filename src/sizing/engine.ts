@@ -66,6 +66,8 @@ export type SizingResult = {
   enclosure: EnclosureSpec; pcs: PcsSpec; transformer: TransformerSpec | null;
   requiredUsableMWh: number; ratedPowerMW: number; effectiveDurationH: number; chargePowerMW: number; chargeCRate: number;
   units: number; totalUnits: number; installedDcMWh: number; day1UsableMWh: number;
+  /** Which of the two independent constraints set the day-one fleet, and how many units each asked for. */
+  binding: 'power' | 'energy'; unitsForPower: number; unitsForEnergy: number;
   packs: number; cells: number; racks: number; strings: number;
   footprintM2: number; massTonnes: number;
   pcsCount: number; pcsTotalMW: number; transformerCount: number; transformerTotalMVA: number;
@@ -105,7 +107,10 @@ export const temperatureFactor = (cellTempC: number) => 2 ** ((cellTempC - 25) /
 export function retentionAt(age: number, efcPerYear: number, cell: ReturnType<typeof cellOf>, tempFactor: number) {
   if (age <= 0) return 1;
   const calA = (1 - cell.calendarRetention) / Math.sqrt(cell.calendarYears);
-  const perEfc = (1 - cell.cycleLifeRetention) / cell.cycleLife;
+  // The rated cycles were tested at the data sheet's depth of discharge, so they are worth that
+  // many equivalent full cycles and no more. Treating 8 000 cycles at 90% DoD as 8 000 full ones
+  // understates the fade per cycle by a ninth.
+  const perEfc = (1 - cell.cycleLifeRetention) / (cell.cycleLife * cell.cycleLifeDod);
   const fade = tempFactor * (calA * Math.sqrt(age) + perEfc * efcPerYear * age);
   return Math.min(1, Math.max(0.2, 1 - fade));
 }
@@ -227,6 +232,10 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   const designPowerMW = Math.max(ratedPowerMW, chargePowerMW);
   const unitsForPower = ceil(designPowerMW * 1000 / enclosure.ratedKW);
   const units = Math.max(1, Math.min(unitsForEnergy, 5000), unitsForPower);
+  // Which constraint won decides how the plant reads. A power-limited fleet carries far more
+  // energy than it is contracted for, and saying so is the difference between a plant that looks
+  // over-specified and one whose duty explains itself.
+  const binding: 'power' | 'energy' = unitsForPower >= unitsForEnergy ? 'power' : 'energy';
 
   // Year-by-year roll-forward with per-vintage cohorts, so augmented capacity ages from its own year.
   const cohorts: Cohort[] = [{ year: 0, dcMWh: units * unitDcMWh, units }];
@@ -287,7 +296,10 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   const chargeCRate = chargePowerMW / Math.max(installedDcMWh, 1e-6);
   const packCRate = enclosureCRate(enclosure);
   const lifetimeThroughputMWh = years.reduce((s, y) => s + y.deliveredMWh, 0);
-  const warrantyThroughputMWh = totalUnits * unitDcMWh * cell.cycleLife * input.dod;
+  // A throughput warranty is a quantity of energy, fixed by the cell's rated cycles at the depth
+  // they were rated at. Scaling it by the customer's own depth of discharge made the warranty
+  // shrink the more gently the plant was operated, which is backwards.
+  const warrantyThroughputMWh = totalUnits * unitDcMWh * cell.cycleLife * cell.cycleLifeDod;
 
   if (systemCRate > packCRate + 1e-9) warnings.push({ code: 'c-rate', level: 'error', text: `System discharge rate ${systemCRate.toFixed(2)} C exceeds the ${packCRate.toFixed(2)} C the ${pack.model} pack sustains at ${pack.continuousA} A. Add units or reduce rated power.` });
   else if (systemCRate > packCRate * 0.9) warnings.push({ code: 'c-rate-margin', level: 'warning', text: `System operates at ${(systemCRate / packCRate * 100).toFixed(0)}% of the pack continuous rating. Thermal review recommended.` });
@@ -347,6 +359,7 @@ export function sizeSystem(raw: SizingInput): SizingResult {
     input, enclosure, pcs, transformer, requiredUsableMWh, ratedPowerMW,
     effectiveDurationH: requiredUsableMWh / Math.max(ratedPowerMW, 1e-6), chargePowerMW, chargeCRate,
     units, totalUnits, installedDcMWh, day1UsableMWh,
+    binding, unitsForPower, unitsForEnergy: Number.isFinite(unitsForEnergy) ? unitsForEnergy : 0,
     packs: units * enclosure.racks * enclosure.packsPerRack, cells: units * enclosureCellCount(enclosure),
     racks: units * enclosure.racks, strings: units * enclosureStrings(enclosure),
     footprintM2: units * enclosureFootprintM2(enclosure), massTonnes: units * enclosure.massKg / 1000,

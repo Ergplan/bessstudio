@@ -137,10 +137,13 @@ describe('degradation', () => {
   });
 
   it('reaches the cell warranty point at the throughput the cell is warranted for', () => {
-    // 8,000 full cycles to 80%: with calendar fade switched off, cycling alone must land there.
+    // 8,000 cycles to 80% at the data sheet's 90% depth of discharge is 7,200 equivalent full
+    // cycles, not 8,000. With calendar fade switched off, cycling that throughput alone must land
+    // on the warranty point — and the rated cycle count on its own must not yet have reached it.
     const noCalendar = { ...cell, calendarRetention: 1 };
-    const years = 10, efcPerYear = cell.cycleLife / years;
-    expect(retentionAt(years, efcPerYear, noCalendar, 1)).toBeCloseTo(cell.cycleLifeRetention, 6);
+    const years = 10, warrantedEfc = cell.cycleLife * cell.cycleLifeDod;
+    expect(retentionAt(years, warrantedEfc / years, noCalendar, 1)).toBeCloseTo(cell.cycleLifeRetention, 6);
+    expect(retentionAt(years, cell.cycleLife / years, noCalendar, 1)).toBeLessThan(cell.cycleLifeRetention);
   });
 
   it('reaches the calendar warranty point when nothing is cycled', () => {
