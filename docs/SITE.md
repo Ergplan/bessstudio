@@ -165,15 +165,24 @@ Orthogonal to roles. A mode changes what is on screen, never what a person is pe
 | **Design** | signed-in customers and staff | sizing, equipment selection, scenario comparison, the quotation path |
 | **Engineering** | staff with `project.write` | full component tree, topology editing, solver settings, provenance |
 
-`ASK:` **A permissions conflict worth deciding, not silently resolving.** Today `owner` and `admin`
-hold both `quote.prepare` and `quote.approve`, so either can prepare a quotation and then release
-their own work — the exact separation §2 claims to enforce, defeated at the top of the tree. Sales
-and approver are properly separated; owner and admin are not.
+**Decided: one level of approval inside the system.** `LIVE` — the tenant setting `approvalMode`
+defaults to `single`. Whoever prepares a quotation issues it and downloads the PDF; the manager
+approves that document **outside** the application, signing the **Internal approval** block the
+offer now carries. One account runs the whole journey, which is what makes it testable.
 
-*Recommendation:* forbid self-approval at the record level rather than the role level — an approver
-may not release a quotation whose `preparedByUid` is their own — and require a second approver in
-that case. This keeps a one-person tenant workable while making the separation real. Needs your
-decision because it can block a small organization with a single administrator.
+The record is careful about this. Issuing writes `issuedBy` / `issuedAt` and **deliberately does not
+touch the approval fields** — nobody approved it inside the system, so the record must not say they
+did. The Firestore rules still refuse anyone with `quote.prepare` writing `approvedByUid`.
+
+`two-step` remains available per tenant and keeps the original separation: prepare and release are
+different people, an approver returns with a reason, and nobody releases their own work. Both paths
+are built and tested. Full in-system RBAC on top of this comes later.
+
+This resolves the conflict earlier flagged here — that `owner` and `admin` held both
+`quote.prepare` and `quote.approve` and could release their own work. Under `single` that is the
+intended behaviour and the document carries the real approval; under `two-step` it remains a
+`GAP:` **record-level self-approval is still not blocked** — an owner may approve a quotation they
+prepared. Worth closing when in-system RBAC lands.
 
 **How a role is assigned:** `LIVE` — three ways, and no fourth.
 
@@ -913,15 +922,16 @@ Keep the existing React frontend and the verified application stack. Add a **Pyt
 service** with a typed API, asynchronous jobs, cancellation, progress, reproducible result storage
 and caching of identical runs.
 
-`ASK:` **this does not fit the free Firebase Spark plan.** Spark has no Cloud Functions and no
-container runtime, and the current app is a static export on Firebase Hosting. A Python service
-needs somewhere to run.
+**Decided: a Google Cloud VM**, using the existing Terraform environment rather than adding a new
+hosting product. The Python service runs there; the React frontend keeps its current deployment
+until the migration is planned.
 
-*Recommendation:* Cloud Run on the Blaze plan, which is pay-per-use and idles at zero cost, with
-Firebase Hosting rewriting `/api/sim/**` to it. Rationale: it keeps one project, one auth model and
-one deploy; the alternative — running the solver in the browser via Pyodide — avoids the bill but
-puts a multi-second solve on the user's main thread and cannot cache across users. Needs your
-decision because it changes the hosting bill from zero to usage-based.
+`GAP:` **the Terraform environment is not in this repository and is not in my possession.** I
+searched for `*.tf`, Dockerfiles and Cloud Build config and found none, and I have no record of
+writing one in this session — it is presumably in another repository or another session. Before S2,
+point me at it: repository, path, the VM's shape, and whether the frontend moves with it or stays on
+Firebase Hosting. Until then the deployment target is named but not specified, and no stage depends
+on it.
 
 ---
 
@@ -1372,13 +1382,13 @@ or the build sequence.
 | **S7** — Contract-demand UPS sizing | Depends on S6. Lesson 7, six presets, custom units, protected share, duration, readiness, equipment options. | F05. Every preset and the 500 kVA worked example; kVA versus kW handling; PF effect; load-fraction and duration boundaries; current and C-rate limits; catalogue compatibility; insufficient initial reserve; fixed-system test versus resize; **continuity remains unverified without evidence**. |
 | **S8** — Lead-acid versus LFP | Depends on S7. Distinct VRLA model/data adapter, chemistry-compatible equipment, equal-service comparison. | F06. Equal protected load and autonomy, **not** equal Ah; VRLA constant-power discharge fixtures at relevant runtimes; LFP short-duration limits; recharge limits; SOC carried across successive outages; incompatibility and missing data detected. **No numeric result outside a validated or interpretable model range.** |
 | **S9** — Indian conditions and lifecycle cost | Depends on S8. Three India presets, ₹ costs, tariff sensitivity, cooling, replacement, recycling. | F07. Outage schedules and partial recharge reproduced; room and battery temperature separated; independently checked 5/10/15-year cash-flow fixtures; discounting, taxes, losses, AMC, replacement timing, residual value; **no missing price treated as zero**; **no forced lithium winner**; evidence and dates on every market claim. |
-| **S10** — Synchronised 3D | Depends on S9. Link accepted simulations to the existing 3D, cutaway and component inspection, exports. 2D learning retained. | Same component identity and timestamp across 3D, single-line, charts and log; scrubbing reproduces recorded state; **playback rate does not change results**; no animation-generated telemetry; keyboard and reduced-motion fallback; exports carry scenario, time and evidence status. |
-| **S11** — Project and quotation integration | Depends on S10. Learning-to-design conversion, immutable results, engineering appendix with selected chemistry. | F08. End-to-end customer → sales → approver; role and tenant negative tests **through the rules as well as the UI**; stale designs invalidate quotation assumptions; approver reviews the exact revision; **indicative results never become warranties or self-issued offers**. |
+| **S10** — Synchronised 3D | **DEFERRED** by decision (§20.2). 3D stays exactly as it is — the quote-generation experience — and the lessons ship in 2D. Revisit after S12. | *(not in the current plan)* |
+| **S11** — Project and quotation integration | Depends on **S9** — dependency revised by the S10 deferral. Learning-to-design conversion, immutable results, engineering appendix with selected chemistry. | F08. End-to-end customer → sales → approver; role and tenant negative tests **through the rules as well as the UI**; stale designs invalidate quotation assumptions; approver reviews the exact revision; **indicative results never become warranties or self-issued offers**. |
 | **S12** — Release readiness | Depends on S11. Production-like compute and jobs, retention, observability, recovery. | End-to-end smoke for all seven lessons and the comparison; job cancellation, timeouts, worker failure; cache isolation; quotas; export integrity; targeted regression of critical journeys; performance against predeclared budgets; **rollback and restore exercised**. Release only the exact tested revision. |
 
-**S10 may be deferred** if a 2D-first release is chosen. Record the revised S11 dependency and keep
-3D as `GAP` — do not call the original scope complete. Any other reordering needs a recorded
-rationale and valid dependencies.
+**S10 is deferred** by decision. S11 now depends on S9, recorded above. Full synchronised 3D stays
+`GAP` and the original scope is **not** claimed complete. The existing 3D studio is untouched and
+keeps doing what it already does well: carrying the quote-generation experience.
 
 ### 17.3 The instruction to start a stage
 
@@ -1461,21 +1471,22 @@ separately. **No blanket tolerance.**
 | Public signed-out lessons | Deferred to §15.7 | Follows from the above. Recorded, not dropped. |
 | Stages S0–S11 as supplied | S0–S12, with a new S1 finishing the quoting tool | The commercial journey must be complete before simulation work starts. |
 
-### 20.3 Open questions
+### 20.3 Decisions taken
 
-Each carries a recommendation so work is not blocked.
+| Question | Decision | Consequence |
+| --- | --- | --- |
+| Quote approval | **One level inside the system.** Issue, download the PDF, manager signs it outside. `two-step` stays per-tenant. | Built. `approvalMode` defaults to `single`; the offer carries an **Internal approval** block; issuing never writes the approval fields. Full RBAC later. |
+| Where the simulation runs | **Google Cloud VM**, on the existing Terraform environment. | Named but unspecified — the Terraform is not in this repo (§13.4). Needed before S2. |
+| 3D | **2D first.** 3D stays as the quote-generation experience; lessons ship 2D; full synchronised 3D later. | S10 deferred; S11 now depends on S9. |
+| Customer versus engineer in 3D | Follows from the above — no change to 3D rights for now. | Revisit with S10. |
 
-1. **Owner/admin self-approval** (§2.1). *Recommend:* forbid at record level — an approver may not
-   release a quotation they prepared — with a second approver required. Blocks single-administrator
-   tenants, so it is your call.
-2. **Where the Python service runs** (§13.4). *Recommend:* Cloud Run on Blaze, Hosting rewrite to
-   `/api/sim/**`. Changes the bill from zero to usage-based.
-3. **Customer versus engineer rights in 3D** (§5.2). *Recommend:* customers read-only inspection;
-   engineers get topology editing and export.
-4. **2D-first release?** (§17.2). *Recommend:* yes — defer S10, ship the lessons in 2D, keep 3D as
-   the demo surface it already is.
+### 20.4 Still open
 
-### 20.4 Equipment data still required
+1. **Where the Terraform environment lives** (§13.4). Blocks S2 planning, not S0 or S1.
+2. **Record-level self-approval under `two-step`** (§2.1). An owner can still approve a quotation
+   they prepared. Close it when in-system RBAC lands.
+
+### 20.5 Equipment data still required
 
 None of this can reach **Validated against equipment data** without:
 

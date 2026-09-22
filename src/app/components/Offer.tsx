@@ -442,6 +442,15 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
           ))}
         </div>
 
+        {/* Under single-level release the quotation is approved against this document rather than
+            in the application, so the document has to carry somewhere to record that. Without this
+            block the approval leaves no trace anywhere. */}
+        <div className="internal-approval">
+          <b>Internal approval</b>
+          <span>Prepared by {quote.preparedBy}, {date(quote.createdAt)}.</span>
+          <span>Approved by <i /> name, designation, date and signature.</span>
+        </div>
+
         <div className="accept" style={{ borderLeftColor: b.accent }}>
           <h5 className="block">Acceptance</h5>
           <p className="prose" style={{ margin: 0 }}>{content.acceptanceNote}</p>

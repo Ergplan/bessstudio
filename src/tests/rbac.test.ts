@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { can, canSeeFinancials, isCustomerRole, roles, staffRoles, type Quote, type Role } from '../platform/types';
+import { approvalModeOf, can, canSeeFinancials, isCustomerRole, roles, staffRoles, type Quote, type Role } from '../platform/types';
 import { allows, applyAction, availableActions, isEditable, transitions, visibleQuotes } from '../quoting/lifecycle';
 
 const quote = (over: Partial<Quote> = {}) => ({
@@ -66,16 +66,16 @@ describe('quotation lifecycle', () => {
       expect(availableActions('customer', quote({ status, kind: 'formal' }))).toEqual([]);
   });
 
-  it('will not let sales release its own quotation', () => {
+  it('will not let sales release its own quotation, under two-step', () => {
     const prepared = quote({ kind: 'formal', status: 'pending-approval' });
-    expect(allows('sales', prepared, 'approve')).toBe(false);
-    expect(allows('approver', prepared, 'approve')).toBe(true);
+    expect(allows('sales', prepared, 'approve', 'two-step')).toBe(false);
+    expect(allows('approver', prepared, 'approve', 'two-step')).toBe(true);
   });
 
-  it('cannot issue a quotation that no approver has released', () => {
+  it('cannot issue a quotation no approver has released, under two-step', () => {
     for (const status of ['draft', 'internal-review', 'pending-approval'] as const)
-      expect(allows('approver', quote({ kind: 'formal', status }), 'send')).toBe(false);
-    expect(allows('sales', quote({ kind: 'formal', status: 'approved' }), 'send')).toBe(true);
+      expect(allows('approver', quote({ kind: 'formal', status }), 'send', 'two-step')).toBe(false);
+    expect(allows('sales', quote({ kind: 'formal', status: 'approved' }), 'send', 'two-step')).toBe(true);
   });
 
   it('never treats an indicative estimate as issuable', () => {
@@ -106,6 +106,56 @@ describe('quotation lifecycle', () => {
 
   it('refuses a transition the record is not positioned for', () => {
     expect(() => applyAction(quote({ status: 'won' }), 'submit', actor)).toThrow();
+  });
+});
+
+describe('approval modes', () => {
+  const prepared = (status: 'draft' | 'internal-review' | 'pending-approval' | 'approved') =>
+    quote({ kind: 'formal', status, ownerUid: 'sales' });
+
+  it('defaults to single level, so an absent setting is never the stricter path by accident', () => {
+    expect(approvalModeOf(null)).toBe('single');
+    expect(approvalModeOf({})).toBe('single');
+    expect(approvalModeOf({ approvalMode: 'two-step' })).toBe('two-step');
+  });
+
+  it('lets one person prepare and issue under single level', () => {
+    expect(availableActions('sales', prepared('draft'), 'single').map(t => t.action)).toContain('issue');
+    expect(allows('sales', prepared('internal-review'), 'issue', 'single')).toBe(true);
+  });
+
+  it('hides the approval round trip entirely under single level', () => {
+    for (const action of ['request-approval', 'approve', 'return', 'send'] as const)
+      expect(allows('owner', prepared('pending-approval'), action, 'single')).toBe(false);
+    expect(availableActions('owner', prepared('draft'), 'single').map(t => t.action)).not.toContain('request-approval');
+  });
+
+  it('hides the single-level shortcut entirely under two-step', () => {
+    for (const status of ['draft', 'internal-review'] as const)
+      expect(allows('owner', prepared(status), 'issue', 'two-step')).toBe(false);
+  });
+
+  it('records who issued it, and does not claim anybody approved it', () => {
+    const issued = applyAction(prepared('draft'), 'issue', actor);
+    expect(issued.status).toBe('sent');
+    expect(issued.issuedByUid).toBe('u1');
+    expect(issued.sentAt).toBeTruthy();
+    // The approval happened on a signed PDF, outside the system. The record must not pretend
+    // otherwise, or an unapproved price looks approved.
+    expect(issued.approvedByUid ?? null).toBeNull();
+    expect(issued.approvedAt ?? null).toBeNull();
+  });
+
+  it('still records a real in-system approval under two-step', () => {
+    const approved = applyAction(prepared('pending-approval'), 'approve', actor);
+    expect(approved.approvedByUid).toBe('u1');
+    expect(approved.issuedByUid ?? null).toBeNull();
+  });
+
+  it('never lets a customer issue, under either mode', () => {
+    for (const mode of ['single', 'two-step'] as const)
+      for (const status of ['draft', 'internal-review'] as const)
+        expect(allows('customer', prepared(status), 'issue', mode)).toBe(false);
   });
 });
 

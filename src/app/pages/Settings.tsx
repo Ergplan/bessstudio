@@ -4,7 +4,7 @@ import { Card, Tabs, TextInput, NumberInput, SelectInput, Slider, Badge, KV, Fie
 import { useSession } from '../../platform/auth';
 import { useWorkspace } from '../../platform/workspace';
 import { repository, usingFirestore } from '../../platform/repo';
-import { can, inviteState, invitableRoles, roleDescriptions, roleLabels, roles, type Invite, type Member, type Role } from '../../platform/types';
+import { approvalModeOf, can, inviteState, invitableRoles, roleDescriptions, roleLabels, roles, type ApprovalMode, type Invite, type Member, type Role } from '../../platform/types';
 import { INVITE_DAYS, inviteLink, newInvite, registerLink } from '../../platform/joining';
 import { Link as LinkIcon, UserPlus } from 'lucide-react';
 import {
@@ -254,6 +254,21 @@ export function Settings() {
                   </table>
                 </>
               ) : <p className="muted">Only an owner or administrator can invite people.</p>}
+            </Card>
+
+            <Card title="Quotation approval" subtitle="How a price gets released to a customer">
+              <Field label="Approval">
+                <select value={approvalModeOf(org)} disabled={!manage}
+                  onChange={async e => { await repository().saveOrganization({ ...org, approvalMode: e.target.value as ApprovalMode }); await refreshOrg(); }}>
+                  <option value="single">One level — issue and send the PDF for signature</option>
+                  <option value="two-step">Two step — a separate approver releases it in the system</option>
+                </select>
+              </Field>
+              <p className="muted">
+                {approvalModeOf(org) === 'single'
+                  ? 'Whoever prepares the quotation issues it and downloads the PDF. The manager approves that document outside the application and signs the approval block it carries. One account can run the whole journey, which is what makes it easy to test.'
+                  : 'Preparing and releasing are different people. A quotation goes to an approver, who releases or returns it with a reason, and only then can it be issued. Nobody releases their own work.'}
+              </p>
             </Card>
 
             <Card title="Customer self-registration" subtitle="Whether strangers from your website may open an account here">

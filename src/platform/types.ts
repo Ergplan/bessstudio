@@ -87,7 +87,25 @@ export type Organization = {
    * customer. Off by default: opening a tenant to the public is a decision, not an accident.
    */
   customerSignupEnabled?: boolean;
+  /**
+   * How a quotation gets released.
+   *
+   * `single` — the default — is one level inside the system: whoever prepares the quotation issues
+   * it and downloads the PDF, and a manager approves that PDF outside the application, signing the
+   * approval block the document carries. `two-step` keeps the release inside the system and
+   * requires a separate approver, so preparing and releasing cannot be the same person.
+   *
+   * Single is the default because it is what a small team actually does, and because it makes the
+   * whole journey testable by one account. The two-step machinery stays built and tested either
+   * way; this only decides which path the interface and the rules offer.
+   */
+  approvalMode?: ApprovalMode;
 };
+
+export type ApprovalMode = 'single' | 'two-step';
+/** Absent means single. A tenant opts in to the stricter path, never out of it by accident. */
+export const approvalModeOf = (org: { approvalMode?: ApprovalMode } | null | undefined): ApprovalMode =>
+  org?.approvalMode === 'two-step' ? 'two-step' : 'single';
 
 /**
  * An invitation to join an organization at a named role.
@@ -201,6 +219,11 @@ export type Quote = {
   ownerUid: string;
   submittedAt?: string | null; submittedBy?: string | null;
   approvedAt?: string | null; approvedBy?: string | null; approvedByUid?: string | null;
+  /**
+   * Single-level release. Deliberately not the `approved*` fields: nobody approved this inside the
+   * system, so the record must not say they did. The manager's approval is a signature on the PDF.
+   */
+  issuedAt?: string | null; issuedBy?: string | null; issuedByUid?: string | null;
   /** Set when an approver sends it back, so the reason survives the round trip. */
   returnedReason?: string | null;
   lines: QuoteLine[];

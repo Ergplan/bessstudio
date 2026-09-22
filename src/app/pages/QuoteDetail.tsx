@@ -12,7 +12,7 @@ import { sizeSystem, type SizingInput } from '../../sizing/engine';
 import { evaluateFinance } from '../../sizing/finance';
 import { useWorkspace } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
-import { can, customerStatusLabels, isCustomerRole, quoteStatuses, type Quote, type QuoteStatus } from '../../platform/types';
+import { approvalModeOf, can, customerStatusLabels, isCustomerRole, quoteStatuses, type Quote, type QuoteStatus } from '../../platform/types';
 import { applyAction, availableActions, isEditable } from '../../quoting/lifecycle';
 import { Financial, useFinancialAccess } from '../components/Gate';
 import { quoteTotals, reviseQuote } from '../../quoting/quote';
@@ -32,6 +32,7 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
   // Editable means the figures underneath may still move. Once sales owns the record, the
   // customer keeps sight of it but not the pen.
   const writable = quote ? isEditable(role, quote) : false;
+  const approvalMode = approvalModeOf(org);
   const project = projects.find(p => p.id === quote?.projectId);
 
   // The document is built from the sizing the quotation was raised against, so a sent offer never
@@ -112,9 +113,9 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
         <div className="spacer" />
         {/* One lifecycle, taken from the shared state machine, so the interface cannot offer a
             step the rules would refuse. */}
-        {availableActions(role, quote).map(t => (
+        {availableActions(role, quote, approvalMode).map(t => (
           <button key={t.action}
-            className={t.action === 'approve' || t.action === 'submit' ? 'btn accent' : t.action === 'return' || t.action === 'lose' ? 'btn danger' : 'btn'}
+            className={['approve', 'submit', 'issue'].includes(t.action) ? 'btn accent' : t.action === 'return' || t.action === 'lose' ? 'btn danger' : 'btn'}
             title={t.describe}
             onClick={() => void move(t.action, t.action === 'return' ? window.prompt('Why is this going back?') ?? undefined : undefined)}>
             {t.action === 'submit' ? <Send size={14} /> : null}{t.label}

@@ -10,7 +10,7 @@ export const offerCss = String.raw`
   --o-serif:Georgia,'Times New Roman',serif;--o-sans:'Inter','Segoe UI',system-ui,Arial,sans-serif}
 
 .offer-page{width:210mm;min-height:297mm;background:#fff;color:var(--o-ink);font-family:var(--o-sans);
-  font-size:7.4pt;line-height:1.38;position:relative;margin:0 auto 18px;padding:0 0 13mm;
+  font-size:7.4pt;line-height:1.38;position:relative;margin:0 auto 18px;padding:0 0 6.5mm;
   box-shadow:0 2px 14px rgba(29,41,59,.14);display:flex;flex-direction:column}
 .offer-page:last-child{margin-bottom:0}
 
@@ -103,9 +103,18 @@ table.offer-table tr.total td.num,table.offer-table tr.subtotal td.num{font-vari
 .addons span{font-size:6.3pt;color:var(--o-slate);line-height:1.35}
 .addons img{height:3.4mm;vertical-align:-.4mm;margin-right:1mm}
 
-.accept{background:var(--o-chip);border-left:.9mm solid var(--o-accent);padding:2mm 2.6mm;margin-top:1.8mm}
+.accept{background:var(--o-chip);border-left:.9mm solid var(--o-accent);padding:1.6mm 2.6mm;margin-top:1.3mm}
+/* Internal approval. Quieter than acceptance — it is the supplier's own sign-off, not the
+   customer's, and it must not read as part of the offer to the customer. */
+/* One line, not a grid. Page four is measured to the pixel and a two-column signature block does
+   not fit; the supplier's own sign-off does not need the room the customer's acceptance does. */
+.internal-approval{display:flex;align-items:baseline;gap:2.4mm;flex-wrap:wrap;
+  border:.3mm dashed var(--o-line);padding:1.1mm 2.4mm;margin-top:1.4mm;font-size:5.9pt;color:var(--o-muted)}
+.internal-approval b{font-size:5.9pt;letter-spacing:.06em;text-transform:uppercase;color:var(--o-slate)}
+.terms-grid{margin-top:1.2mm}
+.internal-approval i{display:inline-block;width:26mm;border-bottom:.3mm solid var(--o-slate);margin:0 1mm}
 .accept h5{margin-bottom:1.5mm}
-.accept .sign{display:grid;grid-template-columns:1fr 1fr;gap:10mm;margin-top:4.5mm}
+.accept .sign{display:grid;grid-template-columns:1fr 1fr;gap:10mm;margin-top:2.8mm}
 .accept .sign div{border-top:.3mm solid var(--o-slate);padding-top:1mm;font-size:6.2pt;color:var(--o-slate)}
 
 .terms-grid{display:grid;grid-template-columns:1fr 1fr;gap:1mm 5mm}
@@ -135,7 +144,7 @@ table.offer-table tr.total td.num,table.offer-table tr.subtotal td.num{font-vari
 
 /* Page four carries the most prose, so its body copy runs a shade tighter. */
 .offer .prose{font-size:6.1pt;color:var(--o-slate);line-height:1.32;margin:0 0 1.2mm}
-.offer .close-note{font-size:6pt;color:var(--o-muted);margin-top:1.5mm}
+.offer .close-note{font-size:6pt;color:var(--o-muted);margin-top:1.1mm}
 
 .offer-overflow{position:absolute;right:6mm;bottom:20mm;background:#C4614C;color:#fff;font-size:6.6pt;
   font-weight:600;padding:1.2mm 2mm;border-radius:1mm;max-width:80mm;line-height:1.35}

@@ -161,6 +161,26 @@ describe('what a customer can reach', () => {
   });
 });
 
+describe('single-level release', () => {
+  it('lets sales issue directly, without claiming an approval nobody gave', async () => {
+    const db = as('sales', 'sales@example.com');
+    await assertSucceeds(updateDoc(doc(db, orgPath('quotes', 'q_pending')),
+      { status: 'sent', issuedByUid: 'sales', issuedAt: new Date().toISOString() }));
+  });
+
+  it('still refuses sales writing the approval fields while issuing', async () => {
+    const db = as('sales', 'sales@example.com');
+    await assertFails(updateDoc(doc(db, orgPath('quotes', 'q_pending')),
+      { status: 'sent', approvedByUid: 'sales' }));
+  });
+
+  it('refuses a customer issuing anything', async () => {
+    const db = as('cust', 'cust@example.com');
+    await assertFails(updateDoc(doc(db, orgPath('quotes', 'q_cust')),
+      { status: 'sent', issuedByUid: 'cust' }));
+  });
+});
+
 describe('approval is the approver’s alone', () => {
   it('lets an approver release a prepared quotation', async () => {
     await assertSucceeds(updateDoc(doc(as('appr', 'appr@example.com'), orgPath('quotes', 'q_pending')),
