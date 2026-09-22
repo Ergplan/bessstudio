@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   byId, cells, cellOf, enclosures, packOf, packSpecs, pcsUnits,
-  enclosureEnergyKWh, enclosureCellCount, enclosureStrings, enclosureCRate, packAh,
+  enclosureEnergyKWh, enclosureCellCount, enclosureStrings, enclosureCRate, enclosureFootprintM2, packAh,
 } from '../catalog/products';
 import { defaultLossChain, defaultSizingInput, retentionAt, retentionFromTable, sizeSystem, suppliedRetention } from '../sizing/engine';
 import { buildModel } from '../domain/model';
 import { evaluateFinance } from '../sizing/finance';
+import { applications } from '../sizing/applications';
 import { currencies, convert, defaultPriceBook } from '../catalog/pricing';
 import { planSite } from '../geometry/site';
 import { defaults } from '../config/schema';
@@ -635,5 +636,38 @@ describe('auxiliary energy, which is a daily quantity', () => {
     const rare = sizeSystem({ ...defaultSizingInput('backup-power'), cyclesPerDay: 0.05 });
     const daily = sizeSystem({ ...defaultSizingInput('backup-power'), cyclesPerDay: 1 });
     expect(rare.day1UsableMWh / rare.units).toBeCloseTo(daily.day1UsableMWh / daily.units, 6);
+  });
+});
+
+describe('the fleet counted component by component', () => {
+  /**
+   * Every count the build sequence, the plant configuration table and the component schedule
+   * print comes from here, and they are read side by side. Cells over packs has to give the
+   * pack's own cell count, packs over enclosures the enclosure's own, or the document contradicts
+   * itself in front of the reader.
+   */
+  it('multiplies the unit count by the unit, for every enclosure in the catalogue', () => {
+    for (const enclosure of enclosures) {
+      const s = sizeSystem({ ...defaultSizingInput(), powerMW: 6, durationH: 3, enclosureId: enclosure.id });
+      const pack = packOf(enclosure), where = enclosure.model;
+      expect(s.racks, where).toBe(s.units * enclosure.racks);
+      expect(s.packs, where).toBe(s.units * enclosure.racks * enclosure.packsPerRack);
+      expect(s.cells, where).toBe(s.packs * pack.series * pack.parallel);
+      expect(s.cells, where).toBe(s.units * enclosureCellCount(enclosure));
+      expect(s.strings, where).toBe(s.units * enclosureStrings(enclosure));
+      expect(s.installedDcMWh, where).toBeCloseTo(s.units * enclosureEnergyKWh(enclosure) / 1000, 9);
+      expect(s.footprintM2, where).toBeCloseTo(s.units * enclosureFootprintM2(enclosure), 9);
+      expect(s.massTonnes, where).toBeCloseTo(s.units * enclosure.massKg / 1000, 9);
+    }
+  });
+
+  it('keeps every count a whole number of things', () => {
+    for (const app of applications) {
+      const s = sizeSystem(defaultSizingInput(app.id));
+      for (const [name, n] of [['units', s.units], ['racks', s.racks], ['packs', s.packs], ['cells', s.cells],
+        ['strings', s.strings], ['converters', s.pcsCount], ['transformers', s.transformerCount]] as const) {
+        expect(Number.isInteger(n), `${app.name} ${name} is ${n}`).toBe(true);
+      }
+    }
   });
 });
