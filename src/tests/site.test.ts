@@ -4,6 +4,7 @@ import { buildModel } from '../domain/model';
 import { defaults } from '../config/schema';
 import { defaultSizingInput, sizeSystem } from '../sizing/engine';
 import { byId, enclosures } from '../catalog/products';
+import { siteLesson } from '../domain/learn';
 
 const enclosure = buildModel(structuredClone(defaults)).dimensions.enclosure;
 const spec = (over: Partial<SiteSpec> = {}): SiteSpec => ({
@@ -103,5 +104,36 @@ describe('the site layout', () => {
     const plan = planSite(spec({ units: sized.units, pcsCount: sized.pcsCount }));
     expect(plan.placements.filter(p => p.kind === 'container')).toHaveLength(sized.units);
     expect(plan.placements.filter(p => p.kind === 'pcs')).toHaveLength(sized.pcsCount);
+  });
+});
+
+describe('what the site lesson tells a reader', () => {
+  const spec = (over: Partial<SiteSpec> = {}): SiteSpec => ({
+    units: 7, laterUnits: 3, model: 'ESS-5015', enclosure: [10.444, 2.2, 2.532], modelled: true,
+    pcsCount: 4, pcsModel: 'PCS 2507.5 kW', pcsKW: 2507.5, transformerCount: 3, transformerMVA: 3.15,
+    energyMWh: 35.1, powerMW: 8, ...over,
+  });
+
+  /**
+   * The lesson offers the single-row length as the reason the field is laid out in a block. It was
+   * reaching for the fenced plot's own length and multiplying that by the unit count — for seven
+   * units on a 45 m plot it claimed a row "over 315 m long", five times the truth.
+   */
+  it('measures a single row along the units, not along the plot', () => {
+    for (const over of [{}, { units: 1, laterUnits: 0 }, { units: 40, laterUnits: 0 }, { units: 3, laterUnits: 9 }]) {
+      const s = spec(over), plan = planSite(s);
+      const lesson = siteLesson(plan);
+      const claim = lesson.why.find(t => t.includes('single row'))!;
+      const stated = Number(claim.match(/run ([\d,]+) m end to end/)![1].replace(/,/g, ''));
+      const slots = s.units + s.laterUnits;
+      expect(stated, `${slots} units`).toBeCloseTo(slots * (s.enclosure[2] + plan.sideGap), 0);
+      // And it has to be longer than the block it is being compared with, or the argument is lost.
+      if (plan.rows > 1) expect(stated).toBeGreaterThan(Math.max(plan.plot[0], plan.plot[1]));
+    }
+  });
+
+  it('divides the installed energy by the units that hold it', () => {
+    const s = spec(), lesson = siteLesson(planSite(s));
+    expect(lesson.what).toContain((s.energyMWh / s.units).toFixed(2));
   });
 });
