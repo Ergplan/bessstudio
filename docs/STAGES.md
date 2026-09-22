@@ -3,9 +3,9 @@
 The live record of the build defined in [`docs/SITE.md` §17](./SITE.md#17-how-this-gets-built).
 `SITE.md` is the contract; this file is what actually happened.
 
-> **S0 and S1 are complete and ready for acceptance.** S2 onward are `PLANNED` — not built, not
-> tested. No simulation fixture (F01–F08) has been run; writing a check into this file is not
-> evidence that it passed.
+> **S0 through S4 are built and ready for acceptance.** S5 onward are `PLANNED` — not built, not
+> tested. Fixtures F01, F02 and F03 have been run and passed; F04–F08 have not, and belong to
+> stages that have not started. Writing a check into this file is not evidence that it passed.
 >
 > **Two rounds of work have landed since S1 outside the numbered register** — the studio
 > experience, and then an audit of the maths, the documents and the interface. Neither opened a
@@ -29,8 +29,8 @@ when a prerequisite or a mandatory check fails.
 | **S1** | Finish the quoting tool | S0 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s1--finish-the-quoting-tool) |
 | **S2** | Model contracts and evidence | S1 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s2--model-contracts-and-evidence) |
 | **S3** | First charge/discharge lesson | S2 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s3--first-chargedischarge-lesson) |
-| **S4** | PCS and BMS behaviour | S3 | `BUILDING` | — | — |
-| **S5** | jouleWise ergOS EMS | S4 | `PLANNED` | — | — |
+| **S4** | PCS and BMS behaviour | S3 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s4--pcs-and-bms-behaviour) |
+| **S5** | jouleWise ergOS EMS | S4 | `BUILDING` | — | — |
 | **S6** | Lessons 1–6 | S5 | `PLANNED` | — | — |
 | **S7** | Contract-demand UPS sizing | S6 | `PLANNED` | — | — |
 | **S8** | Lead-acid versus LFP | S7 | `PLANNED` | — | — |
@@ -41,13 +41,13 @@ when a prerequisite or a mandatory check fails.
 
 ## Fixtures
 
-Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 and F02 have run and passed; the rest belong to stages that have not started.
+Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01, F02 and F03 have run and passed; the rest belong to stages that have not started.
 
 | ID | Covers | Owner stage | State |
 | --- | --- | --- | --- |
 | F01 | ideal energy and SOC, both directions | S3 | **PASS** — `src/tests/sim.fixtures.test.ts` |
 | F02 | converter balance, both directions | S3 | **PASS** — `src/tests/sim.fixtures.test.ts` |
-| F03 | apparent-power headroom, tighter bound wins | S4 | NOT RUN |
+| F03 | apparent-power headroom, tighter bound wins | S4 | **PASS** — `src/tests/sim.fixtures.test.ts` |
 | F04 | backup reserve and the outage-mode transition | S5 | NOT RUN |
 | F05 | UPS sizing, the 500 kVA worked example | S7 | NOT RUN |
 | F06 | repeated outages, reserve carried forward | S8 | NOT RUN |
@@ -495,6 +495,107 @@ becomes part of a quotation.
 ### 7. Decision
 
 **READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S4 — PCS and BMS behaviour.**
+
+---
+
+## S4 — PCS and BMS behaviour
+
+**State:** READY FOR ACCEPTANCE — review pending
+**Revision:** `a9e1731`
+**Depends on:** S3 (READY FOR ACCEPTANCE)
+
+### 1. Scope
+
+Delivered: the two subsystems that are allowed to refuse, as state machines, and F03.
+
+- **`src/sim/pcs.ts`** — the converter. One active-power ceiling assembled from the four things
+  that can set it: the apparent-power rating with reactive power taking its share first (§12.3's
+  capability circle), the temperature derating, the DC current limit, and the DC voltage window.
+  Eight states — standby, precharge, ready, charging, discharging, derated, faulted, recovery —
+  each with the subsystem that owns it and a sentence of what it means, because a state nobody can
+  read is not an explanation.
+- **`src/sim/bms.ts`** — nine protections, each carrying a derating band, a trip threshold, a delay
+  to hold past it, a hysteresis reset point, whether it latches, which direction of current it
+  restrains, and where its numbers came from. Plus cell balancing and the drift between the state
+  of charge the management system believes and the one that is true. Events are ordered by severity
+  and then by code, so two faults in one step are reported in the same order every time.
+- **`src/sim/engine.ts`** — both wired in. Each sub-step takes the tightest of the limit chain, the
+  converter ceiling and the management system's veto, and the constraint that bound is now taken
+  across every sub-step rather than the first one.
+- **`src/app/pages/Lessons.tsx`** — both states with their meanings, and the event log up to the
+  cursor: minute, owner, what engaged, and what would clear it if it latched.
+
+Deferred by design: the supervisory policy itself is still the manual one. Peak shaving, solar
+self-consumption, backup reserve and price scheduling are S5 and S6, and `policyAvailability` says
+so rather than dispatching something unbuilt.
+
+### 2. Environment
+
+As S3. TypeScript engine in the browser, per the departure recorded in the S2 packet. No new
+runtime dependency.
+
+### 3. Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **483 passed** (+56) | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | 48 passed | **PASS** |
+| Static export | `npm run build` | 17 routes | 17 routes | **PASS** |
+| **F03** headroom, tighter bound wins | unit | 100 kVA with 60 kvar leaves 80 kW; a tighter DC current limit beats it | 80.000 kW; with a 200 A limit at 320 V the DC current limit wins at 64.000 kW, the circle behind it at 80 kW; outside the window, nothing at all | **PASS** |
+| Requested versus achieved | unit | what is achieved never exceeds what is asked, and shortfalls are named | holds at four request levels in both directions | **PASS** |
+| Capability circle *plus* current and voltage | unit | all four converter ceilings apply together | rating, derating, DC current and DC window each bind in turn | **PASS** |
+| BMS veto | unit | the management system can hold the plant to nothing | contactors open, both directions zero | **PASS** |
+| BMS derating | unit | the permitted current falls in proportion inside the band | linear from band start to zero at the trip point | **PASS** |
+| Trip delay | unit | a threshold crossed briefly does not trip | held past for less than the delay clears without tripping | **PASS** |
+| Hysteresis | unit | an alarm clears only once the signal comes back past the reset point | re-entering the band does not re-clear | **PASS** |
+| Latching and reset | unit | a latched fault survives the signal recovering | stays raised until reset is called, and names what it is waiting for | **PASS** |
+| Competing constraints | unit | the tightest wins and is the one named | the named constraint is the smallest ceiling at every sample | **PASS** |
+| Event ordering | unit | deterministic with two faults in one step | trip before alarm before limit before info, then by code | **PASS** |
+| Weak cell | unit | one weak cell limits the pack, and a healthy average does not override it | pack held by the weak cell's terminal voltage, not by the mean | **PASS** |
+| Temperature | unit | the hot preset derates, the cool one does not | hot binds on the over-temperature protection; cool never derates | **PASS** |
+| Cooling failure | unit | temperature rises, derates, then trips, and does not come back down at idle | rises adiabatically after the loop stops; derate then trip | **PASS** |
+| Communication loss | unit | the plant stops, and the reason is named | alarm immediately, factor zero, trip after 5 s | **PASS** |
+| **No hidden one-step overshoot** | unit | no sample outside a protection limit at any step size | per-cell current within the permitted limit at every sample, at 15 s, 60 s, 300 s and 600 s | **PASS** |
+| Voltage cutoff, end of step | unit | the cutoff holds at the *end* of the interval, not the start | minimum cell voltage respected to 1e-6 V at 600 s steps | **PASS** |
+| State and constraint agree | unit | a converter is never reported meeting a request a limit is holding back | holds at every dispatching sample across three configurations | **PASS** |
+| Nothing refused silently | unit | every refusal names a constraint and logs an event against whoever decided | reserve, ceiling and current limit each named, owned and logged | **PASS** |
+| Alarm severity reserved | unit | a ceiling doing its job is a limit, not an alarm | only `info` and `limit` from a full or empty battery | **PASS** |
+| Browser: default run | browser | states read, log empty | converter *discharging*, management *normal*, "nothing has engaged yet" | **PASS** |
+| Browser: the reserve | browser | the policy's refusal is visible | constraint *Reserve held back*, ergOS lit, EMS event at 0 min | **PASS** |
+| Browser: handover | browser | the constraint changes hands during the run | BMS current limit at 0 min → EMS reserve at 24 min, both logged | **PASS** |
+| Browser: full battery | browser | charging a full battery is explained | constraint *State of charge ceiling*, converter *derated*, BMS event | **PASS** |
+| Browser: log follows the cursor | browser | only what has happened is shown | 1 event at minute 0–39, 2 from minute 40 | **PASS** |
+| No page or console errors | browser | none | none | **PASS** |
+
+### 4. Browser walkthrough
+
+`scratchpad/s4.mjs` — the lesson at four settings (1 MW from 80%, 2.5 MW from 10%, 2.5 MW from 30%,
+2.5 MW charging from 100%), reading the two states, the named constraint, the lit subsystem and the
+event log off the page at each, and walking the position slider through the derating run to confirm
+the log only ever shows what has already happened.
+
+### 5. Defects
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D32 | A policy that asked for nothing while the learner asked for something named no constraint and logged no event. The plant sat in standby with the explanation as the only clue, which is the silence §11.3 exists to forbid. Found by opening the lesson at the reserve and asking why nothing happened. | **major** | **fixed**; the policy names its own hold, the engine takes that name as the binding constraint and logs it against the EMS. |
+| D33 | A full battery refusing to charge was logged as an **alarm**. Alarm and trip belong to the protections in §12.4; a ceiling doing its job is a limit, and conflating them makes both severities meaningless. | major | **fixed**; limit-chain events are always `limit`, and the message distinguishes held-below from held-to-nothing. |
+| D34 | The converter could read *discharging* in the same moment a limit was named as holding it back, because its state used a tolerance twenty times looser than the solver's. Two readings of one moment that contradicted each other. | major | **fixed**; the state uses the solver's own tolerance, and a test asserts the two can never disagree. |
+| D35 | The binding constraint was read from the first sub-step only, so a ceiling that engaged half way through a reporting interval produced a step with a visible shortfall and nothing named as its cause. Found by the test written for D34. | major | **fixed**; the tightest ceiling across every sub-step of the interval is the one reported, and its event is timestamped at the sub-step that engaged it. |
+| D36 | At rest the lesson player described the closing sample, which dispatches nothing — so a learner opening a finished run was told the converter was in standby for no reason anybody had given. | minor | **fixed**; the state, the explanation and the limiting subsystem describe the last interval that dispatched; the headline figures still describe the state the run ended in. |
+
+### 6. Demonstration and rollback
+
+Demo: **Projects** → any project → **Lessons** → *Charge and discharge* → raise the power to
+2,500 kW and lower the starting charge to 30%. The plant runs against the management system's
+current limit, then hands over to the policy's reserve at 24 minutes; both are named, owned and
+timestamped in the log.
+Rollback: `git revert a9e1731`. No migrations; nothing is written to storage.
+
+### 7. Decision
+
+**READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S5 — jouleWise ergOS EMS.**
 
 ---
 
