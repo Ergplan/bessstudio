@@ -283,6 +283,25 @@ export const solverSettingsSchema = z.object({
   /** Convergence tolerance for the inner limit iteration, as a fraction of rated power. */
   toleranceFraction: z.number().positive().max(0.1),
   maxIterations: z.number().int().min(1).max(1000),
+  /**
+   * The longest a single integration piece may be, whatever the reporting step is.
+   *
+   * These are two different concerns and conflating them is a mistake with a visible cost: a
+   * learner who asks for a sample every ten minutes instead of every minute is asking for a
+   * coarser *chart*, not a coarser *model*, and an engine that integrates in a fixed number of
+   * pieces per step quietly gives them the second. The reporting step sets how often the result is
+   * written down; this sets how finely the state is advanced underneath it.
+   */
+  maxSubStepSeconds: z.number().positive().max(3600).default(10),
+  /**
+   * The fixture mode §14.1 asks for: "analytic idealised SOC and energy with losses disabled".
+   *
+   * With this set, internal resistance, conversion loss, coulombic loss and auxiliary consumption
+   * are all zero, and the cell holds a constant voltage. It exists so the analytic fixtures have
+   * something exact to compare against, and it is recorded on the run so a result computed this
+   * way can never be mistaken for one that was not.
+   */
+  idealised: z.boolean().default(false),
 }).strict();
 export type SolverSettings = z.infer<typeof solverSettingsSchema>;
 
