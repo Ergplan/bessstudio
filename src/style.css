@@ -218,3 +218,9 @@
 .app .standin-chip{margin-left:8px;padding:3px 8px;background:rgba(232,142,63,.12);border:1px solid rgba(232,142,63,.34);color:#E7AC72;font-family:var(--s-mono);font-size:9.5px;letter-spacing:.09em;white-space:nowrap}
 /* What the assumption under the cursor actually drives, while it is being edited. */
 .app .field-note{margin:10px 0 0;padding:9px 11px;background:rgba(147,190,73,.08);border-left:2px solid rgba(147,190,73,.45);color:var(--s-muted);font-size:12.2px;line-height:1.55}
+/* The section tool sits with the other scene controls; the row wraps rather than pushing the walk
+   control off the edge on a narrower canvas. */
+.app .scene-controls{flex-wrap:wrap;row-gap:8px}
+.app .axis-pick{display:inline-flex;gap:0}
+.app .axis-pick button{padding:6px 10px;border-radius:0;margin-left:-1px;font-family:var(--s-mono);font-size:11px;letter-spacing:.06em}
+.app .axis-pick button:first-child{margin-left:0}

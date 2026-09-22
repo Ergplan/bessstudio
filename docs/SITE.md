@@ -561,7 +561,15 @@ in view. At container scope it measures the enclosure rather than the drawn boun
 on the canvas is the one the inspector reports.
 
 **Scene controls.** Roof off · cutaway · explode (0–100 %) · electrical path · cooling path ·
-guided walk. The two path traces are exclusive: the electrical one follows one string, because a
+section · guided walk.
+
+**Section.** A clipping plane through whatever is on screen, on any of the three axes. The control
+speaks in fractions of the current bounds, so the same slider cuts a cell, a container and a site.
+Labels are filtered by the same rule as the geometry, measured from the point the eye judges each
+component by — a rack and a pack sit on their base, a cell on its centre — so a component that is
+no longer drawn does not keep its name floating in space. The plane is a way of looking at the
+design rather than part of it, so it lives beside the camera in session state and never reaches a
+saved configuration. The two path traces are exclusive: the electrical one follows one string, because a
 string is a series path; the cooling one follows the whole loop, because a loop is one circuit
 through every rack. A traced run is drawn thicker so it can be followed at container zoom.
 

@@ -58,3 +58,33 @@ describe('what each trace follows', () => {
     expect(on.size[0]).toBeGreaterThan(off.size[0]);
   });
 });
+
+describe('the section plane', () => {
+  it('keeps what is on the near side of the cut and drops the rest', async () => {
+    // The plane clips geometry in the renderer, but labels are DOM and have to be filtered by the
+    // same rule, or a rack that is no longer drawn keeps its name floating in space.
+    const { keeps } = await import('../scene/section');
+    const model = buildModel(cfg({}));
+    const racks = model.racks.map(r => ({ position: r.position, size: r.size, kind: r.kind }));
+    const xs = racks.map(r => r.position[0]);
+    const mid = (Math.min(...xs) + Math.max(...xs)) / 2;
+    const near = racks.filter(keeps({ axis: 0, at: mid }));
+    expect(near.length).toBeGreaterThan(0);
+    expect(near.length).toBeLessThan(racks.length);
+    expect(near.every(r => r.position[0] <= mid)).toBe(true);
+    expect(racks.filter(keeps(null))).toHaveLength(racks.length);
+  });
+
+  it('measures a rack from its base and a cell from its middle', () => {
+    // Node positions are not consistent: a rack and a pack sit on their base, a cell on its centre.
+    // A cut in Y has to use the same point the eye judges the component by.
+    return import('../scene/section').then(({ keeps }) => {
+      const rack = { position: [0, 0, 0] as [number, number, number], size: [1, 2, 1] as [number, number, number], kind: 'rack' };
+      const cell = { position: [0, 1, 0] as [number, number, number], size: [1, 2, 1] as [number, number, number], kind: 'cell' };
+      expect(keeps({ axis: 1, at: 1.5 })(rack)).toBe(true);    // centre at 1.0
+      expect(keeps({ axis: 1, at: 0.5 })(rack)).toBe(false);
+      expect(keeps({ axis: 1, at: 1.5 })(cell)).toBe(true);    // centre at 1.0
+      expect(keeps({ axis: 1, at: 0.5 })(cell)).toBe(false);
+    });
+  });
+});
