@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addCustomLine, buildQuoteLines, convertQuote, quoteTotals, removeLine, uplift } from '../quoting/quote';
+import { addCustomLine, assumptionsDefault, buildQuoteLines, convertQuote, quoteTotals, removeLine, uplift } from '../quoting/quote';
 import { atRate, currencies, defaultPriceBook, fromLanded, landedCost, localRate, restate, type Currency } from '../catalog/pricing';
 import { defaultSizingInput, sizeSystem } from '../sizing/engine';
 import { evaluateFinance } from '../sizing/finance';
@@ -234,5 +234,31 @@ describe('totalling a workspace that quotes in more than one currency', () => {
       const there = restate(1_000_000, 'INR', c, defaultPriceBook);
       expect(restate(there, c, 'INR', defaultPriceBook)).toBeCloseTo(1_000_000, 6);
     }
+  });
+});
+
+describe('what the quotation assumes', () => {
+  /**
+   * The degradation schedule describes one enclosure ageing from the day it went in; the
+   * performance table shows the fleet, which augmentation refreshes. The document quoted the
+   * first beside the second without saying which was which, so 74% and 77% appeared for the same
+   * year on the same proposal.
+   */
+  it('says which retention figure belongs to the unit and which to the fleet', () => {
+    const s = sizeSystem({ ...defaultSizingInput('frequency-regulation'), powerMW: 8, durationH: 1, projectYears: 15, augmentation: 'periodic' });
+    expect(s.augmentations.length, 'this plant augments').toBeGreaterThan(0);
+    const line = assumptionsDefault(s).find(t => t.startsWith('Capacity retention'))!;
+    const fleet = s.years.at(-1)!;
+    expect(line).toContain(`${Math.round(s.input.degradation.retention[15] * 100)}% at year 15`);
+    expect(line).toContain('one enclosure ageing from its installation year');
+    expect(line).toContain(`${Math.round(fleet.retention * 100)}% in year ${fleet.year}`);
+  });
+
+  it('leaves the distinction out when there is no augmentation to draw it', () => {
+    const s = sizeSystem({ ...defaultSizingInput(), augmentation: 'none' });
+    expect(s.augmentations).toHaveLength(0);
+    const line = assumptionsDefault(s).find(t => t.startsWith('Capacity retention'))!;
+    expect(line).not.toContain('one enclosure ageing');
+    expect(line).toContain('Supplier warranty curves govern the contract.');
   });
 });

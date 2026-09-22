@@ -28,9 +28,18 @@ export const assumptionsDefault = (sizing: SizingResult) => {
     `Grid connection at ${sizing.input.gridKV} kV, ${sizing.input.frequencyHz} Hz, power factor ${sizing.input.powerFactor}.`,
     `Efficiency chain: ${(L.dcCableLoss * 100).toFixed(2)}% DC cable, ${(L.pcsLoss * 100).toFixed(2)}% conversion, ${(L.acCableLoss * 100).toFixed(2)}% AC cable and ${(L.idtLoss * 100).toFixed(2)}% transformer loss, giving ${(sizing.rteAc * 100).toFixed(1)}% round trip at AC.`,
     `Auxiliary consumption of ${sizing.auxMWhPerDay.toFixed(2)} MWh per day across the installed fleet.`,
-    sizing.input.degradation.mode === 'table'
-      ? `Capacity retention per the agreed schedule: ${Math.round((r[1] ?? 1) * 100)}% at year 1 and ${Math.round((r[last] ?? 1) * 100)}% at year ${last}. Supplier warranty curves govern the contract.`
-      : 'Capacity retention derived from the cell warranty anchors at the design duty cycle and temperature. Supplier warranty curves govern the contract.',
+    // The schedule describes one enclosure ageing from the day it was installed; the performance
+    // table shows the fleet, which augmentation refreshes. Quoting the first beside the second
+    // without saying which is which put 74% and 77% for the same year in one document.
+    (() => {
+      const fleet = sizing.years.at(-1), scheduled = sizing.input.degradation.mode === 'table'
+        ? `per the agreed schedule: ${Math.round((r[1] ?? 1) * 100)}% at year 1 and ${Math.round((r[last] ?? 1) * 100)}% at year ${last}`
+        : 'derived from the cell warranty anchors at the design duty cycle and temperature';
+      const augmented = sizing.augmentations.length && fleet
+        ? ` Those figures are for one enclosure ageing from its installation year; the performance table is for the fleet, which the ${sizing.augmentations.length} scheduled augmentation${sizing.augmentations.length > 1 ? 's' : ''} hold${sizing.augmentations.length > 1 ? '' : 's'} at ${Math.round(fleet.retention * 100)}% in year ${fleet.year}.`
+        : '';
+      return `Capacity retention ${scheduled}.${augmented} Supplier warranty curves govern the contract.`;
+    })(),
     'Prices are based on the price book in force on the quotation date and are subject to the stated validity.',
   ];
 };
