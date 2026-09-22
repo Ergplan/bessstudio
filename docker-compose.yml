@@ -1,0 +1,35 @@
+# BESS Studio on the shared workstation VM.
+#
+# Deliberately self-contained: its own compose project name, its own port well outside the ranges
+# the other product reserves, and no volumes — the app is a static export with no state on disk.
+# Nothing here touches the tariff product's networks, volumes or build cache.
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Empty values fall through to the defaults committed in src/platform/firebaseConfig.ts.
+        NEXT_PUBLIC_FIREBASE_API_KEY: "${NEXT_PUBLIC_FIREBASE_API_KEY:-}"
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: "${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:-}"
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: "${NEXT_PUBLIC_FIREBASE_PROJECT_ID:-}"
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:-}"
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID:-}"
+        NEXT_PUBLIC_FIREBASE_APP_ID: "${NEXT_PUBLIC_FIREBASE_APP_ID:-}"
+        NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: "${NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID:-}"
+        NEXT_PUBLIC_PUBLIC_ORG_ID: "${NEXT_PUBLIC_PUBLIC_ORG_ID:-}"
+    image: bessstudio-web:local
+    container_name: bessstudio-web
+    # Loopback only. Reached over an SSH tunnel; no VM port is opened and no firewall rule is added.
+    ports:
+      - "127.0.0.1:8081:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 4s
+      retries: 3
+      start_period: 5s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

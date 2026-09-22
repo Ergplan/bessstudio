@@ -1,0 +1,7 @@
+.next
+out
+node_modules
+.git
+docs
+src/tests
+*.log
