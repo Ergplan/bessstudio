@@ -1,6 +1,6 @@
 /**
  * Web app configuration for the `bessstudio-e55e1` project, which serves at
- * https://bessstudio-e55e1.web.app.
+ * https://bessstudio-e55e1.web.app, and at joulewise.studio once that domain is attached.
  *
  * These values are compiled into the client bundle and are readable by anyone who loads the site —
  * that is how a Firebase web app is meant to work. They identify the project; they authorise

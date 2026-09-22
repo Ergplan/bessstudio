@@ -79,6 +79,69 @@ Hosting serves the Next.js static export from `out/`: directory-style URLs, immu
 the fingerprinted `/_next/static` bundles, `no-cache` on every HTML file so a deploy is picked up on
 the next page load, and a catch-all rewrite to the landing page for anything unrecognised.
 
+## 3b. The custom domain — joulewise.studio
+
+Firebase Hosting handles the certificate and the CDN; you supply DNS and two console steps. **Deploy
+at least once first** (§3) — you cannot attach a domain to a site that has never been published.
+
+### Attach the domain
+
+1. Firebase console → **Hosting** → **Add custom domain** → `joulewise.studio`.
+2. Firebase gives you a **TXT record** to prove ownership. Add it at your registrar and wait for it
+   to verify — usually minutes, occasionally an hour.
+3. Firebase then gives you **two A records**. Add both. The certificate is issued automatically once
+   they resolve; it can take up to 24 hours, and the site serves on the `.web.app` address meanwhile.
+4. Repeat for `www.joulewise.studio` if you want it, choosing **redirect to** `joulewise.studio` so
+   there is one canonical address rather than two sites with split cookies.
+
+### The step that is easy to miss
+
+**Authentication → Settings → Authorized domains → Add `joulewise.studio`.**
+
+Without it, every sign-in from the new domain fails with `auth/unauthorized-domain` while the
+`.web.app` address keeps working — which makes it look like the domain is broken rather than the
+allow-list. The app names this specific cause when it sees that code, but save yourself the trip.
+
+Add `www.joulewise.studio` too if you set one up.
+
+### Optional: sign-in that stays on your domain
+
+By default `authDomain` is `bessstudio-e55e1.firebaseapp.com`, so Google sign-in bounces through
+that address and the user sees it in the URL bar for a moment. To keep it on your own domain, set
+
+```
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=joulewise.studio
+```
+
+and redeploy. This works because Hosting serves the `/__/auth/` handlers on any attached domain.
+
+Do this **after** the domain is verified and serving, not before — an `authDomain` pointing at a
+domain that is not yet live breaks sign-in everywhere, including on `.web.app`. If sign-in misbehaves
+afterwards, removing the variable and redeploying puts it back.
+
+### Then, so links carry the right host
+
+Invitation and registration links are built from the browser's own origin, so they become
+`https://joulewise.studio/join/?…` automatically with no change. But **Create an account** only
+appears on the sign-in page once the public workspace is named:
+
+```
+NEXT_PUBLIC_PUBLIC_ORG_ID=<the organization id from Settings → Team & roles>
+```
+
+Set it, rebuild, redeploy. Settings shows you the exact value once customer self-registration is on.
+
+### Checking it worked
+
+```bash
+dig +short joulewise.studio                 # both Firebase A records
+curl -sI https://joulewise.studio/ | head -3        # HTTP/2 200
+curl -sI https://joulewise.studio/app/queue/ | head -1   # 200, not 404 — trailing-slash routing
+```
+
+Then sign in from `joulewise.studio` and confirm the workbench loads. If it fails with
+`auth/unauthorized-domain`, the authorized-domains step above was missed.
+
 ## 4. First user and first organization
 
 Open https://bessstudio-e55e1.web.app and sign up. The first account to sign up creates an
@@ -94,6 +157,19 @@ To add a colleague while the invitation flow is still on the roadmap:
 3. Add the organization id to their `users/{uid}.orgIds` array.
 
 After that, roles are managed in **Settings → Team & roles**.
+
+## Costs, and when Spark stops being enough
+
+Hosting on Spark includes **10 GB stored** and **360 MB of transfer per day**. The built site is a
+few MB, so storage is never the constraint; transfer is. At roughly 2–3 MB per first visit, 360 MB/day
+is on the order of **120–180 cold visits a day** before it throttles — fine for demos and customer
+meetings, thin for a public launch.
+
+Repeat visits cost far less: `/_next/static/**` is served immutable, so a returning browser
+re-downloads almost nothing.
+
+Blaze is pay-as-you-go from there (transfer billed per GB) and needs a billing account. Nothing about
+the application changes — it is the same deploy.
 
 ## The Spark plan
 
