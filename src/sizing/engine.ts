@@ -119,23 +119,63 @@ export function retentionFromTable(age: number, table: number[]) {
 
 const ceil = (n: number) => Math.ceil(n - 1e-9);
 
+/** Pull a number into a range the physics can use, replacing anything unreadable with `fallback`. */
+const held = (n: number, lo: number, hi: number, fallback = lo) =>
+  (Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback);
+
 /**
- * Fill in anything a stored project predates, and repoint catalogue ids that have been retired,
- * so a record written by an earlier version still sizes instead of throwing.
+ * Fill in anything a stored project predates, repoint catalogue ids that have been retired, and
+ * hold every figure inside the range it means something in, so a record written by an earlier
+ * version — or a number somebody pasted — still sizes instead of throwing or going negative.
+ *
+ * The bounds are deliberately wider than the controls that set them: they are a floor under the
+ * arithmetic, not a second opinion on what the user is allowed to ask for.
  */
 export function normaliseSizingInput(input: SizingInput): SizingInput {
   const known = <T extends { id: string }>(list: T[], id: string | null, fallback: string) =>
     (id && list.some(x => x.id === id) ? id : fallback);
+  const L = { ...defaultLossChain(), ...(input.losses ?? {}) };
+  const durationH = held(input.durationH, 0.05, 24, 2);
   return {
     ...input,
-    chargeDurationH: input.chargeDurationH && input.chargeDurationH > 0 ? input.chargeDurationH : (input.durationH || 2),
+    powerMW: held(input.powerMW, 0.001, 5000),
+    durationH,
+    usableEnergyMWh: held(input.usableEnergyMWh, 0.001, 50_000),
+    chargeDurationH: input.chargeDurationH > 0 ? held(input.chargeDurationH, 0.05, 48) : durationH,
+    cyclesPerDay: held(input.cyclesPerDay, 0, 24, 1),
+    daysPerYear: held(input.daysPerYear, 0, 366, 365),
+    projectYears: Math.round(held(input.projectYears, 1, 60, 20)),
+    dod: held(input.dod, 0.01, 1, 0.9),
+    availability: held(input.availability, 0.01, 1, 0.97),
+    ambientC: held(input.ambientC, -40, 70, 25),
+    altitudeM: held(input.altitudeM, 0, 6000, 0),
+    powerFactor: held(input.powerFactor, 0.1, 1, 0.95),
+    gridKV: held(input.gridKV, 0.2, 800, 33),
     enclosureId: known(enclosures, input.enclosureId, 'enc-5mwh-20ft'),
     pcsId: known(pcsUnits, input.pcsId, 'pcs-2507'),
     transformerId: input.transformerId === null ? null : known(transformers, input.transformerId, 'tx-3150'),
-    losses: { ...defaultLossChain(), ...(input.losses ?? {}) },
+    losses: {
+      ...L,
+      // Efficiencies stay strictly positive and losses strictly below total, so the conversion
+      // chain can never collapse to a round trip of zero or a negative delivered energy.
+      usableDcWindow: held(L.usableDcWindow, 0.05, 1, 0.95),
+      chargeEfficiencyDc: held(L.chargeEfficiencyDc, 0.05, 1, 0.95),
+      dischargeEfficiencyDc: held(L.dischargeEfficiencyDc, 0.05, 1, 0.95),
+      dcCableLoss: held(L.dcCableLoss, 0, 0.5, 0),
+      pcsLoss: held(L.pcsLoss, 0, 0.5, 0),
+      acCableLoss: held(L.acCableLoss, 0, 0.5, 0),
+      idtLoss: held(L.idtLoss, 0, 0.5, 0),
+      openAccessLoss: held(L.openAccessLoss, 0, 0.9, 0),
+      availabilityFactor: held(L.availabilityFactor, 0.05, 1, 0.95),
+      auxScale: held(L.auxScale, 0, 20, 1),
+    },
     degradation: {
       mode: input.degradation?.mode ?? 'table',
-      retention: input.degradation?.retention?.length ? input.degradation.retention : [...suppliedRetention],
+      retention: input.degradation?.retention?.length
+        // A retention of zero is a dead battery, not a schedule; hold the curve above it so the
+        // year rows stay divisible rather than reporting a fleet that delivers nothing.
+        ? input.degradation.retention.map(r => held(r, 0.01, 1, 1))
+        : [...suppliedRetention],
     },
   };
 }
@@ -269,7 +309,9 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   if (input.ambientC > cell.dischargeTempC[1]) warnings.push({ code: 'ambient-high', level: 'error', text: `Design ambient ${input.ambientC} °C exceeds the cell discharge limit of ${cell.dischargeTempC[1]} °C.` });
   if (input.ambientC > 40 && enclosure.cooling === 'air') warnings.push({ code: 'cooling', level: 'warning', text: 'Air-cooled system at high ambient: derating and accelerated ageing are likely. Consider a liquid-cooled product.' });
   if (input.altitudeM > 2000) warnings.push({ code: 'altitude', level: 'warning', text: `Altitude ${input.altitudeM} m requires insulation-coordination and cooling derating review.` });
-  if (input.dod * L.usableDcWindow > 0.95) warnings.push({ code: 'dod', level: 'warning', text: 'Depth of discharge across the usable DC window exceeds 95% and may fall outside the warranty envelope.' });
+  const cycleSwing = input.dod * L.usableDcWindow;
+  if (input.dod >= 0.99) warnings.push({ code: 'dod', level: 'warning', text: `Depth of discharge is set to a full cycle, leaving no state-of-charge reserve at either end. Each cycle swings ${(cycleSwing * 100).toFixed(0)}% of nameplate capacity, which is unlikely to sit inside the warranty envelope.` });
+  else if (cycleSwing > 0.95) warnings.push({ code: 'dod', level: 'warning', text: `Each cycle swings ${(cycleSwing * 100).toFixed(0)}% of nameplate capacity across the usable DC window, above the 95% the warranty envelope assumes.` });
   if (lifetimeThroughputMWh > warrantyThroughputMWh) warnings.push({ code: 'throughput', level: 'warning', text: `Lifetime throughput ${Math.round(lifetimeThroughputMWh).toLocaleString()} MWh exceeds the indicative warranty throughput ${Math.round(warrantyThroughputMWh).toLocaleString()} MWh.` });
   const shortfallYear = years.find(y => y.shortfall);
   if (shortfallYear) warnings.push({ code: 'capacity-shortfall', level: input.augmentation === 'none' ? 'warning' : 'error', text: `Contracted usable energy is not met from year ${shortfallYear.year}. Select an augmentation strategy or oversize day one.` });
