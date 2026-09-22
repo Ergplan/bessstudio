@@ -32,6 +32,12 @@ export function Studio() {
   const { projects, saveProject } = useWorkspace();
   const project = projects.find(p => p.id === params.get('project'));
   const [note, setNote] = useState('');
+  // Whether what is on screen is the configuration held on the project, or a draft that only
+  // exists in this browser. Every edit replaces the configuration object, so holding the one that
+  // was loaded or last saved and comparing identity is enough.
+  const config = useStudio(s => s.config);
+  const settled = useRef<unknown>(null);
+  const fromStore = useRef(false);
   const [status, setStatus] = useState('');
   const canvasHost = useRef<HTMLDivElement>(null);
 
@@ -43,9 +49,10 @@ export function Studio() {
     const { config, import: importConfig, update } = useStudio.getState();
     if (project.studioConfig) {
       const parsed = configSchema.safeParse(project.studioConfig);
-      if (parsed.success) { importConfig(parsed.data); setNote(''); return; }
+      if (parsed.success) { importConfig(parsed.data); setNote(''); fromStore.current = true; settled.current = useStudio.getState().config; return; }
     }
     const enclosure = byId(enclosures, project.sizing.enclosureId);
+    fromStore.current = false;
     let limitNote = '';
     try {
       const limits = limitsFromSizing(sizeSystem(project.sizing));
@@ -55,6 +62,7 @@ export function Studio() {
         c.usable = limits.usable;
       });
       limitNote = `Checked against ${limits.label}.`;
+      settled.current = useStudio.getState().config;
     } catch {
       if (enclosure.studioPreset && config.preset !== enclosure.studioPreset) update(c => { c.preset = enclosure.studioPreset!; });
     }
@@ -89,6 +97,8 @@ export function Studio() {
     if (!project) return;
     void saveProject({ ...project, studioConfig: useStudio.getState().config, status: project.status === 'sizing' ? 'engineering' : project.status },
       `Assembly configuration saved to ${project.name}.`);
+    fromStore.current = true;
+    settled.current = useStudio.getState().config;
   };
 
   // The captured view goes on the project, where every quotation raised from it picks it up as the
@@ -139,7 +149,7 @@ export function Studio() {
       </div>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }} ref={canvasHost}>
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#5E6C79' }}>Loading the 3D assembly…</div>}>
-          <Studio3D brandName={(org?.branding.displayName ?? brand.vendorShort).toUpperCase()} brandLogo={org?.branding.logo ?? null} projectName={project?.name} unitCount={units} site={site} />
+          <Studio3D brandName={(org?.branding.displayName ?? brand.vendorShort).toUpperCase()} brandLogo={org?.branding.logo ?? null} projectName={project?.name} projectRef={project?.reference} state={!project?'reference':settled.current!==config?'edited':fromStore.current?'stored':'derived'} unitCount={units} site={site} />
         </Suspense>
       </div>
     </div>
