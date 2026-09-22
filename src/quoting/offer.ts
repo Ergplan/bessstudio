@@ -126,7 +126,10 @@ export function plantConfiguration(sizing: SizingResult) {
     { sl: 4, parameter: 'Nominal DC power', unit: `${(enc.ratedKW / 1000).toFixed(3)} MW per enclosure`, total: `${(sizing.units * enc.ratedKW / 1000).toFixed(1)} MW` },
     { sl: 5, parameter: 'Nameplate energy at BOL', unit: `${unitMWh.toFixed(3)} MWh per enclosure`, total: `${sizing.installedDcMWh.toFixed(1)} MWh` },
     { sl: 6, parameter: 'Contracted rating', unit: '—', total: `${sizing.ratedPowerMW.toFixed(1)} MW / ${sizing.requiredUsableMWh.toFixed(0)} MWh` },
-    { sl: 7, parameter: 'Duration / C-rate', unit: `${sizing.effectiveDurationH.toFixed(1)} hours`, total: `${sizing.packCRate.toFixed(2)} C charge / ${sizing.packCRate.toFixed(2)} C discharge` },
+    // The plant's own rates, not the pack's rating printed twice. A plant running at 0.23 C
+    // described to its customer as a 0.50 C plant is describing the product's limit, not the duty
+    // it was sized for — and the two are only ever the same on a plant with no margin at all.
+    { sl: 7, parameter: 'Duration / C-rate', unit: `${sizing.effectiveDurationH.toFixed(1)} hours at rated power`, total: `${sizing.chargeCRate.toFixed(2)} C charge / ${sizing.systemCRate.toFixed(2)} C discharge, against ${sizing.packCRate.toFixed(2)} C continuous` },
     { sl: 8, parameter: 'Enclosure footprint', unit: `${(enc.lengthMm / 1000).toFixed(3)} × ${(enc.widthMm / 1000).toFixed(3)} m = ${(enc.lengthMm * enc.widthMm / 1e6).toFixed(1)} m²`, total: `≈ ${Math.round(sizing.footprintM2).toLocaleString()} m² enclosure footprint` },
     { sl: 9, parameter: 'Power conversion', unit: `${sizing.pcs.model}`, total: `${sizing.pcsCount} × ${(sizing.pcs.ratedKW / 1000).toFixed(3)} MW` },
     ...(sizing.transformer ? [{ sl: 10, parameter: 'LV/MV transformer', unit: `${(sizing.transformer.ratedKVA / 1000).toFixed(1)} MVA, ${sizing.transformer.lvKV} / ${sizing.transformer.hvKV} kV`, total: `${sizing.transformerCount} units` }] : []),

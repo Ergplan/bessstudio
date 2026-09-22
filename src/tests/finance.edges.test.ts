@@ -3,7 +3,7 @@ import { defaultSizingInput, sizeSystem, type SizingInput } from '../sizing/engi
 import { annualBenefitUsd, chargingEnergyMWh, costLines, evaluateFinance } from '../sizing/finance';
 import { defaultPriceBook, type PriceBook } from '../catalog/pricing';
 import { applications } from '../sizing/applications';
-import { energySchedule, offerTotals } from '../quoting/offer';
+import { energySchedule, offerTotals, plantConfiguration } from '../quoting/offer';
 import { cellOf, packOf } from '../catalog/products';
 
 /**
@@ -318,5 +318,33 @@ describe('the warranty the plant is measured against', () => {
     const deep = sizeSystem({ ...defaultSizingInput(), dod: 0.9, augmentation: 'none' });
     const used = (s: ReturnType<typeof sizeSystem>) => s.lifetimeThroughputMWh / s.warrantyThroughputMWh;
     expect(used(deep)).toBeGreaterThan(used(shallow));
+  });
+});
+
+describe('the plant configuration table', () => {
+  /**
+   * The C-rate row describes the plant. It was printing the pack's continuous rating in both the
+   * charge and the discharge column, so a plant working at a quarter of its capability told the
+   * customer it ran at the limit.
+   */
+  it('states the rates the plant runs at, alongside the rate the pack is good for', () => {
+    for (const app of applications) {
+      const s = sizeSystem(defaultSizingInput(app.id));
+      const row = plantConfiguration(s).find(r => r.parameter.includes('C-rate'))!;
+      expect(row.total, app.name).toContain(`${s.chargeCRate.toFixed(2)} C charge`);
+      expect(row.total, app.name).toContain(`${s.systemCRate.toFixed(2)} C discharge`);
+      expect(row.total, app.name).toContain(`${s.packCRate.toFixed(2)} C continuous`);
+      // The engine only lets a plant be built inside the pack's rating, so the row must read that way.
+      expect(s.systemCRate, app.name).toBeLessThanOrEqual(s.packCRate + 1e-9);
+      expect(s.chargeCRate, app.name).toBeLessThanOrEqual(s.packCRate + 1e-9);
+    }
+  });
+
+  it('gives the duration the contracted energy actually lasts at rated power', () => {
+    for (const durationH of [0.5, 2, 4, 8]) {
+      const s = sizeSystem({ ...defaultSizingInput(), durationH });
+      expect(s.effectiveDurationH).toBeCloseTo(durationH, 6);
+      expect(plantConfiguration(s).find(r => r.parameter.includes('C-rate'))!.unit).toContain(durationH.toFixed(1));
+    }
   });
 });
