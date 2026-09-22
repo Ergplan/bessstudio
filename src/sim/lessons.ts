@@ -13,7 +13,10 @@ import {
   type HeldSystem, type UpsAssumptions, type UpsOption, type UpsRequirement,
 } from './ups';
 import { byId, enclosures, packSpecs, pcsUnits } from '../catalog/products';
-import { compareChemistries, repeatedOutages, type ChemistryComparison, type RepeatedOutages } from './chemistry';
+import { repeatedOutages, type ChemistryComparison, type RepeatedOutages } from './chemistry';
+import {
+  compareInIndia, illustrativeCosts, indiaPresets, quotedCosts, teachingTariffs, type IndiaComparison,
+} from './india';
 
 /**
  * The lesson catalogue.
@@ -109,6 +112,8 @@ export type LessonCard = {
      */
     chemistry: ChemistryComparison;
     repeated: { chemistry: 'VRLA' | 'LFP'; events: RepeatedOutages['events'] }[];
+    /** The same two options in one Indian operating scenario, over a lifecycle. §15.4 and §15.5. */
+    india: IndiaComparison;
   };
 };
 
@@ -796,12 +801,24 @@ export const upsSizing: LessonCard = {
     const shown: UpsOption[] = held && option
       ? [{ ...option, role: 'under-test' }, ...(options[0] ? [{ ...options[0], role: 'would-need' as const }] : [])]
       : options;
-    // §15.4's day of interruptions: three fifteen-minute outages an hour apart, which is the
-    // schedule the "repeated interruptions" preset is built on. It is deliberately independent of
-    // the backup duration the learner chose — selecting two hours of design autonomy must not turn
-    // every outage into a two-hour event.
-    const events = [{ atMinutes: 600, minutes: 15 }, { atMinutes: 660, minutes: 15 }, { atMinutes: 720, minutes: 15 }];
-    const chemistry = compareChemistries({ protectedKW: requirement.protectedKW, autonomyMinutes: minutes, tempC: 30 });
+    // The operating scenario the comparison runs in, and with it the schedule of outages. §15.4
+    // keeps that schedule independent of the backup duration the learner chose: selecting two hours
+    // of design autonomy must not turn every outage into a two-hour event.
+    const preset = indiaPresets[Math.round(values.conditions ?? 0)] ?? indiaPresets[0];
+    const tariff = teachingTariffs[Math.round(values.tariff ?? 1)] ?? teachingTariffs[1];
+    const horizonYears = ([5, 10, 15] as const)[Math.round(values.horizon ?? 1)] ?? 10;
+    // Prices are entered or they are not. With nothing entered the ledger carries the gaps rather
+    // than filling them, which is the honest default; the quoted set is what a site with
+    // quotations would see.
+    const costs = values.priced === 1
+      ? quotedCosts({ tariffInrPerKWh: tariff, batteryInrPerKWh: 12_000, conversionInrPerKW: 9_000, disposalInrPerKg: 5, residualFraction: 0.05 })
+      : illustrativeCosts(tariff);
+    const india = compareInIndia({
+      protectedKW: requirement.protectedKW, autonomyMinutes: minutes, preset,
+      horizonYears, tariffInrPerKWh: tariff, costs,
+    });
+    const events = preset.outages;
+    const chemistry = india.chemistry;
     const lfpEnergy = chemistry.options.find(o => o.chemistry === 'LFP')?.installedEnergyKWh ?? 0;
     const vrlaBlocks = chemistry.options.find(o => o.chemistry === 'VRLA')?.blocks;
     return {
@@ -809,12 +826,12 @@ export const upsSizing: LessonCard = {
       readiness: readiness(option, requirement, a, minutes),
       held: held && option ? { option, shortfalls: shortfalls(option, requirement, a, minutes) } : null,
       continuity: 'Continuity not verified — an energy model cannot establish zero-break transfer, voltage quality or protection coordination.',
-      chemistry,
+      chemistry, india,
       repeated: (['VRLA', 'LFP'] as const).map(c => ({
         chemistry: c,
         events: repeatedOutages({
-          chemistry: c, protectedKW: requirement.protectedKW, tempC: 30, events, dayMinutes: 1440,
-          assumptions: a, chargerCPerHour: 0.1, installedKWh: lfpEnergy, blocks: vrlaBlocks,
+          chemistry: c, protectedKW: requirement.protectedKW, tempC: india.batteryC, events, dayMinutes: 1440,
+          assumptions: a, chargerCPerHour: preset.chargerCPerHour, installedKWh: lfpEnergy, blocks: vrlaBlocks,
         }).events,
       })),
     };

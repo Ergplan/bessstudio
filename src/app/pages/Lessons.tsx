@@ -13,6 +13,8 @@ import {
 import { lfpParameterSet } from '../../sim/presets';
 import { accounting, simulate } from '../../sim/engine';
 import { comparePolicies } from '../../sim/compare';
+import { indiaPresets, teachingTariffs } from '../../sim/india';
+import { inr } from '../../sim/lifecycle';
 import { badgeLabels, badgeMeanings } from '../../sim/provenance';
 import { pcsStateMeaning, pcsStateOwner, type PcsState } from '../../sim/pcs';
 import { bmsStateMeaning, type BmsState } from '../../sim/bms';
@@ -231,7 +233,8 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
       {card.sizing && (
         <Sizing card={card} values={values}
           onHold={() => { setValues(v => holdSystem(v)); setPrevious(null); }}
-          onResize={() => { setValues(v => resizeSystem(v)); setPrevious(null); }} />
+          onResize={() => { setValues(v => resizeSystem(v)); setPrevious(null); }}
+          onSet={(id, value) => { setValues(v => ({ ...v, [id]: value })); setPrevious(null); }} />
       )}
 
       <div className="grid cols-2">
@@ -281,8 +284,9 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
  * duty; **Resize system** sizes the equipment for the duty on the screen. An interface that
  * silently does the second when the learner meant the first answers a question nobody asked.
  */
-function Sizing({ card, values, onHold, onResize }: {
+function Sizing({ card, values, onHold, onResize, onSet }: {
   card: LessonCard; values: Record<string, number>; onHold: () => void; onResize: () => void;
+  onSet: (id: string, value: number) => void;
 }) {
   const s = card.sizing!(values);
   const titles: Record<string, string> = {
@@ -330,6 +334,104 @@ function Sizing({ card, values, onHold, onResize }: {
           {s.problems.map(p => <p key={p} className="muted" style={{ margin: 0 }}>{p}</p>)}
         </Card>
       )}
+
+      <Card title="The conditions it runs in" subtitle="Illustrative Indian site scenarios — not measured averages, and not a claim about any city or state" tight>
+        <div className="field">
+          <span>Operating conditions</span>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {indiaPresets.map((p, i) => (
+              <button key={p.id} className={`btn sm${Math.round(values.conditions ?? 0) === i ? ' accent' : ''}`}
+                aria-pressed={Math.round(values.conditions ?? 0) === i} onClick={() => onSet('conditions', i)}>{p.label}</button>
+            ))}
+          </div>
+          <p className="hint">{s.india.preset.teaches}</p>
+        </div>
+        <div className="row" style={{ gap: 18, flexWrap: 'wrap', marginTop: 6 }}>
+          <div className="field" style={{ margin: 0 }}>
+            <span>Horizon</span>
+            <div className="row" style={{ gap: 6 }}>
+              {[5, 10, 15].map((y, i) => (
+                <button key={y} className={`btn sm${Math.round(values.horizon ?? 1) === i ? ' accent' : ''}`}
+                  aria-pressed={Math.round(values.horizon ?? 1) === i} onClick={() => onSet('horizon', i)}>{y} yr</button>
+              ))}
+            </div>
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <span>Tariff</span>
+            <div className="row" style={{ gap: 6 }}>
+              {teachingTariffs.map((t, i) => (
+                <button key={t} className={`btn sm${Math.round(values.tariff ?? 1) === i ? ' accent' : ''}`}
+                  aria-pressed={Math.round(values.tariff ?? 1) === i} onClick={() => onSet('tariff', i)}>₹{t}/kWh</button>
+              ))}
+            </div>
+            <p className="hint">Teaching values, not current DISCOM tariffs.</p>
+          </div>
+          <div className="field" style={{ margin: 0 }}>
+            <span>Prices</span>
+            <div className="row" style={{ gap: 6 }}>
+              <button className={`btn sm${values.priced !== 1 ? ' accent' : ''}`} aria-pressed={values.priced !== 1}
+                onClick={() => onSet('priced', 0)}>None entered</button>
+              <button className={`btn sm${values.priced === 1 ? ' accent' : ''}`} aria-pressed={values.priced === 1}
+                onClick={() => onSet('priced', 1)}>Illustrative quotation</button>
+            </div>
+            <p className="hint">With nothing entered the ledger carries the gaps rather than filling them.</p>
+          </div>
+        </div>
+        <div className="row" style={{ gap: 18, marginTop: 10 }}>
+          <KV label="Room">{s.india.roomC} °C</KV>
+          <KV label="Cells">{s.india.batteryC} °C</KV>
+        </div>
+        <p className="muted" style={{ margin: '6px 0 0' }}>{s.india.preset.batteryRiseBasis}</p>
+      </Card>
+
+      <Card title={`What it costs over ${s.india.horizonYears} years`}
+        subtitle={`Discounted, in rupees, at ₹${s.india.tariffInrPerKWh}/kWh — with everything that could not be priced listed rather than counted as nothing`} tight>
+        <table className="data">
+          <thead><tr><th /><th>Lead-acid</th><th>Lithium</th></tr></thead>
+          <tbody>
+            <tr><td>Undiscounted</td>{s.india.costs.map(c => <td key={c.chemistry} className="mono">{inr(c.totals.undiscountedInr)}</td>)}</tr>
+            <tr><td>Discounted</td>{s.india.costs.map(c => <td key={c.chemistry} className="mono">{inr(c.totals.discountedInr)}</td>)}</tr>
+            <tr><td>Replacement basis</td>{s.india.costs.map(c => (
+              <td key={c.chemistry}>{c.replacement.kind === 'modelled' ? `Modelled: every ${c.replacement.years.toFixed(1)} yr` : `Declared cases: ${c.replacement.cases.join(', ')} yr`}</td>
+            ))}</tr>
+            <tr><td>Outages carried, on this schedule</td>{s.india.readiness.map(r => (
+              <td key={r.chemistry} className="mono">{r.carried} of {r.asked} · ends at {(r.endingSoc * 100).toFixed(0)}%</td>
+            ))}</tr>
+            <tr><td>Lines with no price</td>{s.india.costs.map(c => <td key={c.chemistry} className="mono">{c.totals.unknown.length}</td>)}</tr>
+          </tbody>
+        </table>
+        <div className="notice warning" style={{ marginTop: 10 }}>
+          <b>
+            {s.india.costs.some(c => !c.totals.complete)
+              ? 'No crossover is stated, because the totals are incomplete'
+              : s.india.crossoverYear === null
+                ? `No crossover within ${s.india.horizonYears} years`
+                : `They cross in year ${s.india.crossoverYear}`}
+          </b>
+          <p>
+            {s.india.costs.some(c => !c.totals.complete)
+              ? 'A crossover between two partial sums would be the most confident figure on this screen and the least supported. Enter prices, or read the lines with none.'
+              : s.india.crossoverYear === null
+                ? 'On these assumptions the running totals do not cross inside the horizon. That is the answer, not a missing one.'
+                : 'Before that year one option is ahead on cumulative discounted cost, and after it the other is.'}
+          </p>
+        </div>
+        {s.india.costs.some(c => !c.totals.complete) && (
+          <div className="notice error">
+            <b>These totals are incomplete</b>
+            <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+              {[...new Set(s.india.costs.flatMap(c => c.totals.unknown.map(u => `${u.label} — ${u.basis}`)))].slice(0, 6).map(u => <li key={u}>{u}</li>)}
+            </ul>
+          </div>
+        )}
+        <details className="ergos-why">
+          <summary>Every assumption behind these figures</summary>
+          <ul className="muted" style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.8 }}>
+            {s.india.disclosures.map(d => <li key={d}>{d}</li>)}
+            {s.india.costs.flatMap(c => c.totals.notes.map(n => <li key={`${c.chemistry}-${n}`}><b>{c.chemistry}:</b> {n}</li>))}
+          </ul>
+        </details>
+      </Card>
 
       <Card title="Lead-acid or lithium, for the same service"
         subtitle="Each sized against its own discharge curves for the same protected load and the same autonomy" tight>
