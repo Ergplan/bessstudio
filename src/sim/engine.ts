@@ -3,7 +3,7 @@ import { decide, type EmsObservation } from './ems';
 import { binding, limitsFor, plantShape, type Limit } from './limits';
 import { signConvention } from './signs';
 import {
-  ENGINE_VERSION, SIM_SCHEMA_VERSION, seal,
+  ENGINE_VERSION, SIM_SCHEMA_VERSION, sealWith, simulationRunSchema,
   emsPolicySchema, equipmentParameterSetSchema, plantConfigurationSchema, scenarioSchema,
   type EmsDecision, type EmsDecisionLog, type EmsPolicy, type EquipmentParameterSet, type EventLog,
   type PlantConfiguration, type Scenario, type SimEvent, type SimulationRun, type SolverSettings,
@@ -276,7 +276,7 @@ export function simulate(input: RunInput): RunOutput {
   }
 
   const runId = input.runId ?? `run_${scenario.configHash.slice(0, 12)}`;
-  const run = seal({
+  const run = sealWith(simulationRunSchema, {
     id: runId, label: scenario.label, kind: 'SimulationRun' as const,
     scenarioHash: scenario.configHash, plantHash: plant.configHash,
     policyHash: policy.configHash, parameterSetHash: parameters.configHash,
@@ -286,7 +286,7 @@ export function simulate(input: RunInput): RunOutput {
     startedAt, finishedAt: failure ? null : startedAt, failure,
     badge: claimableBadge([parameters.provenance.badge, plant.converter.provenance.badge], []),
     schemaVersion: SIM_SCHEMA_VERSION,
-  } as never) as SimulationRun;
+  });
 
   return {
     run,

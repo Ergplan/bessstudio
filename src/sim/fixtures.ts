@@ -1,4 +1,4 @@
-import { seal, type EquipmentParameterSet, type PlantConfiguration, type EmsPolicy, type Scenario } from './records';
+import { sealWith, equipmentParameterSetSchema, plantConfigurationSchema, emsPolicySchema, scenarioSchema, type EquipmentParameterSet, type PlantConfiguration, type EmsPolicy, type Scenario } from './records';
 import type { Provenance } from './provenance';
 
 /**
@@ -28,7 +28,7 @@ const fixtureProvenance = (what: string): Provenance => ({
  * 10 kWh withdrawal is exactly ten percentage points. Nothing about that is physical; it is
  * arithmetic chosen so the fixture has an exact answer.
  */
-export const flatCellParameters: EquipmentParameterSet = seal({
+export const flatCellParameters: EquipmentParameterSet = sealWith(equipmentParameterSetSchema, {
   id: 'fixture-flat-cell',
   label: 'Fixture — constant-voltage cell',
   kind: 'EquipmentParameterSet',
@@ -40,10 +40,10 @@ export const flatCellParameters: EquipmentParameterSet = seal({
     limits: { chargeCurrentMaxA: 1000, dischargeCurrentMaxA: 1000, chargeTempC: [-40, 80], dischargeTempC: [-40, 80] },
   },
   provenance: fixtureProvenance('a constant-voltage store with no losses'),
-} as never) as EquipmentParameterSet;
+});
 
 /** The fixture plant: 100 kWh behind a 100 kW converter, with nothing else going on. */
-export const fixturePlant = (over: Partial<PlantConfiguration['converter']> = {}): PlantConfiguration => seal({
+export const fixturePlant = (over: Partial<PlantConfiguration['converter']> = {}): PlantConfiguration => sealWith(plantConfigurationSchema, {
   id: 'fixture-plant',
   label: 'Fixture — 100 kWh behind 100 kW',
   kind: 'PlantConfiguration',
@@ -60,21 +60,21 @@ export const fixturePlant = (over: Partial<PlantConfiguration['converter']> = {}
   },
   gridImportLimitW: 1_000_000, gridExportLimitW: 1_000_000,
   auxiliaryW: 0, coolingCapacityW: 0, coolingInputW: 0, ambientC: 25, islandCapable: false,
-} as never) as PlantConfiguration;
+});
 
-export const fixturePolicy: EmsPolicy = seal({
+export const fixturePolicy: EmsPolicy = sealWith(emsPolicySchema, {
   id: 'fixture-policy', label: 'Fixture — relay the request', kind: 'EMSPolicy',
   policy: 'manual', policyVersion: 'fixture-1',
   reserveSoc: 0, emergencyReserveSoc: 0, setpointCadenceSeconds: 1,
   peakTargetW: null, priceWindows: [],
-} as never) as EmsPolicy;
+});
 
 /** A scenario of a given length at a given step, with nothing in it but the initial state. */
-export const fixtureScenario = (over: Partial<Scenario> = {}): Scenario => seal({
+export const fixtureScenario = (over: Partial<Scenario> = {}): Scenario => sealWith(scenarioSchema, {
   id: 'fixture-scenario', label: 'Fixture scenario', kind: 'Scenario',
   plantId: 'fixture-plant', policyId: fixturePolicy.id,
   initialSoc: 0.5, initialCellTempC: 25,
   durationSeconds: 1800, stepSeconds: 60,
   siteLoad: null, generation: null, price: null, outage: null, controls: [],
   ...over,
-} as never) as Scenario;
+});

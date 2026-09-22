@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import {
   scenarioSchema, simulationRunSchema, timeSeriesResultSchema, emsDecisionLogSchema, eventLogSchema,
-  seal, sealIntact, SIM_SCHEMA_VERSION,
+  sealIntact, sealWith,
   type Scenario, type SimulationRun, type TimeSeriesResult, type EmsDecisionLog, type EventLog,
 } from './records';
 
@@ -76,14 +76,14 @@ const roundSeries = (s: TimeSeriesResult): TimeSeriesResult => {
 
 /* ------------------------------------------------------------- sealing ---- */
 
-export const sealScenario = (s: Scenario): Scenario => seal(s) as Scenario;
+export const sealScenario = (s: Scenario): Scenario => sealWith(scenarioSchema, s);
 
 /** A run, its series and its logs, sealed and rounded, ready to be written once. */
 export function sealRun(args: {
   orgId: string; ownerUid: string; at: string;
   run: SimulationRun; series: TimeSeriesResult; decisions: EmsDecisionLog; events: EventLog;
 }): StoredRun {
-  const record = seal({ ...args.run, schemaVersion: SIM_SCHEMA_VERSION }) as SimulationRun;
+  const record = sealWith(simulationRunSchema, args.run);
   return storedRunSchema.parse({
     id: record.id, orgId: args.orgId, ownerUid: args.ownerUid, updatedAt: args.at,
     kind: 'SimulationRun', record,

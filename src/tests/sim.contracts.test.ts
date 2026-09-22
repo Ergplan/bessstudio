@@ -9,7 +9,7 @@ import { canonicalise, configHash, fullHash, sameConfiguration } from '../sim/ha
 import {
   cellParametersSchema, converterSchema, emsPolicySchema, equipmentParameterSetSchema,
   learningTemplateSchema, plantConfigurationSchema, scenarioSchema, seal, sealIntact,
-  simulationRunSchema, timeSeriesResultSchema, SIM_SCHEMA_VERSION,
+  simulationRunSchema, timeSeriesResultSchema, sealWith, SIM_SCHEMA_VERSION,
 } from '../sim/records';
 import { lfpParameterSet, manualPolicy, presets, teachingPlant } from '../sim/presets';
 import { answersConfiguration, decodeRun, decodeScenario, encode, roundForStorage, sealRun, storeScenario } from '../sim/store';
@@ -406,5 +406,31 @@ describe('persistence, and what survives it', () => {
     expect(failed.record.status).toBe('failed');
     expect(failed.record.failure).toMatch(/did not converge/);
     expect(simulationRunSchema.parse(failed.record).failure).toBeTruthy();
+  });
+});
+
+describe('sealing a record the contract has not finished with', () => {
+  /**
+   * A schema fills in what a record left out. Sealing before that happens seals over contents the
+   * parse is about to change, and the hash stops matching the moment the record is read back —
+   * silently, because nothing complains until the read. The solver's `maxSubStepSeconds` default
+   * found this on the day it was added.
+   */
+  it('puts the schema defaults inside the hash, not outside it', () => {
+    const withoutDefault = {
+      id: 'run-x', label: 'x', kind: 'SimulationRun' as const,
+      scenarioHash: '0'.repeat(32), plantHash: '0'.repeat(32), policyHash: '0'.repeat(32), parameterSetHash: '0'.repeat(32),
+      engine: 'e', engineVersion: '1', seed: null, signConvention: 'positive = discharging',
+      status: 'complete' as const, startedAt: '2026-09-22T00:00:00.000Z', finishedAt: '2026-09-22T00:00:01.000Z', failure: null, badge: 'illustrative' as const,
+      // Every solver field except the two that carry defaults.
+      solver: { integrator: 'explicit-euler' as const, subSteps: 1, toleranceFraction: 0.001, maxIterations: 20 },
+    };
+    const sealedProperly = sealWith(simulationRunSchema, withoutDefault);
+    expect(sealedProperly.solver.maxSubStepSeconds, 'the default was applied').toBe(10);
+    expect(sealIntact(sealedProperly), 'and it is inside the hash').toBe(true);
+
+    // The other order is what used to happen, and it does not survive a read.
+    const sealedTooEarly = simulationRunSchema.parse(seal({ ...withoutDefault, schemaVersion: SIM_SCHEMA_VERSION }));
+    expect(sealIntact(sealedTooEarly)).toBe(false);
   });
 });

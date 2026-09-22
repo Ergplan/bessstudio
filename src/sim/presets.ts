@@ -1,4 +1,4 @@
-import { seal, type EquipmentParameterSet, type PlantConfiguration, type EmsPolicy } from './records';
+import { sealWith, equipmentParameterSetSchema, plantConfigurationSchema, emsPolicySchema, type EquipmentParameterSet, type PlantConfiguration, type EmsPolicy } from './records';
 import type { Provenance } from './provenance';
 
 /**
@@ -59,7 +59,7 @@ export const lfpOcvCurve = [
   { soc: 1.00, volts: 3.45 },
 ];
 
-export const lfpParameterSet: EquipmentParameterSet = seal({
+export const lfpParameterSet: EquipmentParameterSet = sealWith(equipmentParameterSetSchema, {
   id: 'params-lfp-314-illustrative',
   label: 'LFP 314 Ah prismatic — teaching parameters',
   kind: 'EquipmentParameterSet',
@@ -92,7 +92,7 @@ export const lfpParameterSet: EquipmentParameterSet = seal({
       'One representative cell stands for the pack. Cell-to-cell spread is a separately injected scenario, not a modelled distribution.',
     ],
   ),
-} as never) as EquipmentParameterSet;
+});
 
 /**
  * One 5 MWh enclosure, with its converter.
@@ -101,7 +101,7 @@ export const lfpParameterSet: EquipmentParameterSet = seal({
  * fill the container. That is the catalogue's reference topology, and it is what the 3D studio
  * draws, so the numbers a learner sees here are the numbers they will see there.
  */
-export const teachingPlant: PlantConfiguration = seal({
+export const teachingPlant: PlantConfiguration = sealWith(plantConfigurationSchema, {
   id: 'plant-5mwh-teaching',
   label: '5 MWh liquid-cooled enclosure — teaching plant',
   kind: 'PlantConfiguration',
@@ -133,14 +133,14 @@ export const teachingPlant: PlantConfiguration = seal({
   coolingInputW: 20_000,
   ambientC: 30,
   islandCapable: false,
-} as never) as PlantConfiguration;
+});
 
 /**
  * The manual policy: the learner asks, and the policy relays the request downwards without
  * altering it. Lesson 1 exists to show what happens between the request and the response, so the
  * policy above it has to be transparent enough to be ruled out as the cause.
  */
-export const manualPolicy: EmsPolicy = seal({
+export const manualPolicy: EmsPolicy = sealWith(emsPolicySchema, {
   id: 'policy-manual',
   label: 'Manual request',
   kind: 'EMSPolicy',
@@ -151,7 +151,7 @@ export const manualPolicy: EmsPolicy = seal({
   setpointCadenceSeconds: 60,
   peakTargetW: null,
   priceWindows: [],
-} as never) as EmsPolicy;
+});
 
 /** Every preset, so a test can walk them rather than trusting a list written by hand. */
 export const presets = {

@@ -449,6 +449,22 @@ export function seal<T extends Record<string, unknown>>(record: T): T & Hashed {
   return { ...withVersion, configHash: configHash(material) } as T & Hashed;
 }
 
+/**
+ * Parse first, then seal, then parse again.
+ *
+ * The order matters and getting it wrong is silent. A schema fills in the fields a record left
+ * out — every `.default()` above — so a record sealed before it is parsed is sealed over contents
+ * the parse is about to change, and the hash it carries stops matching the moment it is read back.
+ * A record only becomes what it is once the contract has finished with it.
+ */
+export function sealWith<T>(schema: { parse: (v: unknown) => T }, record: unknown): T {
+  // A placeholder hash so the first parse has the field it requires; `seal` drops it before
+  // hashing, so it can never reach the value it stands in for.
+  const primed = { ...(record as object), schemaVersion: SIM_SCHEMA_VERSION, configHash: '0'.repeat(32) };
+  const normalised = schema.parse(primed) as Record<string, unknown>;
+  return schema.parse(seal(normalised));
+}
+
 /** Whether a record's hash still matches what it contains. A false here means it was edited in place. */
 export const sealIntact = (record: Hashed & Record<string, unknown>): boolean =>
   seal(record).configHash === record.configHash;
