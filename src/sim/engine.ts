@@ -70,7 +70,14 @@ export const defaultSolver = (): SolverSettings => ({
   maxSubStepSeconds: 10, idealised: false,
 });
 
-/** The most pieces any one run may be advanced in, so a careless scenario cannot hang a browser. */
+/**
+ * The most pieces any one run may be advanced in, so a careless scenario cannot hang a browser.
+ *
+ * Two million is about two seconds of arithmetic here and well beyond anything the interface can
+ * ask for: a whole day at five-minute samples and ten-second integration is nine thousand. A run
+ * past the cap is **refused**, not quietly coarsened — returning an answer computed at a fidelity
+ * nobody asked for is the failure §13.1 is about, and it would be invisible.
+ */
 const MAX_TOTAL_SUBSTEPS = 2_000_000;
 
 /**
@@ -165,6 +172,10 @@ export function simulate(input: RunInput): RunOutput {
   const steps = Math.round(scenario.durationSeconds / scenario.stepSeconds);
   const subSteps = subStepsFor(scenario.stepSeconds, solver);
   const subSeconds = scenario.stepSeconds / subSteps;
+  const pieces = steps * subSteps;
+  if (pieces > MAX_TOTAL_SUBSTEPS) {
+    invalid.push(`This run would advance the state in ${pieces.toLocaleString('en')} pieces, past the ${MAX_TOTAL_SUBSTEPS.toLocaleString('en')} a single run may take. Lengthen the integration interval or shorten the scenario; the alternative is a browser that stops responding without saying why.`);
+  }
   const startedAt = input.at ?? new Date(0).toISOString();
 
   const series: Record<string, number[]> = {

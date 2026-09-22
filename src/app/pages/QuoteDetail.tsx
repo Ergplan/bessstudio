@@ -79,9 +79,18 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
   const setOffer = (patch: Partial<OfferContent>) =>
     patch && quote && void saveQuote({ ...quote, offer: { ...(quote.offer ?? {}), ...patch } });
 
+  /**
+   * The offer document only exists in the page while its own tab is showing, so exporting it from
+   * anywhere else found nothing and did nothing — a button that looked like it worked. It now shows
+   * the document first, exactly as the print button does, and exports what is then on the screen.
+   */
   const exportOfferHtml = async () => {
-    if (!offerRef.current || !quote) return;
-    const node = offerRef.current.querySelector('.offer');
+    if (!quote) return;
+    if (tab !== 'offer') {
+      setTab('offer');
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    const node = offerRef.current?.querySelector('.offer');
     if (!node) return;
     downloadFile(await offerHtml(node as HTMLElement, `${quote.number} r${quote.version} — ${quote.customerName}`),
       `${quote.number}-r${quote.version}-offer.html`);
