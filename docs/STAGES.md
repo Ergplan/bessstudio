@@ -3,8 +3,8 @@
 The live record of the build defined in [`docs/SITE.md` §17](./SITE.md#17-how-this-gets-built).
 `SITE.md` is the contract; this file is what actually happened.
 
-> **S0 through S7 are built and ready for acceptance.** S8 onward are `PLANNED` — not built, not
-> tested. Fixtures F01 to F05 have been run and passed; F06–F08 have not, and belong to stages
+> **S0 through S8 are built and ready for acceptance.** S9 onward are `PLANNED` — not built, not
+> tested. Fixtures F01 to F06 have been run and passed; F07 and F08 have not, and belong to stages
 > that have not started. Writing a check into this file is not evidence that it passed.
 >
 > **One check cannot be passed by testing.** §17.2 asks S6 for an observed beginner walkthrough or
@@ -37,15 +37,15 @@ when a prerequisite or a mandatory check fails.
 | **S5** | jouleWise ergOS EMS | S4 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s5--joulewise-ergos-ems) |
 | **S6** | Lessons 1–6 | S5 | **`READY FOR ACCEPTANCE`** *(usability validation pending)* | review pending | [packet](#s6--lessons-1-to-6) |
 | **S7** | Contract-demand UPS sizing | S6 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s7--contract-demand-ups-sizing) |
-| **S8** | Lead-acid versus LFP | S7 | `BUILDING` | — | — |
-| **S9** | Indian conditions and lifecycle cost | S8 | `PLANNED` | — | — |
+| **S8** | Lead-acid versus LFP | S7 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s8--lead-acid-against-lithium) |
+| **S9** | Indian conditions and lifecycle cost | S8 | `BUILDING` | — | — |
 | **S10** | Synchronised 3D | S9 | **`DEFERRED`** by decision — 2D first | — | — |
 | **S11** | Project and quotation integration | **S9** *(revised by the S10 deferral)* | `PLANNED` | — | — |
 | **S12** | Release readiness | S11 | `PLANNED` | — | — |
 
 ## Fixtures
 
-Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F05 have run and passed; the rest belong to stages that have not started.
+Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F06 have run and passed; the rest belong to stages that have not started.
 
 | ID | Covers | Owner stage | State |
 | --- | --- | --- | --- |
@@ -54,7 +54,7 @@ Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F05 have run and
 | F03 | apparent-power headroom, tighter bound wins | S4 | **PASS** — `src/tests/sim.fixtures.test.ts` |
 | F04 | backup reserve and the outage-mode transition | S5 | **PASS** — `src/tests/sim.s5.test.ts` |
 | F05 | UPS sizing, the 500 kVA worked example | S7 | **PASS** — `src/tests/sim.ups.test.ts` |
-| F06 | repeated outages, reserve carried forward | S8 | NOT RUN |
+| F06 | repeated outages, reserve carried forward | S8 | **PASS** — `src/tests/sim.chemistry.test.ts` |
 | F07 | lifecycle cost, discounting and no-crossover | S9 | NOT RUN |
 | F08 | cross-tenant access and provenance | S11 | NOT RUN |
 
@@ -891,6 +891,99 @@ Rollback: `git revert be105c8`. No migrations; nothing is written to storage.
 ### 7. Decision
 
 **READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S8 — Lead-acid versus LFP.**
+
+---
+
+## S8 — Lead-acid against lithium
+
+**State:** READY FOR ACCEPTANCE — review pending
+**Revision:** `c2b11e5`
+**Depends on:** S7 (READY FOR ACCEPTANCE)
+
+### 1. Scope
+
+Delivered: a distinct VRLA model, the equal-service comparison, and F06. It is a second step inside
+lesson 7, per §15.4, not an eighth card.
+
+- **`src/sim/vrla.ts`** — a fitted Peukert-style constant-power model with a rate-dependent average
+  discharge voltage, a temperature correction, a bulk-and-absorption recharge model and a float-life
+  rule of thumb. It refuses to answer outside the bounds it was fitted for — under five minutes,
+  over eight hours, outside 0–45 °C — because a number produced outside a model's applicability is
+  worse than no number. Every result says it is a fit rather than a datasheet.
+- **`src/sim/chemistry.ts`** — equal service, not equal labels. Both options carry the same
+  protected load for the same autonomy, each sized against its own curves, and everything that
+  differs is disclosed: the DC bus, the management system, the floor area, the mass, and the
+  recharge time that decides readiness for the *next* outage.
+- **F06** — a day of three fifteen-minute outages an hour apart, with the charge carried from one to
+  the next, on both chemistries.
+- **The lesson** — the comparison table, the three-outage day and the disclosures sit under the
+  sizing panels of lesson 7.
+
+Not claimed: lifecycle cost, which is S9, and calendar life for lithium, which is left blank rather
+than guessed. Flooded, gel and other lead-acid technologies are not represented by this VRLA data,
+and LFP figures are never applied to NMC.
+
+### 2. Environment
+
+As S7. TypeScript engine in the browser, per the departure recorded in the S2 packet. No new
+runtime dependency.
+
+### 3. Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **605 passed** (+35) | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | 48 passed | **PASS** |
+| Static export | `npm run build` | 17 routes | 17 routes | **PASS** |
+| **F06** charge carried forward | unit | each outage starts where the last left it | on both chemistries, every event starts below the previous one; the third never starts full | **PASS** |
+| **F06** recharge less than the withdrawal | unit | bounded by the charger and the window | on both chemistries, what goes back between events is less than what came out, and more than nothing | **PASS** |
+| **F06** the shortfall is reported | unit | a later event that cannot be carried says so | first carried in full, a later one short, with the minutes it did carry | **PASS** |
+| **F06** a limited window is not an unlimited one | unit | the charger's rate changes the outcome | 1 C leaves the third event higher than 0.02 C | **PASS** |
+| A model of lead-acid, not lithium | unit | the rate effect is present and monotone | 100% of the twenty-hour rating at 20 h, under 45% at 15 min, under 35% at 5 min | **PASS** |
+| The Peukert relation it claims | unit | matches the closed form independently | to 1e-12 at five durations | **PASS** |
+| Constant-power discharge, not an Ah rating | unit | sizing uses the curve at the duration | the label-based count is less than half the sized one | **PASS** |
+| Refuses outside its bounds | unit | infeasible rather than extrapolated | 1 min, 10 h, 60 °C and −5 °C all return no number and say why | **PASS** |
+| Recharge is the slow part | unit | absorption dominates per point of charge | the last fifth is over 2.5× slower per point than the bulk phase | **PASS** |
+| Never faster than the cells permit | unit | the charger cannot exceed the cell limit | a 5 C charger and a 0.2 C cell give the same time | **PASS** |
+| Equal service, not equal energy | unit | both sized for the same duty, to different energies | 91 kWh of lead-acid against 783 kWh of lithium for 225 kW for 15 minutes | **PASS** |
+| Everything that differs is disclosed | unit | bus, management, space, recharge | all four present in the differences | **PASS** |
+| Same end-of-life threshold for both | unit | 80%, held to both | end-of-life autonomy below beginning-of-life on both | **PASS** |
+| No chemistry's data generalised to another | unit | stated on every comparison | LFP not applied to NMC; flooded and gel not represented by VRLA | **PASS** |
+| No invented lithium service life | unit | blank, with the reason | `serviceLifeYears` null, and the note says why | **PASS** |
+| Warm room shortens life, not autonomy | unit | separate effects | 25 °C → 35 °C halves float life and leaves autonomy unchanged | **PASS** |
+| The schedule does not resize the equipment | unit | the day tests what was sized | the same three outages carried in full by a two-hour design and not by a fifteen-minute one | **PASS** |
+| Browser: the comparison | browser | both configurations, the day, the differences | 3 strings of 64 blocks against 3 enclosures; 5.8 t against 7.8 t; 17.2 m² against 8.1 m² | **PASS** |
+| Browser: the three-outage day | browser | the lead-acid case degrades across the day | 15 of 15, then 7 of 15, then 2 of 15 — against 15, 15, 15 for lithium | **PASS** |
+| Browser: a longer design | browser | carries all three | at two hours of autonomy the lead-acid case carries 15, 15, 15 | **PASS** |
+| No page or console errors | browser | none | none | **PASS** |
+
+### 4. Browser walkthrough
+
+`scratchpad/s8.mjs` — lesson 7 at three autonomies, reading the comparison table, the three-outage
+day and the differences off the page at each.
+
+### 5. Defects
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D53 | The state of charge was measured against the energy available *at the discharge rate*, while recharge was measured against the twenty-hour rating — a battery filled in one currency and emptied in another. It made a fifteen-minute outage cost three per cent of a pack sized to be emptied by it. | **critical** — the comparison's central number was meaningless | **fixed**; charge is a fraction of nominal energy throughout, and delivering a watt-hour at a high rate costs more than a watt-hour of it, which is the Peukert effect stated in the bookkeeping. |
+| D54 | Every block was put in one series stack, giving a 1,728 V battery for a fifteen-minute design and 8,736 V for a two-hour one. | **critical** — not a thing anybody installs | **fixed**; blocks make a string at the converter's DC voltage and strings go in parallel, and a test holds the string between 500 and 1,000 V at every duration. |
+| D55 | Sizing used the whole pack while the run refused to discharge the bottom tenth, so a system sized for fifteen minutes carried 13.6 of them. | major | **fixed**; sizing is against the usable window — readiness less the floor — and says what window it used. |
+| D56 | Recharging "to full" ran the absorption phase to exactly 100%, where a decaying current takes indefinitely long: it returned 17.3 hours and would have returned any number asked of it. | major | **fixed**; it stops at 99%, and the note says that is where it stopped and why. |
+| D57 | The three-outage day re-sized the battery for the outages instead of testing the battery that had been sized for the chosen autonomy, so the schedule silently changed the equipment it was meant to be testing. | major | **fixed**; the day is put to the configuration on the screen, and a test pins that. |
+
+### 6. Demonstration and rollback
+
+Demo: **Lessons** → *UPS support by contract demand* → scroll to **Lead-acid or lithium, for the
+same service**. Read the three-outage day at the default fifteen minutes, then set the backup
+duration to 120 minutes and read it again.
+Rollback: `git revert c2b11e5`. No migrations; nothing is written to storage.
+
+### 7. Decision
+
+**READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S9 — Indian conditions and
+lifecycle cost.**
 
 ---
 
