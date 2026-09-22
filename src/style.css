@@ -201,3 +201,6 @@
   .app .brand small{margin-top:3px}
   .app .brand i{height:26px}
 }
+/* Presentation mode carried the same viewport assumption as the workspace; under the flex layout
+   it has to take its height from the row it is in. */
+@media (min-width:901px){.app.presentation main{height:auto;min-height:0}}
