@@ -28,9 +28,10 @@ describe('the guided walk', () => {
 
   it('starts on the plot when the project buys a fleet', () => {
     const plan = planSite({
-      units: 7, pcsCount: 4, pcsModel: 'PCS 2507.5 kW', pcsKW: 2507.5,
+      units: 7, model: 'SWESLC1331.2V314Ah', enclosure: model.dimensions.enclosure, modelled: true,
+      pcsCount: 4, pcsModel: 'PCS 2507.5 kW', pcsKW: 2507.5,
       transformerCount: 2, transformerMVA: 6.3, energyMWh: 35.11, powerMW: 8,
-    }, model.dimensions.enclosure);
+    });
     const steps = walkSteps(model, plan);
     expect(steps[0].id).toBe('site');
     expect(steps[0].target).toBe('SITE');

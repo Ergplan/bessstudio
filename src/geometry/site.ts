@@ -12,6 +12,11 @@ import type { Primitive } from './primitives';
  */
 export type SiteSpec = {
   units: number;
+  /** The product the project actually selected, and its outside dimensions in metres, L × H × W. */
+  model: string; enclosure: Vec;
+  /** True when the studio has an interior for this product; false means the plot is right and the
+   *  container drawing is a stand-in. */
+  modelled: boolean;
   pcsCount: number; pcsModel: string; pcsKW: number;
   transformerCount: number; transformerMVA: number;
   energyMWh: number; powerMW: number;
@@ -37,9 +42,9 @@ const EDGE = 5;          // setback from the container field to the fence
 const PCS_SIZE: Vec = [2.4, 2.3, 1.6];
 const TX_SIZE: Vec = [3.2, 2.8, 2.4];
 
-export function planSite(spec: SiteSpec, enclosure: Vec): SitePlan {
+export function planSite(spec: SiteSpec): SitePlan {
   const units = Math.max(1, Math.round(spec.units));
-  const [l, h, w] = enclosure;
+  const [l, h, w] = spec.enclosure;
   const pitchZ = w + SIDE_GAP, pitchX = l + ROW_GAP;
 
   // Choose the row length that comes closest to a square field, so the plot is a shape somebody
@@ -118,9 +123,11 @@ export function sitePrimitives(plan: SitePlan, selected: string): Primitive[] {
       for (const dz of [-sz / 2, sz / 2]) box(p.id, `rail${dz}`, [x, 0.18 + sy, z + dz], [sx, 0.09, 0.07], colours.frame);
       for (const dx of [-sx / 2, sx / 2]) for (const dz of [-sz / 2, sz / 2])
         box(p.id, `corner${dx}${dz}`, [x + dx, 0.18 + sy / 2, z + dz], [0.11, sy, 0.11], colours.frame);
-      // Door bays on the service face, so the row reads as something you walk along.
-      for (let d = 0; d < 6; d++)
-        box(p.id, `door${d}`, [x - sx / 2 + sx * (d + 0.5) / 6, 0.18 + sy * 0.46, z + sz / 2 + 0.03], [sx / 6 - 0.3, sy * 0.66, 0.05], colours.frame);
+      // Door bays on the service face, so the row reads as something you walk along. The count
+      // follows the length, because a 1.4 m cabinet does not have six of them.
+      const doors = Math.min(8, Math.max(1, Math.round(sx / 1.8)));
+      for (let d = 0; d < doors; d++)
+        box(p.id, `door${d}`, [x - sx / 2 + sx * (d + 0.5) / doors, 0.18 + sy * 0.46, z + sz / 2 + 0.03], [Math.max(0.2, sx / doors - 0.3), sy * 0.66, 0.05], colours.frame);
     } else {
       const colour = p.kind === 'pcs' ? colours.pcs : colours.tx;
       box(p.id, 'pad', [x, 0.06, z], [sx + 0.5, 0.12, sz + 0.5], colours.frame);

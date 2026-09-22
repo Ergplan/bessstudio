@@ -73,7 +73,12 @@ export function Studio() {
       context = `${s.installedDcMWh.toFixed(2)} MWh DC · ${s.ratedPowerMW.toFixed(2)} MW`;
       // Only a fleet is worth laying out; one container is the container view.
       if (s.units > 1) site = {
-        units: s.units, pcsCount: s.pcsCount, pcsModel: s.pcs.model, pcsKW: s.pcs.ratedKW,
+        units: s.units,
+        // The plot is laid out from the product the project selected, even where the studio has no
+        // interior for it, so a site of cabinets is not drawn as a site of 20-foot containers.
+        model: s.enclosure.model, modelled: !!s.enclosure.studioPreset,
+        enclosure: [s.enclosure.lengthMm / 1000, s.enclosure.heightMm / 1000, s.enclosure.widthMm / 1000],
+        pcsCount: s.pcsCount, pcsModel: s.pcs.model, pcsKW: s.pcs.ratedKW,
         transformerCount: s.transformerCount, transformerMVA: s.transformer ? s.transformer.ratedKVA / 1000 : 0,
         energyMWh: s.installedDcMWh, powerMW: s.ratedPowerMW,
       };

@@ -571,9 +571,13 @@ capacity, string current, nominal duration. Calculated DC performance. Dimension
 controls — cold plates, dry-break ports. Protection — combiner, external PCS. Input provenance,
 including any discrepancy between sources.
 
-**Site view.** Where a project needs more than one unit, the studio lays the fleet out: containers
-in rows at 3 m separation with 6 m access roads between rows, the converters and transformers in
-their own bay off one end, and a fenced plot sized around the lot. The field is proportioned toward
+**Site view.** Where a project needs more than one unit, the studio lays the fleet out at the
+selected product's own catalogue dimensions — including the three systems whose interiors are not
+modelled, so a site of 1.4 m cabinets is not drawn as a site of containers. Units stand in rows at
+3 m separation with 6 m access roads between rows, the converters and transformers sit in their own
+bay off one end, and the fenced plot is sized around the lot. Where the studio's assumed mechanical
+clearances need a bigger envelope than the product's stated dimensions, the inspector says so and
+says which of the two is the assumption. The field is proportioned toward
 a square rather than a single long line. The explorer lists the units and the conversion kit, the
 statistics strip speaks for the fleet, and double-clicking a unit steps inside it. A unit is drawn
 as a shell, not as 4,992 cells, so a twenty-two unit site stays under a thousand boxes.

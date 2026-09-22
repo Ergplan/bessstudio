@@ -74,6 +74,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | Every design-review finding has an explanation | `src/domain/learn.ts` | unit test reads the codes out of the model |
 | The guided walk never narrates conductors while the view hides them | `src/domain/tour.ts` | unit tests |
 | The site never overlaps two units, and everything placed sits inside the plot | `src/geometry/site.ts` | unit tests |
+| The site is laid out at the selected product's dimensions, modelled interior or not | `src/geometry/site.ts`, `src/app/pages/Studio.tsx` | unit tests |
 | A site is drawn as shells, never as a fleet of full assemblies | `src/geometry/site.ts` | unit test bounds the box count |
 | Nothing white-labelled says the demonstration tenant's name | `src/state/store.ts`, `src/scene/Viewer.tsx` | code; browser walkthrough |
 | The studio fits the viewport on a 1440×800 laptop | `app/globals.css`, `src/style.css` | browser measurement |
@@ -81,7 +82,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 Baseline commands:
 
 ```bash
-npm run test        # 187 unit tests
+npm run test        # 189 unit tests
 npm run test:rules  # 41 Firestore rules tests, against the emulator
 npm run build       # static export
 ```
