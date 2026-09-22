@@ -25,7 +25,6 @@ export type Branding = {
   displayName: string; legalName: string; logo: string | null;
   primary: string; primaryDark: string; accent: string; surface: string; slate: string;
   website: string; email: string; phone: string; address: string;
-  showVendorCredit: boolean;
 };
 
 /**
@@ -36,7 +35,7 @@ export const defaultBranding: Branding = {
   displayName: 'Solarworld', legalName: 'Solarworld Energy Infrastructure', logo: '/brand/solarworld-logo.png',
   primary: '#25455F', primaryDark: '#153956', accent: '#93BE49', surface: '#F8FAFB', slate: '#465469',
   website: 'https://www.worldsolar.in', email: 'info@worldsolar.in', phone: '+91 98103 48459',
-  address: 'Roorkee, Uttarakhand, India', showVendorCredit: true,
+  address: 'Roorkee, Uttarakhand, India',
 };
 
 /** Deck palette, reused for charts and status colours so the app reads as one system. */
