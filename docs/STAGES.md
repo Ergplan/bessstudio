@@ -3,8 +3,8 @@
 The live record of the build defined in [`docs/SITE.md` §17](./SITE.md#17-how-this-gets-built).
 `SITE.md` is the contract; this file is what actually happened.
 
-> **S0 through S9 are built and ready for acceptance.** S11 and S12 are the two that remain; S10 is
-> deferred by decision. Fixtures F01 to F07 have been run and passed; F08 belongs to S11. Writing a check into this file is not evidence that it passed.
+> **S0 through S11 are built and ready for acceptance.** S12 is the one that remains; S10 is
+> deferred by decision. Every fixture F01 to F08 has been run and passed. Writing a check into this file is not evidence that it passed.
 >
 > **One check cannot be passed by testing.** §17.2 asks S6 for an observed beginner walkthrough or
 > an explicit note that usability validation is pending. Nobody has watched a beginner use this,
@@ -39,12 +39,12 @@ when a prerequisite or a mandatory check fails.
 | **S8** | Lead-acid versus LFP | S7 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s8--lead-acid-against-lithium) |
 | **S9** | Indian conditions and lifecycle cost | S8 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s9--indian-conditions-and-lifecycle-cost) |
 | **S10** | Synchronised 3D | S9 | **`DEFERRED`** by decision — 2D first | — | — |
-| **S11** | Project and quotation integration | **S9** *(revised by the S10 deferral)* | `BUILDING` | — | — |
-| **S12** | Release readiness | S11 | `PLANNED` | — | — |
+| **S11** | Project and quotation integration | **S9** *(revised by the S10 deferral)* | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s11--project-and-quotation-integration) |
+| **S12** | Release readiness | S11 | `BUILDING` | — | — |
 
 ## Fixtures
 
-Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F07 have run and passed; the rest belong to stages that have not started.
+Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F08 have run and passed; the rest belong to stages that have not started.
 
 | ID | Covers | Owner stage | State |
 | --- | --- | --- | --- |
@@ -55,7 +55,7 @@ Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F07 have run and
 | F05 | UPS sizing, the 500 kVA worked example | S7 | **PASS** — `src/tests/sim.ups.test.ts` |
 | F06 | repeated outages, reserve carried forward | S8 | **PASS** — `src/tests/sim.chemistry.test.ts` |
 | F07 | lifecycle cost, discounting and no-crossover | S9 | **PASS** — `src/tests/sim.india.test.ts` |
-| F08 | cross-tenant access and provenance | S11 | NOT RUN |
+| F08 | cross-tenant access and provenance | S11 | **PASS** — `src/tests/rules.test.ts`, `src/tests/quoting.appendix.test.ts` |
 
 ## What is already true, and must stay true
 
@@ -1082,6 +1082,105 @@ Rollback: `git revert 626bd83`. No migrations; nothing is written to storage.
 
 **READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S11 — Project and quotation
 integration** (S10 deferred by decision).
+
+---
+
+## S11 — Project and quotation integration
+
+**State:** READY FOR ACCEPTANCE — review pending
+**Revision:** `1806ed2`
+**Depends on:** S9 (READY FOR ACCEPTANCE). S10 is deferred by decision, and this stage's dependency
+was revised to S9 accordingly.
+
+### 1. Scope
+
+Delivered: the learning-to-design conversion, immutable results linked to a project revision, the
+engineering appendix, and F08.
+
+- **`src/quoting/appendix.ts`** — the appendix §16 allows, and the three rules it enforces: it
+  releases nothing, it warrants nothing, and it is tied to an exact design revision. For a UPS
+  proposal it also carries the contract demand with its units, the critical load and whether it was
+  measured, both power factors, the UPS output, the chemistry selected, the battery capacity, the
+  requested and achieved autonomy, the outage-start charge, redundancy, recharge and the continuity
+  status — with indicative contract-demand sizing in a section that says so.
+- **`src/quoting/conversion.ts`** — a lesson's duty becomes a design. The power and the duration
+  come across; the teaching plant does not. Every figure states where it came from, and the design
+  lists what it still needs before it is about anywhere.
+- **Immutable results** — a run kept from a lesson carries the project and the design revision it
+  was produced against, is written once, and is refused an update by the rules from every role.
+- **Two approvals, two people** — `evidence.approve` is a new permission held by engineers, owners
+  and admins; `quote.approve` is held by approvers, owners and admins. Neither role that holds one
+  and not the other can reach the other.
+
+### 2. Environment
+
+As S9. TypeScript engine in the browser, per the departure recorded in the S2 packet. No new
+runtime dependency.
+
+### 3. Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **665 passed** (+29) | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | **54 passed** (+6) | **PASS** |
+| Static export | `npm run build` | 17 routes | 17 routes | **PASS** |
+| **F08** another customer's run by identifier | rules | refused | refused; own run still readable | **PASS** |
+| **F08** their design and their quotation | rules | refused | both refused | **PASS** |
+| **F08** a listing that would return both | rules | refused | collection read refused | **PASS** |
+| **F08** another workspace entirely | rules | read, list and write all refused | all three refused | **PASS** |
+| **F08** a run written under another workspace's name | rules | refused | refused | **PASS** |
+| **F08** staff of this workspace still see it | rules | yes, and not the other one | holds | **PASS** |
+| **F08** a changed parameter set cannot reuse the result | unit | refused, naming what moved | refused; scenario, plant and parameter set each named | **PASS** |
+| **F08** nor its badge | unit | the badge does not carry across | falls to illustrative on every mismatch | **PASS** |
+| **F08** a tampered run record | unit | refused before anything is read from it | refused: the seal no longer matches | **PASS** |
+| **F08** a run that did not complete | unit | refused, with its failure | refused, quoting the failure | **PASS** |
+| Immutable results | rules | no update from any role | refused for customer, sales, engineer, approver, admin and owner | **PASS** |
+| A run links to a project revision | unit | project and design hash carried, and survive storage | round-trips unchanged | **PASS** |
+| A design change flags the quotation | unit | stale, with what it invalidated | assumptions, performance and price all named; review required | **PASS** |
+| The same design twice is the same revision | unit | identical hash | identical | **PASS** |
+| The appendix carries what §16 lists | unit | nominal, usable, AC boundary, efficiency, evidence | all present, in three sections | **PASS** |
+| Modelled performance is never a warranty | unit | said, and no guarantee anywhere | "not a warranty" present; no unqualified guarantee | **PASS** |
+| The appendix releases nothing | unit | said plainly | "releases, prices or issues" nothing | **PASS** |
+| Evidence approval is not price approval | unit | separate permissions, separate roles | engineer has one, approver the other, neither has both | **PASS** |
+| Indicative stays distinct from reviewed | unit | separate sections and statuses | heading, status and note differ; a warning while unreviewed | **PASS** |
+| The chemistry is named | unit | LFP, VRLA or not selected | all three | **PASS** |
+| The conversion carries the duty, not the plant | unit | power and duration only | 270 kW for 15 minutes; catalogue defaults unchanged | **PASS** |
+| The conversion says where each figure came from | unit | provenance on every one | "an estimate from contract demand, not a measurement" | **PASS** |
+| The conversion produces a design that runs | unit | the sizing engine accepts it | both lessons size without a bad number | **PASS** |
+| Browser: the appendix on a quotation | browser | sections, rows, limitations, actions | plant section with the design revision; both actions available | **PASS** |
+| Browser: tie and approve | browser | both recorded, both then disabled | "approved by Demo Engineer … covers the model and its assumptions, and no price" | **PASS** |
+| Browser: keep a result | browser | written once, button reads kept | held, and appears in the appendix as *Achieved under the stated scenario* | **PASS** |
+| Browser: the design moves | browser | the quotation says so | "The design has moved on since this quotation was prepared" | **PASS** |
+| Browser: the conversion | browser | provenance and outstanding items | three figures with their sources, six outstanding items | **PASS** |
+| No page or console errors | browser | none | none | **PASS** |
+
+### 4. Browser walkthrough
+
+`scratchpad/s11.mjs` and `scratchpad/s11b.mjs` — the appendix on a quotation, tying it to a design
+revision and approving the engineering evidence; then the whole path: keep a result from a lesson,
+take the lesson's duty into the design, and return to the quotation to find it flagged against the
+revision it was prepared from, with the kept run's scenario and badge beside it.
+
+### 5. Defects
+
+None found that survived to this commit. The two things this stage changed about earlier work were
+deliberate extensions rather than fixes: the stored envelope gained the project and design revision
+a result belongs to, and the permission table gained the evidence approval that §16 requires to be
+separate from pricing.
+
+### 6. Demonstration and rollback
+
+Demo: **Quotations** → any quotation → **Engineering appendix** → **Tie this quotation to the
+current design**. Then **Lessons** → *Charge and discharge* from that project → **Keep this result
+with the project** → **Take this duty into the design** → **Apply it**. Return to the quotation:
+the appendix now carries the kept run and says the design has moved on.
+Rollback: `git revert 1806ed2`. The stored envelope's two new fields default to empty, so documents
+written before it are read unchanged.
+
+### 7. Decision
+
+**READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S12 — Release readiness.**
 
 ---
 
