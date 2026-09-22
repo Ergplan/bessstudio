@@ -555,6 +555,13 @@ canvas centre; component inspector right; statistics strip below.
 
 **Views.** Isometric, top, front, side, reset. Orbit, zoom, pan.
 
+**Keyboard.** Every scene control has a key: `1`–`4` for the views, `R`/`W`/`L`/`N`/`D` for the
+layers, `E` and `C` for the two traces, `S` and `A` for the section, `[` and `]` for explode, `G`
+for the walk, `P` for presentation, `Backspace` to step out one level, `?` for the list. Typing in
+a field is typing; modified presses belong to the browser; the walk keeps the arrow keys and
+Escape while it is running. A test holds the list and the bindings to each other, so neither an
+undiscoverable binding nor an entry that does nothing can survive.
+
 **Dimensions.** The dimension layer measures the three axes of whatever is in view with an offset
 run, end ticks and a value — millimetres at component scale, metres once a plot or a container is
 in view. At container scope it measures the enclosure rather than the drawn bounds, so the figure
@@ -583,7 +590,9 @@ pauses; steps with the arrow keys; leaves on Escape. Manual from the start for a
 for reduced motion. Leaving restores the visibility, explode and highlight settings that were in
 place beforehand.
 
-**Inspector.** System overview — topology preset, cell equivalent, operating voltage, aggregate
+**Inspector.** Selecting an ancillary — combiner, thermal unit, controller, string protection —
+describes that component and the volume reserved for it, rather than falling through to the
+container's DC performance. System overview — topology preset, cell equivalent, operating voltage, aggregate
 capacity, string current, nominal duration. Calculated DC performance. Dimensions. Cooling and
 controls — cold plates, dry-break ports. Protection — combiner, external PCS. Input provenance,
 including any discrepancy between sources.

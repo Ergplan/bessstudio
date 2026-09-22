@@ -224,3 +224,16 @@
 .app .axis-pick{display:inline-flex;gap:0}
 .app .axis-pick button{padding:6px 10px;border-radius:0;margin-left:-1px;font-family:var(--s-mono);font-size:11px;letter-spacing:.06em}
 .app .axis-pick button:first-child{margin-left:0}
+/* The keyboard list. Bindings that cannot be discovered are bindings nobody uses. */
+.app .canvas-hint button{background:none;border:0;padding:0;color:var(--s-accent);font-size:inherit;font-family:inherit;min-height:0}
+.app .canvas-hint button:hover{text-decoration:underline;background:none}
+.app .keys-backdrop{position:fixed;inset:0;background:rgba(4,6,9,.72);display:grid;place-items:center;z-index:16777280}
+.app .keys{width:min(560px,92vw);background:var(--s-panel);border:1px solid var(--s-line)}
+.app .keys header{height:auto;padding:14px 18px;background:none;border-bottom:1px solid var(--s-line-soft);display:flex;align-items:center;justify-content:space-between}
+.app .keys header h3{margin:0}
+.app .keys-list{display:grid;grid-template-columns:1fr 1fr;gap:2px 22px;padding:14px 18px}
+.app .keys-list>div{display:flex;align-items:center;gap:11px;padding:5px 0}
+.app .keys-list kbd{flex:0 0 76px;text-align:center;background:rgba(255,255,255,.05);border:1px solid var(--s-line);color:var(--s-text);font-family:var(--s-mono);font-size:11px;padding:4px 0}
+.app .keys-list span{color:var(--s-muted);font-size:12.5px}
+.app .keys>.muted{margin:0;padding:0 18px 16px;font-size:11.5px}
+@media (max-width:640px){.app .keys-list{grid-template-columns:1fr}}
