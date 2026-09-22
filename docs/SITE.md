@@ -582,7 +582,10 @@ on the canvas is the one the inspector reports.
 section · measure · guided walk.
 
 **Measure.** Two points picked off the model give the distance between them and its axis
-components, because an installer wants the clearance in one direction rather than the diagonal. A
+components, snapped onto the component they landed on so the reading is the one that was meant and
+can be taken again — an axis thinner than the tolerance snaps to its centre-line, a thicker one to
+its faces or its middle, and a routed run to an end or its midpoint. The tolerance is a fraction of
+what is on screen, so it follows the zoom. The distance and its components because an installer wants the clearance in one direction rather than the diagonal. A
 third pick starts the next measurement, so a run of them needs no clearing. Readings are in
 millimetres for anything you could hold and metres once a container is in view.
 
