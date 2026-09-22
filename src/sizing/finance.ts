@@ -131,7 +131,11 @@ export function evaluateFinance(sizing: SizingResult, pb: PriceBook): FinanceRes
   const rows: CashRow[] = []; let cumulative = 0, augmentationUsd = 0;
   for (const y of sizing.years) {
     const aug = sizing.augmentations.find(a => a.year === y.year);
-    const augCapex = aug ? aug.units * unitCostUsd * (1 - pb.batteryPriceDeclinePct / 100) ** y.year * (1 + pb.marginPct / 100) : 0;
+    // An augmentation is bought on the same commercial basis as the day-one fleet — margin and
+    // tax both apply to it — but not the day-one contingency, which is a construction allowance a
+    // later replacement purchase does not carry. Leaving tax off understated every augmentation by
+    // the whole tax rate on a book that charges one.
+    const augCapex = aug ? aug.units * unitCostUsd * (1 - pb.batteryPriceDeclinePct / 100) ** y.year * (1 + pb.marginPct / 100) * (1 + pb.taxPct / 100) : 0;
     augmentationUsd += augCapex;
     const capex = (y.year === 0 ? capexUsd : 0) + augCapex;
     const escal = (1 + infl) ** y.year;
