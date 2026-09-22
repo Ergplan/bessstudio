@@ -117,6 +117,15 @@ table.data td b{color:var(--ink);font-weight:600}
 .badge.bad{background:rgba(226,104,94,.14);color:#EC9086;border-color:rgba(226,104,94,.32)}
 .badge.neutral{background:rgba(255,255,255,.055);color:var(--slate)}
 
+/* A control that was never placed inside a .field still has to look like it belongs. Left to the
+   browser, a bare select renders as a light grey box in the middle of a dark page — the one
+   unstyled thing on the screen, which is exactly what the eye goes to. :where() keeps this at zero
+   specificity so every rule below still wins, and the sliders, checkboxes and colour wells that
+   are meant to look like themselves are left alone. */
+.shell :where(select,textarea,input:not([type=range]):not([type=checkbox]):not([type=color]):not([type=file])){
+  padding:8px 10px;border:1px solid var(--line);background:var(--field);color:var(--ink);font-size:13px;border-radius:8px}
+.shell :where(select,textarea,input):focus-visible{outline:2px solid var(--green);outline-offset:-1px}
+
 .field{display:block;margin-bottom:14px}
 .field>span{display:block;font-size:11.5px;font-weight:500;color:var(--slate);margin-bottom:6px}
 .field input,.field select,.field textarea{width:100%;padding:9px 11px;border:1px solid var(--line);background:var(--field);
