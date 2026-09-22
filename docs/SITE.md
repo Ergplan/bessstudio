@@ -567,7 +567,7 @@ selection. It is clipped by the section plane like everything else.
 
 **Keyboard.** Every scene control has a key: `1`–`4` for the views, `R`/`W`/`L`/`N`/`D` for the
 layers, `E` and `C` for the two traces, `S` and `A` for the section, `[` and `]` for explode, `G`
-for the walk, `P` for presentation, `F` to frame the selection, `/` to find a component,
+for the walk, `P` for presentation, `M` to measure, `F` to frame the selection, `/` to find a component,
 `Backspace` to step out one level, `?` for the list. Typing in
 a field is typing; modified presses belong to the browser; the walk keeps the arrow keys and
 Escape while it is running. A test holds the list and the bindings to each other, so neither an
@@ -579,7 +579,12 @@ in view. At container scope it measures the enclosure rather than the drawn boun
 on the canvas is the one the inspector reports.
 
 **Scene controls.** Roof off · cutaway · explode (0–100 %) · electrical path · cooling path ·
-section · guided walk.
+section · measure · guided walk.
+
+**Measure.** Two points picked off the model give the distance between them and its axis
+components, because an installer wants the clearance in one direction rather than the diagonal. A
+third pick starts the next measurement, so a run of them needs no clearing. Readings are in
+millimetres for anything you could hold and metres once a container is in view.
 
 **Section.** A clipping plane through whatever is on screen, on any of the three axes. The control
 speaks in fractions of the current bounds, so the same slider cuts a cell, a container and a site.

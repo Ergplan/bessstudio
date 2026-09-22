@@ -14,6 +14,7 @@ export type Action =
   | { kind: 'trace'; path: 'electrical' | 'cooling' }
   | { kind: 'section' }
   | { kind: 'sectionAxis' }
+  | { kind: 'measure' }
   | { kind: 'explode'; by: number }
   | { kind: 'walk' }
   | { kind: 'present' }
@@ -36,6 +37,7 @@ export const shortcuts: { keys: string; label: string; action: Action }[] = [
   { keys: 'C', label: 'Cooling path', action: { kind: 'trace', path: 'cooling' } },
   { keys: 'S', label: 'Section', action: { kind: 'section' } },
   { keys: 'A', label: 'Section axis', action: { kind: 'sectionAxis' } },
+  { keys: 'M', label: 'Measure', action: { kind: 'measure' } },
   { keys: '[  ]', label: 'Explode', action: { kind: 'explode', by: 0.1 } },
   { keys: 'G', label: 'Guided walk', action: { kind: 'walk' } },
   { keys: 'P', label: 'Presentation mode', action: { kind: 'present' } },

@@ -251,3 +251,8 @@
 .app .find-results b{display:block;color:var(--s-text);font-family:var(--s-mono);font-size:11.5px;letter-spacing:.04em}
 .app .find-results span{display:block;color:var(--s-dim);font-size:11px;margin-top:2px}
 .app .find-results .muted{padding:10px 8px;font-size:12px}
+/* A measurement taken off the model. */
+.app .measure-label{display:block;white-space:nowrap;background:rgba(14,17,22,.94);border:1px solid rgba(227,198,74,.4);padding:5px 9px;text-align:center}
+.app .measure-label b{display:block;color:#E3C64A;font-family:var(--s-mono);font-size:12px;letter-spacing:.04em}
+.app .measure-label i{display:block;color:var(--s-dim);font-style:normal;font-size:10px;margin-top:2px;letter-spacing:.03em}
+.app .measure-hint{color:var(--s-dim);font-size:11.5px;white-space:nowrap}

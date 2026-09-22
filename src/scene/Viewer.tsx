@@ -7,6 +7,7 @@ import {useStudio} from '../state/store';
 import {primitives,type Primitive,belongs,displacement} from '../geometry/primitives';
 import {planSite,sitePrimitives} from '../geometry/site';
 import {centreOf,keeps,type Cut} from './section';
+import {pick as pickPoint,say as sayLength,spanOf} from './measure';
 import {type Model,type Vec,add} from '../domain/model';
 import {brand} from '../brand/brand';
 import {qualification} from '../config/schema';
@@ -18,11 +19,15 @@ const boxGeo=new THREE.BoxGeometry(1,1,1),cylinderGeo=new THREE.CylinderGeometry
  */
 const sectionPlane=new THREE.Plane(new THREE.Vector3(-1,0,0),1e6);
 const PARKED=1e6;
+/** Scene captions are captions; the canvas under them is what the pointer is for. */
+const NO_POINTER={pointerEvents:'none'} as const;
 const dummy=new THREE.Object3D();
 function Batch({items,selected}:{items:Primitive[];selected:string}){const ref=useRef<THREE.InstancedMesh>(null!);const pick=useStudio(s=>s.select),focus=useStudio(s=>s.focus),scope=useStudio(s=>s.scope);const material=useMemo(()=>new THREE.MeshStandardMaterial({color:'white',roughness:items[0].metal?.42:.7,metalness:items[0].metal?.5:.12,clippingPlanes:[sectionPlane],clipShadows:true}),[items[0].metal]);useEffect(()=>()=>material.dispose(),[material]);
  useLayoutEffect(()=>{items.forEach((p,i)=>{dummy.position.set(...p.position);dummy.scale.set(...p.size);if(p.rotation)dummy.quaternion.set(...p.rotation);else dummy.quaternion.identity();dummy.updateMatrix();ref.current.setMatrixAt(i,dummy.matrix);ref.current.setColorAt(i,selected!=='BESS'&&selected!=='SITE'&&p.owner===selected?new THREE.Color(p.color).lerp(new THREE.Color('#bedc78'),.3):new THREE.Color(p.color));});ref.current.instanceMatrix.needsUpdate=true;if(ref.current.instanceColor)ref.current.instanceColor.needsUpdate=true;ref.current.computeBoundingSphere();},[items,selected]);
  const id=(e:ThreeEvent<MouseEvent>)=>items[e.instanceId??0]?.owner;
- return <instancedMesh ref={ref} args={[items[0].shape==='box'?boxGeo:cylinderGeo,material,items.length]} onClick={e=>{e.stopPropagation();pick(id(e));}} onDoubleClick={e=>{e.stopPropagation();const owner=id(e);focus(scope==='SITE'?(owner.startsWith('UNIT-')?'BESS':scope):owner);}} castShadow receiveShadow frustumCulled={false} />;
+ return <instancedMesh ref={ref} args={[items[0].shape==='box'?boxGeo:cylinderGeo,material,items.length]} onClick={e=>{e.stopPropagation();const st=useStudio.getState();
+   if(st.measure.on){st.setMeasure(m=>pickPoint(m,e.point.toArray() as Vec));return;}
+   pick(id(e));}} onDoubleClick={e=>{e.stopPropagation();const owner=id(e);focus(scope==='SITE'?(owner.startsWith('UNIT-')?'BESS':scope):owner);}} castShadow receiveShadow frustumCulled={false} />;
 }
 function Branding({model}:{model:Model}){const brandName=useStudio(s=>s.brandName)||brand.vendorShort.toUpperCase();const tex=useMemo(()=>{const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=256;const ctx=canvas.getContext('2d')!;ctx.fillStyle='#213e50';ctx.font='600 114px Arial';ctx.textAlign='center';ctx.fillText(brandName,512,155);const t=new THREE.CanvasTexture(canvas);t.colorSpace=THREE.SRGBColorSpace;if(model.config.logo){const img=new Image();img.onload=()=>{ctx.clearRect(0,0,1024,256);const scale=Math.min(1024/img.width,256/img.height);ctx.drawImage(img,(1024-img.width*scale)/2,(256-img.height*scale)/2,img.width*scale,img.height*scale);t.needsUpdate=true;};img.src=model.config.logo;}return t;},[model.config.logo,brandName]);useEffect(()=>()=>tex.dispose(),[tex]);return <mesh position={[model.dimensions.enclosure[0]/2+.04,model.dimensions.enclosure[1]*.66,0]} rotation={[0,Math.PI/2,0]}><planeGeometry args={[model.dimensions.enclosure[2]*.76,model.dimensions.enclosure[2]*.19]}/><meshBasicMaterial map={tex} transparent side={THREE.DoubleSide}/></mesh>;}
 /**
@@ -39,6 +44,38 @@ function SectionPlane({cut}:{cut:Cut}){
   },[cut,invalidate]);
   useEffect(()=>()=>{sectionPlane.constant=PARKED;},[]);
   return null;
+}
+
+/**
+ * The measurement itself: a bar between the two picked points, a marker at each, and the distance
+ * with its axis components — an installer wants the clearance in one direction, not the diagonal.
+ */
+function Measurement({reach}:{reach:number}){
+  const measure=useStudio(s=>s.measure);
+  const material=useMemo(()=>new THREE.MeshBasicMaterial({color:'#E3C64A',toneMapped:false,depthTest:false}),[]);
+  useEffect(()=>()=>material.dispose(),[material]);
+  if(!measure.on||!measure.a)return null;
+  const dot=Math.max(.01,reach*.008);
+  const marks=[measure.a,measure.b].filter(Boolean) as Vec[];
+  const span=measure.b?spanOf(measure.a,measure.b):null;
+  const mid=measure.b?measure.a.map((v,i)=>(v+measure.b![i])/2) as Vec:null;
+  return <group renderOrder={10}>
+    {marks.map((p,i)=><mesh key={i} geometry={boxGeo} material={material} position={p} scale={[dot,dot,dot]}/>)}
+    {measure.b&&<Line from={measure.a} to={measure.b} width={dot*.34} material={material}/>}
+    {span&&mid&&<Html center position={mid} style={NO_POINTER} zIndexRange={[16777273,16777273]}><span className="measure-label"><b>{sayLength(span.distance)}</b>
+      <i>X {sayLength(span.delta[0])} · Y {sayLength(span.delta[1])} · Z {sayLength(span.delta[2])}</i></span></Html>}
+  </group>;
+}
+
+/** A bar between two points, since WebGL will not draw a line thicker than one pixel. */
+function Line({from,to,width,material}:{from:Vec;to:Vec;width:number;material:THREE.Material}){
+  const {position,quaternion,length}=useMemo(()=>{
+    const a=new THREE.Vector3(...from),b=new THREE.Vector3(...to),dir=b.clone().sub(a);
+    const length=dir.length()||1e-6;
+    const quaternion=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),dir.clone().normalize());
+    return {position:a.clone().add(b).multiplyScalar(.5),quaternion,length};
+  },[from,to]);
+  return <mesh geometry={boxGeo} material={material} position={position} quaternion={quaternion} scale={[width,length,width]}/>;
 }
 
 /**
@@ -94,7 +131,7 @@ function Dimensions({bounds}:{bounds:THREE.Box3}){
     <mesh position={r.centre} scale={r.scale}><boxGeometry args={[1,1,1]}/><meshBasicMaterial color="#6d8494"/></mesh>
     {r.ticks.map((t,i)=><mesh key={i} position={t} scale={r.key==='Y'?[bar,tick*.5,tick]:[r.key==='X'?bar:tick,tick*.5,r.key==='X'?tick:bar]}>
       <boxGeometry args={[1,1,1]}/><meshBasicMaterial color="#8ea6b4"/></mesh>)}
-    <Html center position={r.label}><span className="dimension-label">{r.key} {say(r.length)}</span></Html>
+    <Html center position={r.label} style={NO_POINTER}><span className="dimension-label">{r.key} {say(r.length)}</span></Html>
   </group>)}</group>;
 }
 
@@ -124,10 +161,11 @@ function Scene({model,api}:{model:Model;api:React.Ref<ViewerHandle>}){const {sco
  ctx.fillStyle='#142e40';ctx.font=`${16*k}px Arial`;if(config.visibility.labels&&!config.presentation){const labels=(scope==='BESS'?model.racks:model.packs.filter(p=>belongs(p.id,scope))).filter(inCut);for(const n of labels){const p=new THREE.Vector3(...add(n.position,[0,n.size[1]+.1,0])).project(camera);const x=(p.x+1)/2*width,y=(-p.y+1)/2*height;if(x>50*k&&x<width-120*k&&y>85*k&&y<height-125*k)ctx.fillText(n.id,x,y);}}
  ctx.fillStyle='#f5f7f8';ctx.fillRect(0,height-108*k,width,108*k);ctx.fillStyle='#142e40';ctx.font=`${16*k}px Arial`;ctx.fillText(qualification,30*k,height-72*k);ctx.fillText(`Custom enclosure ${model.dimensions.enclosure.map(x=>x.toFixed(3)).join(' × ')} m (X × Y × Z) • ${model.warnings.filter(w=>w.level==='error').length} active errors • Illustrative terminals and cable diameters`,30*k,height-43*k);ctx.fillStyle='#a23a22';ctx.fillText(model.warnings.find(w=>w.level==='error')?.text??'PCS compatibility remains unverified.',30*k,height-16*k);return await new Promise<Blob>((resolve,reject)=>output.toBlob(b=>b?resolve(b):reject(new Error('PNG encoding failed.')),'image/png'));}finally{Object.assign(ortho,old);ortho.updateProjectionMatrix();gl.setPixelRatio(ratio);gl.setSize(oldSize.x,oldSize.y,false);invalidate();}}}),[model,scope,config,bounds]);
  return <><color attach="background" args={['#0B0F14']}/><ambientLight intensity={1.5}/><hemisphereLight args={['#E4EDF2','#1A232A',1.35]}/><directionalLight position={[2,12,5]} intensity={3} castShadow shadow-mapSize={[2048,2048]} shadow-camera-left={-14} shadow-camera-right={14} shadow-camera-top={9} shadow-camera-bottom={-9} shadow-bias={-.0002}/><directionalLight position={[-8,5,-6]} intensity={1.8}/><group>{batches.map((items,i)=><Batch key={`${i}-${items.length}`} items={items} selected={selected}/>)}{scope==='BESS'&&<Branding model={model}/>}</group><mesh rotation={[-Math.PI/2,0,0]} position={[0,-.19,0]} receiveShadow><planeGeometry args={[200,200]}/><shadowMaterial opacity={.34}/></mesh><gridHelper args={[40,80,'#2A3843','#182027']} position={[0,-.195,0]}/>
- {!config.presentation&&config.visibility.labels&&(scope==='SITE'?(plan?.placements.filter(p=>p.kind==='container')??[]).map(p=>({id:p.id,kind:'container' as const,position:p.position,size:p.size})):scope==='BESS'?model.racks:scope.includes('/C')?model.cells.filter(n=>n.id===scope):model.packs.filter(n=>belongs(n.id,scope))).filter(inCut).map(n=><Html key={n.id} center position={add(add(n.position,[0,n.size[1]+.1,0]),displacement(n,model))} distanceFactor={undefined}><button className="scene-label" onClick={()=>select(n.id)} onDoubleClick={()=>useStudio.getState().focus(n.id)}>{n.id}</button></Html>)}
- {!config.presentation&&config.visibility.labels&&scope!=='BESS'&&model.packs.filter(p=>belongs(p.id,scope)&&inCut(p)).flatMap(p=>['+','-'].map(pol=><Html key={`${p.id}${pol}`} center position={add(model.electrical.ports[`${p.id}:${pol}`].position,displacement(p,model))}><span className="polarity-label">{pol}</span></Html>))}
+ {!config.presentation&&config.visibility.labels&&(scope==='SITE'?(plan?.placements.filter(p=>p.kind==='container')??[]).map(p=>({id:p.id,kind:'container' as const,position:p.position,size:p.size})):scope==='BESS'?model.racks:scope.includes('/C')?model.cells.filter(n=>n.id===scope):model.packs.filter(n=>belongs(n.id,scope))).filter(inCut).map(n=><Html key={n.id} center position={add(add(n.position,[0,n.size[1]+.1,0]),displacement(n,model))} distanceFactor={undefined} style={NO_POINTER}><button className="scene-label" onClick={()=>select(n.id)} onDoubleClick={()=>useStudio.getState().focus(n.id)}>{n.id}</button></Html>)}
+ {!config.presentation&&config.visibility.labels&&scope!=='BESS'&&model.packs.filter(p=>belongs(p.id,scope)&&inCut(p)).flatMap(p=>['+','-'].map(pol=><Html key={`${p.id}${pol}`} center position={add(model.electrical.ports[`${p.id}:${pol}`].position,displacement(p,model))} style={NO_POINTER}><span className="polarity-label">{pol}</span></Html>))}
  <SectionPlane cut={cut}/>
  <SelectionBox node={selectedNode}/>
+ <Measurement reach={Math.max(...bounds.getSize(new THREE.Vector3()).toArray())}/>
 {config.visibility.dimensions&&<Dimensions bounds={scope==='BESS'?enclosureBox(model.dimensions.enclosure):bounds}/>}
  <OrbitControls ref={controls} onEnd={()=>useStudio.getState().update(c=>{c.camera.position=camera.position.toArray() as Vec;c.camera.target=controls.current.target.toArray() as Vec;c.camera.zoom=camera.zoom;})} makeDefault enableDamping dampingFactor={.12} minZoom={3} maxZoom={2800}/></>;
 }
