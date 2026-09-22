@@ -3,8 +3,8 @@
 The live record of the build defined in [`docs/SITE.md` §17](./SITE.md#17-how-this-gets-built).
 `SITE.md` is the contract; this file is what actually happened.
 
-> **S0 through S6 are built and ready for acceptance.** S7 onward are `PLANNED` — not built, not
-> tested. Fixtures F01 to F04 have been run and passed; F05–F08 have not, and belong to stages
+> **S0 through S7 are built and ready for acceptance.** S8 onward are `PLANNED` — not built, not
+> tested. Fixtures F01 to F05 have been run and passed; F06–F08 have not, and belong to stages
 > that have not started. Writing a check into this file is not evidence that it passed.
 >
 > **One check cannot be passed by testing.** §17.2 asks S6 for an observed beginner walkthrough or
@@ -36,8 +36,8 @@ when a prerequisite or a mandatory check fails.
 | **S4** | PCS and BMS behaviour | S3 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s4--pcs-and-bms-behaviour) |
 | **S5** | jouleWise ergOS EMS | S4 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s5--joulewise-ergos-ems) |
 | **S6** | Lessons 1–6 | S5 | **`READY FOR ACCEPTANCE`** *(usability validation pending)* | review pending | [packet](#s6--lessons-1-to-6) |
-| **S7** | Contract-demand UPS sizing | S6 | `BUILDING` | — | — |
-| **S8** | Lead-acid versus LFP | S7 | `PLANNED` | — | — |
+| **S7** | Contract-demand UPS sizing | S6 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s7--contract-demand-ups-sizing) |
+| **S8** | Lead-acid versus LFP | S7 | `BUILDING` | — | — |
 | **S9** | Indian conditions and lifecycle cost | S8 | `PLANNED` | — | — |
 | **S10** | Synchronised 3D | S9 | **`DEFERRED`** by decision — 2D first | — | — |
 | **S11** | Project and quotation integration | **S9** *(revised by the S10 deferral)* | `PLANNED` | — | — |
@@ -45,7 +45,7 @@ when a prerequisite or a mandatory check fails.
 
 ## Fixtures
 
-Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F04 have run and passed; the rest belong to stages that have not started.
+Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F05 have run and passed; the rest belong to stages that have not started.
 
 | ID | Covers | Owner stage | State |
 | --- | --- | --- | --- |
@@ -53,7 +53,7 @@ Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F04 have run and
 | F02 | converter balance, both directions | S3 | **PASS** — `src/tests/sim.fixtures.test.ts` |
 | F03 | apparent-power headroom, tighter bound wins | S4 | **PASS** — `src/tests/sim.fixtures.test.ts` |
 | F04 | backup reserve and the outage-mode transition | S5 | **PASS** — `src/tests/sim.s5.test.ts` |
-| F05 | UPS sizing, the 500 kVA worked example | S7 | NOT RUN |
+| F05 | UPS sizing, the 500 kVA worked example | S7 | **PASS** — `src/tests/sim.ups.test.ts` |
 | F06 | repeated outages, reserve carried forward | S8 | NOT RUN |
 | F07 | lifecycle cost, discounting and no-crossover | S9 | NOT RUN |
 | F08 | cross-tenant access and provenance | S11 | NOT RUN |
@@ -797,6 +797,100 @@ Rollback: `git revert 8268f6d`. No migrations; nothing is written to storage.
 
 **READY FOR ACCEPTANCE — review pending, with usability validation recorded as pending.** Next
 eligible stage: **S7 — Contract-demand UPS sizing.**
+
+---
+
+## S7 — Contract-demand UPS sizing
+
+**State:** READY FOR ACCEPTANCE — review pending
+**Revision:** `be105c8`
+**Depends on:** S6 (READY FOR ACCEPTANCE)
+
+### 1. Scope
+
+Delivered: lesson 7, the sizing behind it, and F05.
+
+- **`src/sim/ups.ts`** — contract demand → site power → protected power → protected apparent power
+  → energy at the load; and then, kept separate, the continuous rating after headroom and the
+  nominal battery after the path losses and the usable state-of-charge window. Every figure carries
+  the assumption that produced it in the strip a reader can open.
+- **Equipment from the catalogue**, multiplied out of real rows: module and rack counts derived from
+  the enclosure entry, converters filtered by whether their DC window contains the string's voltage,
+  and — where nothing fits — an answer that says commercial selection is pending rather than an
+  invented rating.
+- **Three result cards**: selected requirement, next supported power size, longer runtime option,
+  the last only where the converter and the discharge rate still hold.
+- **Test this system** and **Resize system** as separate actions, with the held system shown as the
+  system under test beside what the duty would need.
+- **Lesson 7** — three controls (contract demand, load to protect, backup duration), four figures,
+  two charts, a *Simulate grid failure* action rather than a fourth control, and the coupled run
+  behind it: grid healthy, grid fails, protected load carried locally, grid returns.
+
+Not claimed anywhere: continuity. §15.3 is explicit that an energy model cannot establish zero-break
+transfer, voltage quality or protection coordination, and every panel says so.
+
+### 2. Environment
+
+As S6. TypeScript engine in the browser, per the departure recorded in the S2 packet. No new
+runtime dependency.
+
+### 3. Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **570 passed** (+35) | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | 48 passed | **PASS** |
+| Static export | `npm run build` | 17 routes | 17 routes | **PASS** |
+| **F05** the worked example | unit | 500 kVA × 0.90 × 50% = 225 kW; 250 kVA at 0.90; 56.25 kWh for 15 min; 270 kW / 300 kVA with 20% headroom | all four exact to 1e-9 | **PASS** |
+| **F05** 56.25 kWh is not the battery | unit | the nominal estimate is separately derived | 84.94 kWh — the load energy over the path efficiency, divided by the usable window and the retained capacity | **PASS** |
+| **F05** every preset | unit | all six contract demands, recalculated not looked up | the §15.3 table reproduced exactly; 120 preset combinations produce no bad number | **PASS** |
+| kVA against kW | unit | site power factor is not applied twice | a 450 kW contract and a 500 kVA contract give the same protected load | **PASS** |
+| Power factor effect | unit | required kVA changes at unchanged kW | 0.90 → 0.80 leaves 225 kW and raises 250 kVA to 281.25 | **PASS** |
+| Measured load supersedes | unit | replaces the estimate, never added to it | 120 kW measured is 120 kW protected, and the estimate warning is dropped | **PASS** |
+| Load-fraction boundary | unit | more protected share, more requirement | monotone across 25 / 50 / 75 / 100%, reaching 450 kW | **PASS** |
+| Duration boundary | unit | more energy, same inverter | 5 min → 120 min raises the energy 24-fold and leaves 270 kW / 300 kVA unchanged | **PASS** |
+| Discharge-rate limit on a short outage | unit | power binds, not energy | 5 minutes of 225 kW selects on power; the configuration's own continuous rating covers it | **PASS** |
+| Catalogue compatibility | unit | real rows, and a DC window that contains the string | counts integral, converter window contains the string's nominal voltage, caveats state what is illustrative | **PASS** |
+| Insufficient initial reserve | unit | reported, not papered over | from 30% charge a two-hour duty comes back *insufficient readiness* with the runtime it can reach | **PASS** |
+| Fixed-system test versus resize | unit | holding does not resize | the held system keeps its enclosure, its count and its converters under a harder duty, and names what it cannot meet | **PASS** |
+| Resize after holding | unit | grows when asked to | continuous rating rises from 375 kW to 7,523 kW for a 5 MVA duty | **PASS** |
+| The coupled run | unit | the sizing estimate is confirmed, not trusted | grid lost and restored as events; every sample of the outage carried locally, nothing unserved | **PASS** |
+| Economic dispatch never eats the reserve | unit | nothing discharged before the outage | zero to 1e-6 W at every pre-outage sample | **PASS** |
+| BMS authoritative through an outage | unit | cell limits hold | no cell below its minimum at any sample of a two-hour island | **PASS** |
+| No verified no-break claim | unit | on every setting | "continuity is not verified" on all six contract demands | **PASS** |
+| Browser: the default | browser | 500 kVA / 50% / 15 min reads correctly | 225 kW protected, 270 kW required, 85 kWh estimate, 15 min achieved on 3 × SWESLC832V314Ah | **PASS** |
+| Browser: simulate grid failure | browser | the outage runs from the button | runtime 15 min of 15 asked for | **PASS** |
+| Browser: a harder duty | browser | resizes when it should | 100% for 120 min → 450 kW, 1,359 kWh estimate, 6 units | **PASS** |
+| Browser: test versus resize | browser | the held system is tested, not resized | the 375 kW system asked to carry 5,400 kW reports three shortfalls and 0 min achieved; *Resize system* then reaches 7,523 kW and 15 min | **PASS** |
+| No page or console errors | browser | none | none | **PASS** |
+
+### 4. Browser walkthrough
+
+`scratchpad/s7.mjs` — the default setting, the assumptions strip, *Simulate grid failure*, a harder
+duty, then **Test this system** against a five-megavolt-ampere contract and **Resize system** after
+it, reading the result cards, the shortfalls and the readiness at each step.
+
+### 5. Defects
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D49 | A 270 kW requirement was met with fifty-four five-kilowatt hybrid inverters wired to a string four times their DC window. The kilowatts added up and nothing else did. | **critical** — the configuration cannot be connected, let alone built | **fixed**; a converter is a candidate only where its DC window contains the string's nominal voltage, and no selection exceeds twenty units of one kind. |
+| D50 | "The smallest compatible combination" was read one way and gave eleven cabinets and eleven inverters where one of each would do; read the other way it gave a five-megawatt-hour container for an eighty-five kilowatt-hour requirement. | major | **fixed**; among the combinations within twice the least energy that meets the requirement, the fewest units wins — stated as the arbitrary line it is, and checked both ways. |
+| D51 | While a system was held for testing, the result cards showed a freshly sized configuration as *Selected requirement* — equipment nobody has, on a panel about the equipment they do. | major | **fixed**; the held system is shown as *The system under test*, with *What this duty would need* beside it. |
+| D52 | The button reading **Simulate grid failure** announced itself as "Play", so it could not be asked for by name — and a browser check looking for it by name could not find it either. | major — accessibility | **fixed**; the accessible name is the words on the button. |
+
+### 6. Demonstration and rollback
+
+Demo: **Projects** → any project → **Lessons** → *UPS support by contract demand*. Leave it at
+500 kVA, 50%, 15 minutes and press **Simulate grid failure**. Then press **Test this system**, raise
+the contract demand to 5,000 kVA and the protected share to 100%, and read what the system you
+already have does with that.
+Rollback: `git revert be105c8`. No migrations; nothing is written to storage.
+
+### 7. Decision
+
+**READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S8 — Lead-acid versus LFP.**
 
 ---
 
