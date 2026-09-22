@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { defaultSizingInput, sizeSystem, type SizingInput } from '../sizing/engine';
+import { readFileSync } from 'node:fs';
+import { defaultSizingInput, sizeSystem, warningTitle, warningTitles, type SizingInput } from '../sizing/engine';
 import { annualBenefitUsd, chargingEnergyMWh, costLines, evaluateFinance } from '../sizing/finance';
 import { defaultPriceBook, type PriceBook } from '../catalog/pricing';
 import { applications } from '../sizing/applications';
@@ -345,6 +346,27 @@ describe('the plant configuration table', () => {
       const s = sizeSystem({ ...defaultSizingInput(), durationH });
       expect(s.effectiveDurationH).toBeCloseTo(durationH, 6);
       expect(plantConfiguration(s).find(r => r.parameter.includes('C-rate'))!.unit).toContain(durationH.toFixed(1));
+    }
+  });
+});
+
+describe('what each warning is called', () => {
+  it('names every warning the engine can raise', () => {
+    // Gather the codes from the source rather than from a run, so a new warning added without a
+    // name shows up here rather than on a customer's screen as "Dc Window High".
+    const source = readFileSync(new URL('../sizing/engine.ts', import.meta.url), 'utf8');
+    const codes = [...source.matchAll(/code: '([a-z-]+)'/g)].map(m => m[1]);
+    expect(codes.length).toBeGreaterThan(15);
+    for (const code of new Set(codes)) {
+      expect(warningTitles[code], `${code} has no name`).toBeTruthy();
+      expect(warningTitle(code), code).not.toBe(code.replace(/-/g, ' '));
+    }
+  });
+
+  it('writes the terms of art the way an engineer writes them', () => {
+    for (const [code, title] of Object.entries(warningTitles)) {
+      expect(title, code).not.toMatch(/\bDc\b|\bPcs\b|\bAc\b|\bIdt\b|\bSoc\b/);
+      expect(title[0], `${code} starts lower case`).toBe(title[0].toUpperCase());
     }
   });
 });

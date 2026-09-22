@@ -51,6 +51,41 @@ export type SizingInput = {
 };
 
 export type SizingWarning = { code: string; level: 'error' | 'warning' | 'info'; text: string };
+
+/**
+ * What each warning is called where it is shown.
+ *
+ * Prettifying the code gave headings like "Dc Window High" and "Pcs Granularity" — the two terms
+ * of art on the page, both misspelt, on a document an engineer is reading to decide whether to
+ * trust the rest of it.
+ */
+export const warningTitles: Record<string, string> = {
+  'c-rate': 'Discharge rate above the pack rating',
+  'c-rate-margin': 'Discharge rate close to the pack rating',
+  'charge-rate': 'Charge rate above the pack rating',
+  'charge-rate-margin': 'Charge rate close to the pack rating',
+  'charge-limited': 'Charging sets the size, not discharging',
+  'charge-oversize': 'Charge window is buying enclosures',
+  'dc-window-high': 'String voltage above the converter input',
+  'dc-window-low': 'String voltage below the converter input',
+  'ambient-high': 'Ambient above the cell limit',
+  cooling: 'Air cooling at high ambient',
+  altitude: 'Altitude derating review',
+  dod: 'Depth of discharge and the warranty envelope',
+  throughput: 'Lifetime throughput above the warranty basis',
+  'capacity-shortfall': 'Contracted energy not met',
+  'duty-cycle': 'Duty heavier than the preset',
+  oversize: 'Day-one capacity well above contract',
+  headroom: 'Where the installed energy goes',
+  'power-limited': 'Power sets the size, not energy',
+  'pcs-granularity': 'Conversion capacity rounded up',
+  'idt-discharge': 'Transformer loss on discharge',
+  'degradation-extrapolated': 'Degradation schedule extrapolated',
+  validation: 'Basis of this sizing',
+};
+
+/** The warning's own name where it has one, and a readable form of its code where it does not. */
+export const warningTitle = (code: string) => warningTitles[code] ?? code.replace(/-/g, ' ');
 export type YearRow = {
   year: number; retention: number; installedDcMWh: number; storedDcMWh: number; usableMWh: number;
   /** AC energy actually dispatched in one cycle: the plant's usable energy, capped at what it is contracted to deliver. */

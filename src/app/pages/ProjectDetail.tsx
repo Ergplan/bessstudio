@@ -12,7 +12,7 @@ import { can, quoteStatuses, isCustomerRole } from '../../platform/types';
 import { applications, application } from '../../sizing/applications';
 import {
   defaultSizingInput, sizeSystem, normaliseSizingInput, enclosureSummary, defaultLossChain, defaultDegradation,
-  suppliedRetention, retentionAt, cellTemperature, temperatureFactor,
+  suppliedRetention, retentionAt, cellTemperature, temperatureFactor, warningTitle,
   type AugmentationStrategy, type SizingMode, type DegradationMode, type LossChain, type SizingResult,
 } from '../../sizing/engine';
 import { evaluateFinance } from '../../sizing/finance';
@@ -338,7 +338,7 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
 
             <Card title="Design checks" subtitle="Geometry, thermal and electrical compatibility">
               {sizing.warnings.map(w => (
-                <div key={w.code} className={`notice ${w.level}`}><b>{w.code.replace(/-/g, ' ')}</b><p>{w.text}</p></div>
+                <div key={w.code} className={`notice ${w.level}`}><b>{warningTitle(w.code)}</b><p>{w.text}</p></div>
               ))}
             </Card>
           </div>
