@@ -28,8 +28,8 @@ when a prerequisite or a mandatory check fails.
 | **S0** | Baseline and acceptance contract | — | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s0--baseline-and-acceptance-contract) |
 | **S1** | Finish the quoting tool | S0 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s1--finish-the-quoting-tool) |
 | **S2** | Model contracts and evidence | S1 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s2--model-contracts-and-evidence) |
-| **S3** | First charge/discharge lesson | S2 | `BUILDING` | — | — |
-| **S4** | PCS and BMS behaviour | S3 | `PLANNED` | — | — |
+| **S3** | First charge/discharge lesson | S2 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s3--first-chargedischarge-lesson) |
+| **S4** | PCS and BMS behaviour | S3 | `BUILDING` | — | — |
 | **S5** | jouleWise ergOS EMS | S4 | `PLANNED` | — | — |
 | **S6** | Lessons 1–6 | S5 | `PLANNED` | — | — |
 | **S7** | Contract-demand UPS sizing | S6 | `PLANNED` | — | — |
@@ -41,12 +41,12 @@ when a prerequisite or a mandatory check fails.
 
 ## Fixtures
 
-All **NOT RUN**. Definitions in [§18](./SITE.md#18-acceptance-fixtures).
+Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 and F02 have run and passed; the rest belong to stages that have not started.
 
 | ID | Covers | Owner stage | State |
 | --- | --- | --- | --- |
-| F01 | ideal energy and SOC, both directions | S3 | NOT RUN |
-| F02 | converter balance, both directions | S3 | NOT RUN |
+| F01 | ideal energy and SOC, both directions | S3 | **PASS** — `src/tests/sim.fixtures.test.ts` |
+| F02 | converter balance, both directions | S3 | **PASS** — `src/tests/sim.fixtures.test.ts` |
 | F03 | apparent-power headroom, tighter bound wins | S4 | NOT RUN |
 | F04 | backup reserve and the outage-mode transition | S5 | NOT RUN |
 | F05 | UPS sizing, the 500 kVA worked example | S7 | NOT RUN |
@@ -113,9 +113,9 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 Baseline commands:
 
 ```bash
-npm run test        # 387 unit tests
+npm run test        # 427 unit tests
 npm run test:rules  # 48 Firestore rules tests, against the emulator
-npm run build       # static export, 15 routes
+npm run build       # static export, 16 routes
 ```
 
 ---
@@ -400,6 +400,101 @@ lesson.**
 > If the Terraform environment is produced later, the contracts, records, hashes, sign adapters and
 > fixtures all carry across unchanged, and the Python service becomes a second engine behind the
 > same `SimulationRun.engine` field — which exists for that reason.
+
+---
+
+## S3 — First charge/discharge lesson
+
+**State:** READY FOR ACCEPTANCE — review pending
+**Revision:** see the commit carrying this file
+**Depends on:** S2 (READY FOR ACCEPTANCE)
+
+### 1. Scope
+
+Delivered: the engine, the first lesson, and F01 and F02.
+
+- **`src/sim/battery.ts`** — the cell as a first-order Thevenin equivalent circuit: one
+  open-circuit voltage curve, one series resistance with a temperature coefficient, coulomb
+  counting for the state, and a lumped thermal mass. Every function takes one cell and the caller
+  multiplies by the topology.
+- **`src/sim/limits.ts`** — every ceiling, expressed as a limit on one cell's current so they can
+  be compared at all: what the battery management system permits, the cell voltage cutoffs, the
+  converter's DC window, its DC current limit, its rating after temperature derating, the
+  connection limit, the hard state-of-charge floor, and the reserve the policy keeps in hand. The
+  lowest wins and its name is reported.
+- **`src/sim/ems.ts`** — the manual policy, which relays the learner's request and refuses to
+  spend the reserve, with an explanation built from the values it decided on.
+- **`src/sim/engine.ts`** — the orchestration, the energy accounting at every boundary it names,
+  and a round-trip efficiency that is reported only from a complete cycle.
+- **`src/sim/lessons.ts`**, **`src/app/pages/Lessons.tsx`**, **`/app/lessons`** — the catalogue of
+  seven cards with one built and six saying which stage brings them, and the player: one-sentence
+  goal, Play, the four-box stack with the limiting subsystem lit, four headline figures, two
+  charts, three controls, the ergOS explanation, "what changed and why", and Reset. Reached from a
+  project, per §3.0.
+
+Explicitly deferred: the PCS and BMS state machines, hysteresis, latching and the event ordering
+they need — those are S4, and the event log records limit engagements today without claiming to be
+a state machine. Reactive power is untouched: §12.3's capability circle arrives with F03 in S4.
+
+### 2. Environment
+
+As S2. TypeScript engine in the browser, per the departure recorded in the S2 packet. No new
+runtime dependency.
+
+### 3. Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **427 passed** (+40) | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | 48 passed | **PASS** |
+| Static export | `npm run build` | `/app/lessons` present | 16 routes incl. `/app/lessons` | **PASS** |
+| **F01** ideal energy and SOC | unit | 20 kW for 30 min from 50% delivers 10 kWh and ends at 40% | exact to 1e-9, both directions | **PASS** |
+| **F02** converter balance | unit | 100 kW DC at 95% delivers 95 kW AC; charge uses the charge efficiency | 95.000 kW; 100 kW drawn puts 90 kW in at 90% | **PASS** |
+| Charge/discharge signs | unit | positive discharges, negative charges, current follows | holds in both directions | **PASS** |
+| Loss and boundary accounting | unit | each loss counted exactly once | DC − converter = AC; AC − auxiliaries = connection | **PASS** |
+| Voltage cutoffs | unit | no cell taken outside its window | holds at both ends over a 2 h run | **PASS** |
+| Current cutoffs | unit | BMS limit and converter DC limit both respected | holds at four request levels | **PASS** |
+| SOC cutoffs | unit | never below empty or above full | holds at 300 s steps | **PASS** |
+| Reproducibility | unit | same inputs, same answer | series, decisions and hash identical | **PASS** |
+| Timestep convergence | unit | refining the step does not move the answer | 600 s to 15 s agree within 0.1 percentage point of charge, monotonically | **PASS** |
+| Failed solver displays honestly | unit | a failure is a failure | status `failed`, reason given, `finishedAt` null | **PASS** |
+| Invalid configuration displays honestly | unit | refused before anything is computed | refused, naming the field and the rule | **PASS** |
+| Browser: open from project | browser | Lessons reachable from a project | project → Lessons → catalogue, 1 of 7 available | **PASS** |
+| Browser: play | browser | the run plays | 0 → 25 min in 2.5 s, charge level falls 80% → 71.8% | **PASS** |
+| Browser: change power | browser | the result changes | 2,000 kWh → 3,469.1 kWh at 2.5 MW | **PASS** |
+| Browser: replay from the same state | browser | both runs start alike | both from 80%, stated on the page | **PASS** |
+| Browser: reset | browser | back to the default | 2,000 kWh again, controls restored | **PASS** |
+| Beginner limits | unit | ≤3 controls, ≤4 metrics, ≤2 charts | 3, 4, 2 | **PASS** |
+| No page or console errors | browser | none | none | **PASS** |
+
+### 4. Browser walkthrough
+
+`scratchpad/lesson.mjs` — project → Lessons → the card → play → change the power → replay → reset,
+reading the figures off the page at each step. The failure state is exercised in the unit suite
+rather than the browser, because reaching it needs a configuration the controls cannot produce —
+which is itself the point of bounding them.
+
+### 5. Defects
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D28 | The timestep convergence check failed by 3.6 percentage points of charge. The reserve was evaluated once per reporting step, so a plant sampled every ten minutes discharged past it for up to ten minutes before the policy noticed — exactly the failure §13.1 warns about. | **major** — found by the mandatory check, never shipped | **fixed**; the reserve is a limit in the chain, evaluated at every integration piece and owned by the EMS. The integration interval is now bounded separately from the reporting interval. |
+| D29 | A record sealed before it was parsed was sealed over contents the parse was about to change, so its hash stopped matching the moment it was read back. The solver's new `maxSubStepSeconds` default exposed it. | major | **fixed**; parse, seal, parse again, in one place every record goes through. |
+| D30 | The invalid-configuration check refused its own fixture: the fixture cell carried a thermal resistance ten times what the contract allows. | minor | **fixed**; and the engine now validates every input before computing anything. |
+| D31 | The first sample of a series was a step late, so a chart of a run beginning at 80% began at 79.7%. | minor | **fixed**; the series convention is written into the schema — sample *i* is the state at the start of interval *i* and the power across it — and a closing sample carries the state the run ended in. |
+
+### 6. Demonstration and rollback
+
+Demo: sign in → **Projects** → any project → **Lessons** → *Charge and discharge* → **Play**, then
+move the power dial and press Play again.
+Rollback: `git revert` the S3 commits. No migrations; nothing is written to storage yet — a run is
+computed on demand and held in the page. Persisting runs to `simRuns` is S11's, when a result
+becomes part of a quotation.
+
+### 7. Decision
+
+**READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S4 — PCS and BMS behaviour.**
 
 ---
 

@@ -183,6 +183,7 @@ export function simulate(input: RunInput): RunOutput {
     // and whether or not it is dispatching. They are counted here, once.
     const auxW = plant.auxiliaryW + plant.converter.standbyW;
 
+    const startSoc = soc, startTemp = tempC, startVoltage = ocv(cell, soc);
     let sumDc = 0, sumAc = 0, sumCellI = 0, sumCellV = 0, sumConvLoss = 0, sumBattLoss = 0;
     let appliedLimits: { by: string; limitW: number; reason: string }[] = [];
     let bindName = asked.requestedW === 0 ? '' : 'Request met in full';
@@ -241,7 +242,7 @@ export function simulate(input: RunInput): RunOutput {
     if (failure !== null) break;
 
     const n = subSteps;
-    const dcW = sumDc / n, acW = sumAc / n, cellI = sumCellI / n, vCell = sumCellV / n;
+    const dcW = sumDc / n, acW = sumAc / n, cellI = sumCellI / n;
     // At the connection point: what the converter produced, less what the plant consumed itself.
     // On charge `acW` is already negative, so the same subtraction deepens the import — which is
     // right, because the auxiliaries are drawn from the same connection in both directions.
@@ -250,16 +251,19 @@ export function simulate(input: RunInput): RunOutput {
     // unserved, and then only by however much the plant could not produce.
     const unserved = islanded && siteLoadW !== null ? Math.max(0, siteLoadW - Math.max(0, gridW)) : 0;
 
+    // The state as it was at the start of this interval, and the power averaged across it. The
+    // state has already been advanced by the loop above, so the values pushed here are the ones
+    // captured before it ran.
     series.timeSeconds.push(t);
     series.requestedPowerW.push(asked.requestedW);
     series.achievedPowerW.push(acW);
     series.gridPowerW.push(gridW);
     series.dcPowerW.push(dcW);
-    series.packVoltageV.push(vCell * shape.seriesCells);
+    series.packVoltageV.push(startVoltage * shape.seriesCells);
     series.packCurrentA.push(cellI * shape.parallelStrings);
-    series.cellVoltageV.push(vCell);
-    series.soc.push(soc);
-    series.cellTempC.push(tempC);
+    series.cellVoltageV.push(startVoltage);
+    series.soc.push(startSoc);
+    series.cellTempC.push(startTemp);
     series.converterLossW.push(sumConvLoss / n);
     series.batteryLossW.push(sumBattLoss / n);
     series.auxiliaryW.push(auxW);
@@ -273,6 +277,19 @@ export function simulate(input: RunInput): RunOutput {
         ? `${asked.explanation} The ${bindName.toLowerCase()} held it to ${Math.abs(acW / 1e3).toFixed(0)} kW.`
         : asked.explanation,
     });
+  }
+
+  // One last sample, carrying the state the run ended in and no power, so a chart shows where it
+  // finished and the energy sums are unchanged.
+  if (!failure && series.timeSeconds.length) {
+    series.timeSeconds.push(steps * scenario.stepSeconds);
+    for (const key of ['requestedPowerW', 'achievedPowerW', 'gridPowerW', 'dcPowerW', 'packCurrentA',
+      'converterLossW', 'batteryLossW', 'auxiliaryW', 'unservedLoadW']) series[key].push(0);
+    series.packVoltageV.push(ocv(cell, soc) * shape.seriesCells);
+    series.cellVoltageV.push(ocv(cell, soc));
+    series.soc.push(soc);
+    series.cellTempC.push(tempC);
+    bindingConstraint.push('');
   }
 
   const runId = input.runId ?? `run_${scenario.configHash.slice(0, 12)}`;

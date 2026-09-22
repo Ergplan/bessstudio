@@ -79,8 +79,11 @@ describe('F01 — ideal energy and state of charge', () => {
       scenario: fixtureScenario(), plant: fixturePlant(), policy: fixturePolicy,
       parameters: flatCellParameters, solver, manualRequestW: 20_000,
     });
-    expect(out.series.achievedPowerW.every(p => p > 0), 'discharge is positive').toBe(true);
-    expect(out.series.packCurrentA.every(i => i > 0), 'discharge current is positive').toBe(true);
+    // The closing sample carries the state the run ended in and no power, so the dispatching
+    // samples are everything but the last.
+    const dispatching = <T>(a: T[]) => a.slice(0, -1);
+    expect(dispatching(out.series.achievedPowerW).every(p => p > 0), 'discharge is positive').toBe(true);
+    expect(dispatching(out.series.packCurrentA).every(i => i > 0), 'discharge current is positive').toBe(true);
     expect(out.series.soc.every((s, i) => i === 0 || s <= out.series.soc[i - 1] + 1e-12), 'charge only falls').toBe(true);
     expect(out.run.signConvention).toContain('discharging');
 
@@ -88,8 +91,8 @@ describe('F01 — ideal energy and state of charge', () => {
       scenario: fixtureScenario({ initialSoc: 0.4 }), plant: fixturePlant(), policy: fixturePolicy,
       parameters: flatCellParameters, solver, manualRequestW: -20_000,
     });
-    expect(charging.series.achievedPowerW.every(p => p < 0), 'charge is negative').toBe(true);
-    expect(charging.series.packCurrentA.every(i => i < 0), 'charge current is negative').toBe(true);
+    expect(charging.series.achievedPowerW.slice(0, -1).every(p => p < 0), 'charge is negative').toBe(true);
+    expect(charging.series.packCurrentA.slice(0, -1).every(i => i < 0), 'charge current is negative').toBe(true);
   });
 });
 

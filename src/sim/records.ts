@@ -343,7 +343,18 @@ export const timeSeriesResultSchema = z.object({
   kind: z.literal('TimeSeriesResult'),
   runId: id(),
   stepSeconds: z.number().positive(),
-  /** Seconds from the start of the scenario, one per sample. */
+  /**
+   * Seconds from the start of the scenario, one per sample.
+   *
+   * **The convention, because a series is unreadable without one.** Sample `i` describes the
+   * interval that *begins* at `timeSeconds[i]`. The state channels — charge level, voltages,
+   * current, temperature — are the values at the start of that interval; the power channels are
+   * the averages across it. A final sample closes the series: it carries the state the run ended
+   * in and zero power, so summing power × step over every sample gives the energy exactly once.
+   *
+   * Without this the first sample is a step late, and a chart of a run that begins at half charge
+   * begins somewhere else.
+   */
   timeSeconds: z.array(z.number()),
   /** Signed, per the application convention: positive is discharge. */
   requestedPowerW: z.array(z.number()),

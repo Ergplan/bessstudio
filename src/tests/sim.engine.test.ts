@@ -93,8 +93,11 @@ describe('what the plant actually does when asked', () => {
   it('shows the current rising as the voltage falls under a constant power request', () => {
     // §12.2 names this as one of the three things the discharge lesson has to make a user see.
     const out = run({ scenario: teaching({ initialSoc: 0.9, durationSeconds: 10_800, stepSeconds: 60 }), manualRequestW: 1_200_000 });
-    const first = out.series.packCurrentA[0], last = out.series.packCurrentA[out.series.packCurrentA.length - 1];
-    const vFirst = out.series.packVoltageV[0], vLast = out.series.packVoltageV[out.series.packVoltageV.length - 1];
+    // The last sample is the closing one, which carries no power; the last dispatching sample is
+    // the one before it.
+    const n = out.series.packCurrentA.length - 2;
+    const first = out.series.packCurrentA[0], last = out.series.packCurrentA[n];
+    const vFirst = out.series.packVoltageV[0], vLast = out.series.packVoltageV[n];
     expect(vLast, 'voltage fell').toBeLessThan(vFirst);
     expect(last, 'current rose to hold the power').toBeGreaterThan(first);
     expect(out.series.achievedPowerW[0]).toBeCloseTo(out.series.achievedPowerW[10], -3);

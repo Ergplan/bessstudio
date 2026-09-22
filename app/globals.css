@@ -302,3 +302,30 @@ h2.project-title{border-color:transparent}
 .project-ref{flex:none;font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--slate-light)}
 .holding-note{margin:0;padding:10px 13px;background:rgba(200,164,21,.09);border-left:2px solid var(--gold);color:var(--slate);font-size:12.5px;line-height:1.55}
 .holding-note a{color:var(--green)}
+
+/* ---- lessons ----
+   §15 caps a beginner card at three controls, four figures and two charts, and §15.1 asks the
+   whole loop to be reachable without a configuration wizard. The layout is built to those limits
+   rather than to whatever happens to fit. */
+.lesson-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.lesson-card{border:1px solid var(--line-soft);background:rgba(255,255,255,.02);padding:16px;display:flex;
+  flex-direction:column;gap:8px;min-width:0}
+.lesson-card.later{opacity:.5}
+.lesson-card h4{font-size:14px}
+.lesson-card p{margin:0;font-size:12.5px;color:var(--slate);line-height:1.55;flex:1}
+.lesson-number{font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:var(--slate-light)}
+.lesson-card .btn{align-self:flex-start}
+.lesson-goal{margin:0;font-size:13.5px;color:var(--slate);line-height:1.6;max-width:70ch}
+.lesson-explain{margin:12px 0 0;font-size:12.5px;line-height:1.65;color:var(--ink)}
+
+/* The stack: who asks, who converts, who permits, who stores. Compact on purpose. */
+.sim-stack{display:flex;align-items:center;gap:0;flex-wrap:wrap}
+.sim-stack>div{display:flex;align-items:center;min-width:0}
+.sim-box{border:1px solid var(--line-soft);background:rgba(255,255,255,.03);padding:9px 12px;min-width:0}
+.sim-box b{display:block;font-size:12px;color:var(--ink)}
+.sim-box span{font-size:10.5px;color:var(--slate-light)}
+.sim-box.limiting{border-color:var(--amber);background:rgba(232,142,63,.1)}
+.sim-limiting{display:flex;align-items:center;gap:3px;font-style:normal;font-family:var(--mono);font-size:9px;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--amber);margin-top:4px}
+.sim-flow{width:22px;height:1px;background:linear-gradient(90deg,var(--line),var(--green));flex:none}
+.sim-stack.in .sim-flow{background:linear-gradient(270deg,var(--line),var(--blue))}

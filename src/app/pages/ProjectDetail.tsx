@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { ArrowLeft, Box, FileText, RotateCcw, Trash2 } from 'lucide-react';
+import { ArrowLeft, Box, FileText, GraduationCap, RotateCcw, Trash2 } from 'lucide-react';
 import { Card, Stat, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, TextArea, Field, Slider, pct, date } from '../components/ui';
 import { LineChart, BarChart, CompositionBar, series, status } from '../components/viz';
 import { quotesLeftBehind, reassign, HOLDING_ACCOUNT } from '../../platform/projects';
@@ -107,6 +107,8 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
           </select>
         )}
         <div className="spacer" />
+        {/* §3.0 puts the learner after the quote: somebody handed a design who wants to understand it. */}
+        <Link className="btn" href={`/app/lessons?project=${project.id}`}><GraduationCap size={15} /> Lessons</Link>
         <Link className="btn" href={`/app/studio?project=${project.id}`}><Box size={15} /> Open 3D studio</Link>
         {can(role, 'quote.write') && <button className="btn accent" onClick={() => void issueQuote()}><FileText size={15} /> Create quotation</button>}
         {can(role, 'project.write') && (
