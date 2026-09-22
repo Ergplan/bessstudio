@@ -43,3 +43,28 @@ describe('studio limits from the project', () => {
     expect(over?.text).toContain(limits.equipment.maxVoltage!.toLocaleString());
   });
 });
+
+describe('one container, in the plant the studio is drawing', () => {
+  /**
+   * The studio draws the day-one plant and says so — "one of five identical units". Dividing the
+   * converter capacity by the end-of-life fleet instead handed each container a smaller share of
+   * current than it would ever be asked for, and the studio then reported the battery's own
+   * capability as an equipment fault.
+   */
+  it('divides every per-unit figure by the fleet standing on day one', () => {
+    for (const augmentation of ['none', 'periodic', 'oversize-day1'] as const) {
+      const s = sizeSystem({ ...defaultSizingInput('frequency-regulation'), powerMW: 8, durationH: 1, augmentation });
+      const limits = limitsFromSizing(s);
+      expect(limits.equipment.maxCurrent, augmentation).toBe(Math.round(s.pcs.dcMaxA * s.pcsCount / s.units));
+      expect(limits.usable.acKW, augmentation).toBeCloseTo(s.ratedPowerMW * 1000 / s.units, 3);
+      expect(limits.usable.auxKW, augmentation).toBeCloseTo(s.auxMWhPerDay * 1000 / 24 / s.units, 3);
+    }
+  });
+
+  it('does not call a container that can push more current than it is asked for a fault', () => {
+    const s = sizeSystem({ ...defaultSizingInput('frequency-regulation'), powerMW: 8, durationH: 1, augmentation: 'periodic' });
+    expect(s.totalUnits, 'this plant augments, so the two fleet counts differ').toBeGreaterThan(s.units);
+    const model = buildModel({ ...structuredClone(defaults), equipment: limitsFromSizing(s).equipment });
+    expect(model.warnings.some(w => w.code === 'pcs-current'), model.warnings.map(w => w.code).join(', ')).toBe(false);
+  });
+});
