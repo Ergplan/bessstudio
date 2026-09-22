@@ -1,5 +1,6 @@
 import { source } from '../config/schema';
 import type { Model, Node } from './model';
+import { AGEING_DOUBLING_K } from '../sizing/engine';
 import type { SitePlan } from '../geometry/site';
 
 /**
@@ -115,7 +116,7 @@ function packLesson(model: Model, node: Node): Lesson {
     why: [
       `The cells are held under compression with a ${a.compression} mm allowance at each end. Prismatic cells swell as they cycle — the electrode stack breathes — and if nothing holds them the layers separate and the internal resistance climbs. Compression is not packaging, it is part of the electrical design.`,
       `The ${source.rows} × ${source.columns} arrangement is wired as a serpentine: each row runs the opposite way to the one before it, so the end of the last row finishes near the start of the first. That keeps the two terminals close together and the ${source.seriesCells - 1} links between cells as short as they can be.`,
-      `A ${a.coldPlate} mm cold plate runs under the whole tray. Ageing in an LFP cell roughly doubles for every 10 °C, so a few degrees of difference between the hottest and coldest cell in a pack shows up years later as a spread in capacity — and a string is only as good as its weakest pack.`,
+      `A ${a.coldPlate} mm cold plate runs under the whole tray. Ageing in an LFP cell roughly doubles for every ${AGEING_DOUBLING_K} °C, so a few degrees of difference between the hottest and coldest cell in a pack shows up years later as a spread in capacity — and a string is only as good as its weakest pack.`,
       `The ${a.terminalClearance} mm above the cells is terminal and busbar clearance, and the ${a.connector} mm at the end is room for the cables to leave without bending tighter than they are allowed to.`,
     ],
     numbers: [
@@ -168,7 +169,7 @@ const ancillaries: Record<string, { title: string; what: string; why: string[] }
     title: 'The thermal unit',
     what: 'A liquid loop — pump, reservoir and refrigeration — that feeds coolant to the cold plate under every pack and takes the heat away.',
     why: [
-      'Cells age roughly twice as fast for every 10 °C, so the thermal system is a warranty instrument as much as a comfort one.',
+      `Cells age roughly twice as fast for every ${AGEING_DOUBLING_K} °C, so the thermal system is a warranty instrument as much as a comfort one.`,
       'It heats as well as cools: below 0 °C the cells must not be charged at all, and an Indian winter at altitude reaches that.',
       'Liquid rather than air because the heat comes from inside a sealed block of cells; air can only reach their faces.',
     ],

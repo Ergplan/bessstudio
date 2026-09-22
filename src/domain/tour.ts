@@ -1,6 +1,7 @@
 import { source, type Config } from '../config/schema';
 import type { Model } from './model';
 import type { SitePlan } from '../geometry/site';
+import { AGEING_DOUBLING_K } from '../sizing/engine';
 
 /**
  * The guided walk.
@@ -67,7 +68,7 @@ export function walkSteps(model: Model, plan: SitePlan | null = null): WalkStep[
     {
       id: 'cooling', eyebrow: '', target: rack,
       title: 'How the heat gets out',
-      body: `Every rack is fed from a header running the length of the container. Inside one, coolant crosses the plate under each of its packs and returns warmer — ${s.packs} plates in parallel across the ${s.racks} racks. Cells age about twice as fast for every 10 °C, so this loop is a warranty instrument: the spread between the hottest and coldest cell in a container is what shows up in year eight as a spread in capacity.`,
+      body: `Every rack is fed from a header running the length of the container. Inside one, coolant crosses the plate under each of its packs and returns warmer — ${s.packs} plates in parallel across the ${s.racks} racks. Cells age about twice as fast for every ${AGEING_DOUBLING_K} °C the design runs warmer, so this loop is a warranty instrument: the spread between the hottest and coldest cell in a container is what shows up in year eight as a spread in capacity.`,
       visibility: { roof: false, walls: false, lids: true, coolant: true, hv: false, busbars: false, labels: false }, explode: 0, highlight: true,
     },
     {

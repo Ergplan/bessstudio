@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { buildModel } from '../domain/model';
 import { defaults } from '../config/schema';
 import { lessonFor, remedyFor } from '../domain/learn';
+import { walkSteps } from '../domain/tour';
+import { AGEING_DOUBLING_K, temperatureFactor } from '../sizing/engine';
 import { readFileSync } from 'node:fs';
 
 const model = buildModel(structuredClone(defaults));
@@ -72,5 +74,34 @@ describe('the equipment and usable-AC inputs', () => {
       for (const key of keys) expect(notes[key], `no note for ${group}.${key}`).toBeTruthy();
       for (const key of Object.keys(notes)) expect(keys, `stale note for ${group}.${key}`).toContain(key);
     }
+  });
+});
+
+describe('the studio narrates the model it sits beside', () => {
+  /**
+   * The rule of thumb everybody quotes for cell ageing is ten degrees; the model uses twelve. The
+   * lessons and the walk quoted the rule of thumb, so the prose and the arithmetic disagreed on
+   * the same screen. Both now read the model's own constant.
+   */
+  it('quotes the ageing constant the engine actually uses', () => {
+    const model = buildModel(structuredClone(defaults));
+    const prose = [
+      ...walkSteps(model).map(s => s.body),
+      ...['BESS', model.packs[0].id, model.cells[0].id, 'CHILLER'].flatMap(id => {
+        const l = lessonFor(model, id);
+        return [l.what, ...l.why, l.consequence];
+      }),
+    ].join(' ');
+    expect(prose, 'somewhere the doubling is narrated').toMatch(new RegExp(`${AGEING_DOUBLING_K} °C`));
+    // And nowhere is a different figure claimed for the same thing.
+    for (const wrong of [8, 9, 10, 11, 13, 15, 20]) {
+      if (wrong === AGEING_DOUBLING_K) continue;
+      expect(prose, `claims doubling every ${wrong} °C`).not.toMatch(new RegExp(`(doubl|twice as fast)[^.]{0,60}${wrong} °C`));
+    }
+  });
+
+  it('doubles the ageing factor over that many degrees', () => {
+    expect(temperatureFactor(25 + AGEING_DOUBLING_K) / temperatureFactor(25)).toBeCloseTo(2, 9);
+    expect(temperatureFactor(25 - AGEING_DOUBLING_K) / temperatureFactor(25)).toBeCloseTo(0.5, 9);
   });
 });

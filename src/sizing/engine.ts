@@ -131,8 +131,17 @@ export const defaultSizingInput = (applicationId: ApplicationId = 'peak-shaving'
 export const cellTemperature = (ambientC: number, cooling: EnclosureSpec['cooling']) =>
   cooling === 'liquid' ? Math.min(38, Math.max(18, 25 + (ambientC - 25) * 0.25)) : Math.min(48, Math.max(18, 25 + (ambientC - 25) * 0.6));
 
-/** Arrhenius-style ageing multiplier, doubling roughly every 12 K above 25 °C. Simplified; supplier curves override. */
-export const temperatureFactor = (cellTempC: number) => 2 ** ((cellTempC - 25) / 12);
+/**
+ * Kelvin of cell temperature that doubles the rate of ageing.
+ *
+ * Exported because the studio narrates it. The rule of thumb everybody quotes is 10 K, the model
+ * uses 12, and prose that quoted the rule of thumb beside a model that used something else left
+ * the two disagreeing on the same screen.
+ */
+export const AGEING_DOUBLING_K = 12;
+
+/** Arrhenius-style ageing multiplier, doubling roughly every `AGEING_DOUBLING_K` above 25 °C. Simplified; supplier curves override. */
+export const temperatureFactor = (cellTempC: number) => 2 ** ((cellTempC - 25) / AGEING_DOUBLING_K);
 
 /**
  * Capacity retention of one cohort after `age` years of service, derived from the catalogue
