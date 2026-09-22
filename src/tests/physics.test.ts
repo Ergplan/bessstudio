@@ -473,3 +473,37 @@ describe('the site', () => {
     expect(perUnit(64), 'but never below it — the separations are real').toBeGreaterThan(pitch);
   });
 });
+
+describe('site conditions reaching the answer', () => {
+  const at = (ambientC: number, mode: 'table' | 'model') => sizeSystem({
+    ...defaultSizingInput(), powerMW: 5, durationH: 4, projectYears: 20, ambientC,
+    augmentation: 'periodic',
+    degradation: mode === 'table' ? { mode: 'table', retention: [...suppliedRetention] } : { mode: 'model', retention: [] },
+  });
+
+  it('a hotter site ages the cells faster, and needs more capacity over the term', () => {
+    const cool = at(15, 'model'), hot = at(50, 'model');
+    expect(hot.cellTempC).toBeGreaterThan(cool.cellTempC);
+    expect(hot.tempFactor).toBeGreaterThan(cool.tempFactor);
+    expect(hot.endOfLifeRetention).toBeLessThan(cool.endOfLifeRetention);
+    expect(hot.totalUnits).toBeGreaterThanOrEqual(cool.totalUnits);
+  });
+
+  it('liquid cooling holds the cells well below a hot ambient', () => {
+    // 45 C outside should not mean 45 C at the cell, or the warranty is spent in a few summers.
+    const hot = at(45, 'model');
+    expect(hot.enclosure.cooling).toBe('liquid');
+    expect(hot.cellTempC).toBeLessThan(35);
+    expect(hot.cellTempC).toBeGreaterThan(25);
+  });
+
+  it('leaves the fleet untouched under the supplied table, which is what the table means', () => {
+    // The supplied schedule is a fixed curve with no temperature term. This is why the ambient
+    // control has to say so: it is not broken, it is out of circuit in this mode.
+    const cool = at(15, 'table'), hot = at(50, 'table');
+    expect(hot.totalUnits).toBe(cool.totalUnits);
+    expect(hot.endOfLifeRetention).toBe(cool.endOfLifeRetention);
+    // but the cell temperature it reports still tracks the site
+    expect(hot.cellTempC).toBeGreaterThan(cool.cellTempC);
+  });
+});

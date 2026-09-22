@@ -13,7 +13,7 @@ import { applications, application } from '../../sizing/applications';
 import {
   defaultSizingInput, sizeSystem, normaliseSizingInput, enclosureSummary, defaultLossChain, defaultDegradation,
   suppliedRetention, retentionAt, cellTemperature, temperatureFactor,
-  type AugmentationStrategy, type SizingMode, type DegradationMode, type LossChain,
+  type AugmentationStrategy, type SizingMode, type DegradationMode, type LossChain, type SizingResult,
 } from '../../sizing/engine';
 import { evaluateFinance } from '../../sizing/finance';
 import { createQuote, nextQuoteNumber } from '../../quoting/quote';
@@ -22,6 +22,22 @@ import { convert, formatMoney } from '../../catalog/pricing';
 import type { ApplicationId } from '../../sizing/applications';
 
 type Tab = 'requirements' | 'losses' | 'design' | 'performance' | 'economics';
+
+/**
+ * What the design ambient actually reaches, and whether it reaches the sizing at all.
+ *
+ * The supplied degradation schedule is a fixed 20-year table, so under it the temperature changes
+ * nothing about the fleet — which makes the slider look broken to anyone who moves it and watches
+ * the numbers stay still. It reaches the sizing only under the ageing model.
+ */
+function ambientHint(sizing: SizingResult, mode: DegradationMode): string {
+  const cell = `Liquid-cooled, the cells sit near ${sizing.cellTempC.toFixed(0)} °C at this ambient`;
+  const air = `Air-cooled, the cells sit near ${sizing.cellTempC.toFixed(0)} °C at this ambient`;
+  const where = sizing.enclosure.cooling === 'liquid' ? cell : air;
+  return mode === 'model'
+    ? `${where}, ageing ${sizing.tempFactor.toFixed(2)}× the reference rate at 25 °C.`
+    : `${where}. The supplied schedule is a fixed table, so this does not move the fleet — set Degradation basis to “derived from duty cycle and temperature”, under Losses & degradation.`;
+}
 
 export function ProjectDetail({ id: projectId }: { id: string }) {
   const router = useRouter();
@@ -155,7 +171,8 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
 
           <Card title="Site, grid and equipment">
             <TextInput label="Site location" value={project.site.location} onChange={location => void saveProject({ ...project, site: { ...project.site, location } })} />
-            <Slider label="Design ambient temperature" value={project.sizing.ambientC} min={-20} max={58} step={1} unit="°C" onChange={ambientC => set({ ambientC })} />
+            <Slider label="Design ambient temperature" value={project.sizing.ambientC} min={-20} max={58} step={1} unit="°C" onChange={ambientC => set({ ambientC })}
+              hint={ambientHint(sizing, project.sizing.degradation.mode)} />
             <Slider label="Altitude" value={project.sizing.altitudeM} min={0} max={5000} step={10} unit="m" onChange={altitudeM => set({ altitudeM })} />
             <SelectInput label="System" value={project.sizing.enclosureId} options={enclosures.map(e => ({ value: e.id, label: `${e.model} · ${(enclosureSummary(e).energyKWh / 1000).toFixed(3)} MWh / ${e.ratedKW} kW ${e.family}` }))} onChange={enclosureId => set({ enclosureId })} />
             <SelectInput label="Power conversion" value={project.sizing.pcsId} options={pcsUnits.map(p => ({ value: p.id, label: `${p.model} · ${p.ratedKW} kW ${p.topology}` }))} onChange={pcsId => set({ pcsId })} />
