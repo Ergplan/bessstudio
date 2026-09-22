@@ -9,7 +9,7 @@ import { useSession } from '../../platform/auth';
 import { newProject as makeProject } from '../../platform/projects';
 import { can } from '../../platform/types';
 import { sizeSystem } from '../../sizing/engine';
-import { applications } from '../../sizing/applications';
+import { application, applications } from '../../sizing/applications';
 
 export function Projects() {
   const { customers, projects, saveProject } = useWorkspace();
@@ -67,7 +67,7 @@ export function Projects() {
                 <tr key={p.id}>
                   <td><Link href={`/app/projects?id=${p.id}`}><b>{p.name}</b></Link><div className="mono" style={{ color: 'var(--slate-light)' }}>{p.reference}</div></td>
                   <td><Link href={`/app/customers?id=${p.customerId}`}>{p.customerName}</Link></td>
-                  <td style={{ textTransform: 'capitalize' }}>{p.sizing.applicationId.replace(/-/g, ' ')}</td>
+                  <td>{application(p.sizing.applicationId).name}</td>
                   <td className="num">{s ? `${s.ratedPowerMW.toFixed(2)} MW` : '—'}</td>
                   <td className="num">{s ? `${s.requiredUsableMWh.toFixed(1)} MWh` : '—'}</td>
                   <td className="num">{s?.totalUnits ?? '—'}</td>

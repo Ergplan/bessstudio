@@ -80,13 +80,17 @@ input,select,textarea{font:inherit;color:inherit}
 .btn.sm{padding:6px 11px;font-size:9.5px}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .spacer{flex:1}
-.card{background:var(--card);border:1px solid var(--line-soft)}
+/* min-width:0 so a wide table inside can scroll rather than stretching its own card. */
+.card{background:var(--card);border:1px solid var(--line-soft);min-width:0}
 .card>header{display:flex;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid var(--line-soft)}
 .card>header h3{font-size:14px;letter-spacing:-.015em}
 .card>header p{margin:3px 0 0;font-size:12px;color:var(--slate-light);letter-spacing:0;text-transform:none}
 .card .body{padding:18px}
 .card .body.tight{padding:12px 18px}
-.grid{display:grid;gap:14px}
+/* An implicit grid column is min-content wide, which lets one wide table stretch the column
+   and push the page sideways. minmax(0,1fr) is the same single column that can actually shrink;
+   the .cols-* classes below replace it outright. */
+.grid{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
 .cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}
 .cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}
@@ -99,6 +103,11 @@ input,select,textarea{font:inherit;color:inherit}
   font-variant-numeric:tabular-nums}
 .stat .value small{font-size:13px;font-weight:500;color:var(--slate);margin-left:5px;letter-spacing:-.01em}
 .stat .foot{font-size:11.5px;color:var(--slate-light);margin-top:8px}
+
+/* A table with more columns than the window is wide scrolls inside its own card. Left alone it
+   pushes the whole page sideways, and a horizontal scrollbar under the entire application is the
+   plainest possible statement that it was not built for the screen it is being read on. */
+.card .body:has(> table.data){overflow-x:auto}
 
 table.data{width:100%;border-collapse:collapse;font-size:13px}
 table.data th{text-align:left;font-size:9.5px;color:var(--slate-light);font-weight:400;padding:10px 14px;

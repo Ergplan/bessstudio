@@ -10,6 +10,7 @@ import { useSession } from '../../platform/auth';
 import { can, customerStages, segments, uid, nowIso, type Customer, type CustomerStage, type Segment } from '../../platform/types';
 import { formatMoney, restate } from '../../catalog/pricing';
 import { defaultSizingInput } from '../../sizing/engine';
+import { application } from '../../sizing/applications';
 
 const blank = (orgId: string, ownerUid: string, ownerName: string): Customer => ({
   id: uid('cus'), orgId, name: '', segment: 'commercial', stage: 'lead', country: '', city: '', website: '', notes: '',
@@ -181,7 +182,7 @@ export function CustomerDetail({ id: customerId }: { id: string }) {
                 <thead><tr><th>Project</th><th>Reference</th><th>Application</th><th>Status</th><th>Updated</th></tr></thead>
                 <tbody>{mine.map(p => (
                   <tr key={p.id}><td><Link href={`/app/projects?id=${p.id}`}><b>{p.name}</b></Link></td><td className="mono">{p.reference}</td>
-                    <td style={{ textTransform: 'capitalize' }}>{p.sizing.applicationId.replace(/-/g, ' ')}</td>
+                    <td>{application(p.sizing.applicationId).name}</td>
                     <td><Badge tone={p.status === 'awarded' ? 'good' : p.status === 'quoted' ? 'info' : 'neutral'}>{p.status}</Badge></td>
                     <td className="muted">{date(p.updatedAt)}</td></tr>
                 ))}</tbody>

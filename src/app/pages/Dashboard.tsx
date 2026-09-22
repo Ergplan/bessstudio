@@ -6,6 +6,7 @@ import { CompositionBar, Funnel, BarChart, series } from '../components/viz';
 import { useWorkspace } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
 import { formatMoney, restate } from '../../catalog/pricing';
+import { application, type ApplicationId } from '../../sizing/applications';
 import { customerStages } from '../../platform/types';
 import { sizeSystem } from '../../sizing/engine';
 
@@ -39,7 +40,9 @@ export function Dashboard() {
 
   const byApplication = Object.entries(projects.reduce<Record<string, number>>((acc, p) => {
     acc[p.sizing.applicationId] = (acc[p.sizing.applicationId] ?? 0) + 1; return acc;
-  }, {})).map(([label, value]) => ({ label: label.replace(/-/g, ' '), value }));
+    // The catalogue already writes these names properly. Prettifying the id and letting CSS
+    // capitalise it gave "Ev Charging Buffer" and "Frequency Regulation / Fcas".
+  }, {})).map(([id, value]) => ({ label: application(id as ApplicationId).name, value }));
 
   if (loading) return <p className="muted">Loading workspace…</p>;
   if (!customers.length) return (
