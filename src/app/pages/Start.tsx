@@ -6,7 +6,7 @@ import { useSession } from '../../platform/auth';
 import { repository } from '../../platform/repo';
 import { nowIso, uid, type Customer, type Project } from '../../platform/types';
 import { defaultSizingInput, sizeSystem } from '../../sizing/engine';
-import { newProject as makeProject } from '../../platform/projects';
+import { newProject as makeProject, HOLDING_ACCOUNT } from '../../platform/projects';
 import { application, applications, type ApplicationId } from '../../sizing/applications';
 import { BuildSequence } from '../landing/BuildSequence';
 import '../landing/landing.css';
@@ -60,9 +60,9 @@ export function Start() {
 
       const repo = repository();
       // New opportunities land against a holding account until the real customer is known.
-      const existing = (await repo.list(org.id, 'customers')).find(c => c.name === 'New opportunity');
+      const existing = (await repo.list(org.id, 'customers')).find(c => c.name === HOLDING_ACCOUNT);
       const customer: Customer = existing ?? {
-        id: uid('cus'), orgId: org.id, name: 'New opportunity', segment: 'developer', stage: 'lead',
+        id: uid('cus'), orgId: org.id, name: HOLDING_ACCOUNT, segment: 'developer', stage: 'lead',
         country: '', city: '', website: '', notes: 'Created from the opening question. Rename once the customer is known.',
         contacts: [], ownerUid: user.uid, ownerName: user.displayName, createdAt: nowIso(), updatedAt: nowIso(),
       };
@@ -71,7 +71,7 @@ export function Start() {
       const already = (await repo.list(org.id, 'projects')).filter(p => p.customerId === customer.id).length;
       const project: Project = makeProject({
         orgId: org.id, customer, existing: already, sizing: sizingInput,
-        name: `${label} ${application(applicationId).name.toLowerCase()}`,
+        name: `${label} · ${application(applicationId).name}`,
         by: { uid: user.uid, displayName: user.displayName },
       });
       await repo.save(org.id, 'projects', project);

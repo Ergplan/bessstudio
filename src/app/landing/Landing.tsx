@@ -55,7 +55,7 @@ export function Landing() {
         <div className={`l-hero-inner${asking ? ' asking' : ''}`}>
           <div className="l-eyebrow l-label">{defaultBranding.displayName} · Battery Energy Storage</div>
           <h1 className="l-title">BESS <span className="thin">Studio</span></h1>
-          <p className="l-tagline">Your BESS design studio is here.</p>
+          <p className="l-tagline">Size it from the duty cycle, prove it fits, and price it.</p>
           <div className="l-cta">
             <button className="l-btn primary" onClick={() => setAsking(true)}>Start building <ArrowRight size={14} /></button>
             <a className="l-btn" href="#capabilities">See what it does</a>

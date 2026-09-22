@@ -5,7 +5,7 @@ import { useMemo, useState } from 'react';
 import { ArrowLeft, Box, FileText, RotateCcw, Trash2 } from 'lucide-react';
 import { Card, Stat, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, TextArea, Field, Slider, pct, date } from '../components/ui';
 import { LineChart, BarChart, CompositionBar, series, status } from '../components/viz';
-import { quotesLeftBehind, reassign } from '../../platform/projects';
+import { quotesLeftBehind, reassign, HOLDING_ACCOUNT } from '../../platform/projects';
 import { useWorkspace, quotesOf } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
 import { can, quoteStatuses, isCustomerRole } from '../../platform/types';
@@ -117,6 +117,20 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
             }}><Trash2 size={15} /></button>
         )}
       </div>
+      <div className="project-head">
+        {can(role, 'project.write')
+          ? <input className="project-title" aria-label="Project name" value={project.name}
+              placeholder="Name this design"
+              onChange={e => void saveProject({ ...project, name: e.target.value })} />
+          : <h2 className="project-title">{project.name}</h2>}
+        <span className="project-ref">{project.reference}</span>
+      </div>
+      {project.customerName === HOLDING_ACCOUNT && can(role, 'project.write') && (
+        <p className="holding-note">
+          This design sits on a holding account, so the quotation would go out addressed to “{HOLDING_ACCOUNT}”.{' '}
+          <Link href={`/app/customers?id=${project.customerId}`}>Name the customer</Link> before you issue it.
+        </p>
+      )}
 
       <div className="grid cols-4">
         <Stat label="Rated power" value={sizing.ratedPowerMW.toFixed(2)} unit="MW"

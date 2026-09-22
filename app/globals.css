@@ -270,3 +270,15 @@ table.data td b{color:var(--ink);font-weight:600}
   .shell:has(> .main > .page.bleed){height:100dvh;min-height:0;overflow:hidden}
   .shell:has(> .main > .page.bleed) > .main{min-height:0;overflow:hidden}
 }
+
+/* The project's own name, editable where it is shown. Without this the page named the customer and
+   never the design, and a project raised from the opening question could not be renamed at all. */
+.project-head{display:flex;align-items:baseline;gap:14px;min-width:0}
+.project-title{flex:1;min-width:0;background:none;border:1px solid transparent;color:var(--ink);font-size:23px;font-weight:600;letter-spacing:-.025em;padding:3px 7px;margin-left:-7px;border-radius:2px}
+.project-title:hover{border-color:var(--line-soft)}
+.project-title:focus{outline:none;border-color:var(--green);background:var(--field)}
+.project-title::placeholder{color:var(--slate-light);font-weight:400}
+h2.project-title{border-color:transparent}
+.project-ref{flex:none;font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--slate-light)}
+.holding-note{margin:0;padding:10px 13px;background:rgba(200,164,21,.09);border-left:2px solid var(--gold);color:var(--slate);font-size:12.5px;line-height:1.55}
+.holding-note a{color:var(--green)}

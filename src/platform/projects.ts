@@ -1,4 +1,10 @@
 import { defaultSizingInput } from '../sizing/engine';
+
+/**
+ * The account a design lands on when it is raised from the opening question, before anybody has
+ * said who it is for. Named in one place so the project page can recognise it and ask.
+ */
+export const HOLDING_ACCOUNT = 'New opportunity';
 import { nowIso, uid, type Customer, type Project } from './types';
 import type { SizingInput } from '../sizing/engine';
 
