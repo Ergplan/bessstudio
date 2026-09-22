@@ -6,6 +6,13 @@ The live record of the build defined in [`docs/SITE.md` §17](./SITE.md#17-how-t
 > **S0 and S1 are complete and ready for acceptance.** S2 onward are `PLANNED` — not built, not
 > tested. No simulation fixture (F01–F08) has been run; writing a check into this file is not
 > evidence that it passed.
+>
+> **Two rounds of work have landed since S1 outside the numbered register** — the studio
+> experience, and then an audit of the maths, the documents and the interface. Neither opened a
+> stage, because neither was one: both were work against the invariant table below, and both
+> found invariants this file had already claimed as covered. They are recorded at
+> [Work since S1](#work-since-s1) rather than as stages, and the invariant table now says what is
+> actually enforcing each one.
 
 **Delivery states:** PLANNED → BUILDING → TESTING → READY FOR ACCEPTANCE → ACCEPTED, and **BLOCKED**
 when a prerequisite or a mandatory check fails.
@@ -61,7 +68,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | The sales queue is exactly the roles holding `quote.prepare` | `src/platform/notifications.ts` | unit tests |
 | Every project carries an owner, whichever path created it | `src/platform/projects.ts` | unit tests |
 | A quotation moves only through the lifecycle, never by setting a status | `src/app/pages/QuoteDetail.tsx` | browser walkthrough |
-| Changing currency converts amounts, never relabels them | `src/quoting/quote.ts` | unit tests |
+| Changing currency converts amounts, never relabels them | `src/quoting/quote.ts` | unit tests — **and was broken outside INR until 22 Sep**; see [Work since S1](#work-since-s1) |
 | Every quotation line multiplies out: quantity × rate is the amount printed | `src/catalog/pricing.ts`, `src/quoting/quote.ts` | unit tests |
 | A customer's stage advances with the work and never retreats | `src/platform/stages.ts` | unit tests |
 | Only the demonstration workspace is seeded | `src/platform/auth.tsx` | code; needs a live signup |
@@ -70,12 +77,12 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | A role cannot be minted — invitation names it, or it is `customer` | `firestore.rules` | rules tests |
 | Audit trail append-only, under the writer's own name | `firestore.rules` | rules tests |
 | Sizing reproduces the supplied workbooks | `src/sizing/`, `src/catalog/pricing.ts` | 103 unit tests |
-| Every catalogue figure agrees with the cell it is built from | `src/catalog/products.ts` | first-principles audit |
-| Energy is conserved: charge covers discharge and the losses | `src/sizing/engine.ts` | first-principles audit |
+| Every catalogue figure agrees with the cell it is built from, and every converter can reach its rating at its own minimum voltage | `src/catalog/products.ts` | unit tests over the whole catalogue |
+| Energy is conserved: charge covers discharge and the losses, and auxiliaries are spent once a day rather than once a cycle | `src/sizing/engine.ts` | unit tests |
 | A fleet well above its contract accounts for every megawatt-hour of the difference | `src/sizing/engine.ts` | unit tests |
 | NPV, IRR and LCOS mean what they say | `src/sizing/finance.ts` | first-principles audit |
 | The studio geometry is the sum of its stated allowances | `src/domain/model.ts` | first-principles audit |
-| The studio checks against the project's converter, not a placeholder | `src/platform/studioBridge.ts` | unit tests |
+| The studio checks against the project's converter, not a placeholder, and divides every per-unit figure by the same day-one fleet | `src/platform/studioBridge.ts` | unit tests |
 | A studio lesson reads the live model, never fixed copy | `src/domain/learn.ts`, `src/domain/tour.ts` | unit tests |
 | Every design-review finding has an explanation | `src/domain/learn.ts` | unit test reads the codes out of the model |
 | Every mechanical assumption has an explanation | `src/domain/learn.ts` | unit test reads the keys out of the schema |
@@ -92,13 +99,23 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | A site is drawn as shells, never as a fleet of full assemblies | `src/geometry/site.ts` | unit test bounds the box count |
 | Nothing white-labelled says the demonstration tenant's name | `src/state/store.ts`, `src/scene/Viewer.tsx` | code; browser walkthrough |
 | The studio fits the viewport on a 1440×800 laptop | `app/globals.css`, `src/style.css` | browser measurement |
+| The same plant costs the same money whichever of the six currencies it is quoted in | `src/catalog/pricing.ts` | unit tests across every currency |
+| A total across records never adds two currencies together | `src/catalog/pricing.ts` | unit tests |
+| Every figure printed for the customer is one the engine computed, at the depth of discharge and cycle count it was computed at | `src/quoting/offer.ts`, `src/sizing/engine.ts` | unit tests; the performance table must multiply out |
+| No input a person can type or paste leaves the model with a negative, infinite or impossible figure | `src/sizing/engine.ts` | adversarial unit tests at both ends of every control |
+| Every headline economic figure is rebuildable from the cash-flow table printed beside it | `src/sizing/finance.ts` | unit tests |
+| Every design check has a written name, not a tidied-up code | `src/sizing/engine.ts`, `src/domain/model.ts` | unit tests read the codes out of the source |
+| Prose that quotes a modelled constant quotes the one the model uses | `src/domain/learn.ts`, `src/domain/tour.ts` | unit tests |
+| The exported offer opens and prints correctly from disk, with its pictures | `src/quoting/export.ts` | browser walkthrough from `file://` |
+| Every control has an accessible name | `src/app`, `src/components` | browser sweep of ten routes and five studio panels |
+| The workspace never scrolls sideways, from 1920 down to 1024 | `app/globals.css` | browser measurement at five sizes |
 
 Baseline commands:
 
 ```bash
-npm run test        # 276 unit tests
+npm run test        # 347 unit tests
 npm run test:rules  # 41 Firestore rules tests, against the emulator
-npm run build       # static export
+npm run build       # static export, 15 routes
 ```
 
 ---
@@ -251,6 +268,69 @@ members and reads as "nothing seen".
 **READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S2 — model contracts and
 evidence**, currently **BLOCKED**: the GCloud Terraform environment is not in this repository and I
 have no record of it. Repository, path and VM shape needed before S2 can be planned.
+
+---
+
+## Work since S1
+
+Not a stage. Two rounds of work landed against the invariant table rather than against the
+register, because neither delivered a numbered goal from `SITE.md` §17. They are recorded here so
+the register is not silent about the commits between S1 and whatever opens next.
+
+### R1 — the studio experience
+
+The project's own equipment carried into the studio; white-labelling; a learning layer on every
+component; a guided walk; a site view with the fleet, the converters and the reserved augmentation
+pads; section, measure, search and a keyboard. Covered by the studio invariants above.
+
+### R2 — audit of the maths, the documents and the interface
+
+An adversarial pass over the sizing engine, the finance model, the customer documents and every
+screen. It found defects in four things this file had already listed as covered, which is the part
+worth recording: an invariant with a tick beside it is a claim, and three of these claims were
+wrong.
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D6 | The landed build-up's rupee rate was applied to every currency, so the same plant was quoted at $152,815,801, €152,815,801 and AED 152,815,801 — a factor of about a hundred, on a document a customer signs. Only the rupee quotation was right. | **critical** | **fixed**; the offer rate applies to rupee amounts only, and a test prices the same plant in all six currencies and requires one amount of money |
+| D7 | The offer's own price build-up printed its rupee figures into a column headed with the quotation currency, so a ₹44.8 m enclosure appeared as a $44.8 m one and the order value beside it stopped reconciling. | **critical** | **fixed**; the build-up restates through the offer's rate on the way out |
+| D8 | Auxiliary consumption is stated per day and was subtracted once per cycle. A plant cycling six times a day paid for its cooling six times over: the reference project bought 31 GWh a year to deliver 16, a round trip of 52% against an 87% chain, and was sized for a load it would never carry. | **critical** | **fixed**; the day's discharge-side auxiliary energy is shared across the cycles that carry it. The reference plant went from 7 enclosures to 5 and from ₹36.12 cr to ₹26.39 cr |
+| D9 | Four screens added quotation totals across currencies and labelled the sum with one of them; the project page converted at the reference table while the quotation raised from it used the offer rate — ₹1.39 cr on one screen, ₹1.53 cr on the next. | major | **fixed**; every amount is restated before it is added |
+| D10 | Cycle life was quoted at whatever depth the customer operated at rather than the data sheet's, the ageing model treated 8,000 cycles at 90% DoD as 8,000 full ones, and the throughput warranty shrank the more gently the plant was operated. | major | **fixed**; the cell spec carries `cycleLifeDod` and all three read it |
+| D11 | `normaliseSizingInput` normalised nothing numeric: a pasted depth of discharge of 5, a negative rated power (negative charge energy in every year row), a zeroed loss chain and a retention table containing a zero all survived into the model. | major | **fixed**; every figure is held inside the range it means something in |
+| D12 | The performance table invited the reader to multiply annual cycles by energy per cycle and get the energy supplied; the answer was 8% high on the default case and 50% high on an oversized plant. | major | **fixed**; both columns are the figures the supplied energy is built from, and the derate is stated |
+| D13 | An augmentation purchased in year 8 was grossed up for margin but not for tax. | major | **fixed** |
+| D14 | The exported offer referenced its logos by path, so a proposal saved and emailed arrived with empty boxes where the branding should be. | major | **fixed**; images travel inline, verified by opening the file from disk with no server |
+| D15 | The studio divided the converter's current by the end-of-life fleet and the auxiliaries by the day-one fleet, and reported the battery's own capability as an equipment fault. | major | **fixed**; one fleet count, the one the studio is drawing |
+| D16 | The plant configuration table printed the pack's continuous rating in both the charge and discharge column, telling a customer a 0.23 C plant ran at 0.50 C. | minor | **fixed** |
+| D17 | "95% at year 1 and 74% at year 15" sat one page from a table showing 77% for year 15 — the unit's schedule against the fleet's, neither labelled. | minor | **fixed** |
+| D18 | The 5 kW hybrid converter's DC current limit was below what its own rating needs at the bottom of its voltage window. | minor | **fixed** |
+| D19 | A full-depth cycle landed exactly on the depth-of-discharge warning's threshold and said nothing. | minor | **fixed** |
+| D20 | The site lesson claimed a single row of seven units would run "over 315 m", five times the truth: it was multiplying the unit count by the plot's own length. | minor | **fixed** |
+| D21 | The lessons and the guided walk said cells age twice as fast for every 10 °C; the model doubles every 12. | minor | **fixed**; one exported constant, and a test requires the prose to quote it |
+| D22 | Design checks read "Dc Window High" and "Pcs Granularity"; the projects list read "Ev Charging Buffer". | minor | **fixed**; every check and application has a written name |
+| D23 | At 1024×768 the workspace scrolled sideways by up to 170px. | minor | **fixed**; no horizontal overflow from 1920 down to 1024 |
+| D24 | Sign out, Reset camera and Fit to selection were icons with a tooltip and no accessible name. | minor | **fixed**; a sweep of ten routes and five studio panels now comes back clean |
+| D25 | Every page began with a request to fonts.googleapis.com, so first paint was in Helvetica and the product's appearance depended on a third party. | minor | **fixed**; the typefaces are served from the export |
+| D26 | The customer picker rendered as a light grey box in a dark page. | minor | **fixed** |
+
+**Checks after R2**
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **347 passed** (+71 on the S1 baseline) | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | **41 passed** | **PASS** |
+| Static export | `npm run build` | 15 routes | 15 routes | **PASS** |
+| Buttons and links | browser crawl | no 404, no page error, no blank page | none on any route | **PASS** |
+| Accessible names | browser sweep | every control named | every control named | **PASS** |
+| Horizontal overflow | browser, 1920→1024 | none | none | **PASS** |
+| Offer opened from `file://` | browser | all pictures decode | 7 of 7 | **PASS** |
+| Currency | unit | one amount of money in all six | within a tenth of a percent | **PASS** |
+
+**Not addressed, and open for a decision:** whether a white-labelled proposal should carry the
+jouleWise name at all. It currently appears in the footer and in the "Supplied through" row. That
+is a commercial decision, not a defect.
 
 ---
 
