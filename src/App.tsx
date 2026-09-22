@@ -42,7 +42,7 @@ export default function App({brandName=brand.vendorShort.toUpperCase(),brandLogo
      case 'section':return setSection(s=>({...s,on:!s.on}));
      case 'sectionAxis':return setSection(s=>({...s,on:true,axis:((s.axis+1)%3) as 0|1|2}));
      case 'explode':return update(c=>{c.explode=Math.min(1,Math.max(0,Number((c.explode+action.by).toFixed(2))));});
-     case 'walk':return setWalking(w=>{if(!w)settleWalk();return !w;});
+     case 'walk':settleWalk();return setWalking(w=>!w);
      case 'present':return update(c=>{c.presentation=!c.presentation;});
      case 'up':{const up=parentScope(scope,!!plan);if(up)focus(up);return;}
      case 'shortcuts':return setKeysOpen(o=>!o);
