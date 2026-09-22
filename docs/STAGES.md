@@ -60,6 +60,8 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | A customer is never notified about another customer's record | `src/platform/notifications.ts` | unit tests |
 | The sales queue is exactly the roles holding `quote.prepare` | `src/platform/notifications.ts` | unit tests |
 | Every project carries an owner, whichever path created it | `src/platform/projects.ts` | unit tests |
+| A quotation moves only through the lifecycle, never by setting a status | `src/app/pages/QuoteDetail.tsx` | browser walkthrough |
+| Changing currency converts amounts, never relabels them | `src/quoting/quote.ts` | unit tests |
 | A customer sees only their own records | `src/platform/workspace.tsx`, `firestore.rules` | rules tests |
 | Pricing requires a verified email | `src/platform/types.ts`, `firestore.rules` | rules tests |
 | A role cannot be minted — invitation names it, or it is `customer` | `firestore.rules` | rules tests |
@@ -69,7 +71,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 Baseline commands:
 
 ```bash
-npm run test        # 142 unit tests
+npm run test        # 154 unit tests
 npm run test:rules  # 41 Firestore rules tests, against the emulator
 npm run build       # static export
 ```

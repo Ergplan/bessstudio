@@ -1,6 +1,6 @@
 import { type SizingResult } from '../sizing/engine';
 import { type FinanceResult } from '../sizing/finance';
-import { toLocal, type Currency, type PriceBook } from '../catalog/pricing';
+import { currencies, localRate, toLocal, type Currency, type PriceBook } from '../catalog/pricing';
 import { nowIso, uid, type Customer, type Project, type Quote, QuoteKind, type QuoteLine } from '../platform/types';
 
 export const scopeIncludedDefault = [
@@ -108,3 +108,60 @@ export const reviseQuote = (quote: Quote): Quote => ({
   createdAt: nowIso(), updatedAt: nowIso(),
   validUntil: new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10),
 });
+
+
+/**
+ * Add a line somebody types themselves — a site survey, a spares kit, a commissioning visit.
+ *
+ * The generated lines come from the sizing and the price book; these do not, so they carry no
+ * provenance and are priced by hand.
+ */
+export function addCustomLine(quote: Quote, category: QuoteLine['category'] = 'services'): Quote {
+  const line: QuoteLine = {
+    id: uid('ln'), category, label: 'New line', quantity: 1, unit: 'lot',
+    unitPrice: 0, total: 0, optional: false,
+  };
+  const lines = [...quote.lines, line];
+  return { ...quote, lines, ...quoteTotals(lines, quote.discountPct, quote.taxPct, quote.freight), updatedAt: nowIso() };
+}
+
+export function removeLine(quote: Quote, id: string): Quote {
+  const lines = quote.lines.filter(l => l.id !== id);
+  if (lines.length === quote.lines.length) return quote;
+  return { ...quote, lines, ...quoteTotals(lines, quote.discountPct, quote.taxPct, quote.freight), updatedAt: nowIso() };
+}
+
+/**
+ * Units of `currency` per US dollar.
+ *
+ * `localRate` answers this only for the price book's own currency — under the landed-import basis
+ * it returns the offer's rupee rate whatever it is asked about, because that is the rate the
+ * build-up was struck at. Asking it about a second currency silently returns the same number,
+ * which is how a conversion factor of exactly 1 gets through. For the currency the book is written
+ * in, that offer rate is the authority; for any other, the reference table is.
+ */
+const unitsPerUsd = (pb: PriceBook, currency: Currency): number =>
+  currency === pb.currency ? localRate(pb, currency) : currencies[currency].perUsd;
+
+/**
+ * Restate a quotation in another currency.
+ *
+ * Changing the currency used to relabel the document and leave the numbers alone, so ₹216,049,432
+ * became $216,049,432 — an eighty-fold overstatement presented to a customer as a price. Every
+ * amount is now rescaled by the ratio of the two rates.
+ *
+ * The rate is the price book's own (`localRate`), not a reference table, so a quotation converted
+ * here still reconciles with the build-up that produced it.
+ */
+export function convertQuote(quote: Quote, to: Currency, priceBook: PriceBook): Quote {
+  if (to === quote.currency) return quote;
+  const from = unitsPerUsd(priceBook, quote.currency), into = unitsPerUsd(priceBook, to);
+  if (!(from > 0) || !(into > 0)) throw new Error('No exchange rate is available for that currency.');
+  const k = into / from;
+  const lines = quote.lines.map(l => ({ ...l, unitPrice: l.unitPrice * k, total: l.total * k }));
+  return {
+    ...quote, currency: to, lines, freight: quote.freight * k,
+    ...quoteTotals(lines, quote.discountPct, quote.taxPct, quote.freight * k),
+    updatedAt: nowIso(),
+  };
+}

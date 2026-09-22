@@ -476,8 +476,12 @@ keystroke.
 Tiles: quotation number and status, customer, total, valid until. Lifecycle buttons come from the
 shared state machine, so the interface never offers a step the rules would refuse.
 
-**Pricing** — line items by category, quantity, unit price, total, optional flag; discount, tax,
-freight; currency.
+**Pricing** — line items by category, quantity, unit price, total, optional flag. Lines can be
+added, renamed and removed; a hand-added line carries no provenance and is priced by hand. Discount,
+tax, freight. **Changing the currency converts every amount** at the price book's own rate, so the
+quotation still reconciles with the build-up that produced it.
+
+**Status is read-only.** The lifecycle actions in the header are the only way a quotation moves.
 
 **Scope & terms** — included, excluded, assumptions, incoterms, payment terms, delivery weeks,
 warranty years, validity.

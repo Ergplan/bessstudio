@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Printer, Copy, Send, Download, FileCode2, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Printer, Copy, Send, Download, FileCode2, RotateCcw, Plus, Trash2 } from 'lucide-react';
 import { Card, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, TextArea, Field, quoteTone, date } from '../components/ui';
 import { Proposal } from '../components/Proposal';
 import { Offer } from '../components/Offer';
@@ -12,10 +12,10 @@ import { sizeSystem, type SizingInput } from '../../sizing/engine';
 import { evaluateFinance } from '../../sizing/finance';
 import { useWorkspace } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
-import { approvalModeOf, can, customerStatusLabels, isCustomerRole, quoteStatuses, type Quote, type QuoteStatus } from '../../platform/types';
+import { approvalModeOf, can, customerStatusLabels, isCustomerRole, type Quote } from '../../platform/types';
 import { applyAction, availableActions, isEditable } from '../../quoting/lifecycle';
 import { Financial, useFinancialAccess } from '../components/Gate';
-import { quoteTotals, reviseQuote } from '../../quoting/quote';
+import { addCustomLine, convertQuote, quoteTotals, removeLine, reviseQuote } from '../../quoting/quote';
 import { currencies, formatMoney, type Currency } from '../../catalog/pricing';
 
 type Tab = 'commercial' | 'scope' | 'content' | 'offer' | 'proposal';
@@ -25,6 +25,7 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
   const { quotes, projects, priceBook, saveQuote } = useWorkspace();
   const { org, role, user } = useSession();
   const [tab, setTab] = useState<Tab>('commercial');
+  const [note, setNote] = useState('');
   const offerRef = useRef<HTMLDivElement>(null);
   const quote = quotes.find(q => q.id === quoteId);
   const customerView = isCustomerRole(role);
@@ -61,11 +62,16 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
     void saveQuote({ ...next, ...quoteTotals(next.lines, next.discountPct, next.taxPct, next.freight) }, note);
   };
   const setLine = (id: string, changes: Partial<Quote['lines'][number]>) => {
-    const lines = quote.lines.map(l => (l.id === id ? { ...l, ...changes, total: (changes.quantity ?? l.quantity) * (changes.unitPrice ?? l.unitPrice) } : l));
+    // A partially typed number ("-", "1e") parses to NaN, and a NaN total spreads to the whole
+    // quotation and cannot be typed back out of.
+    const num = (v: number | undefined, fallback: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fallback);
+    const lines = quote.lines.map(l => {
+      if (l.id !== id) return l;
+      const quantity = num(changes.quantity, l.quantity), unitPrice = num(changes.unitPrice, l.unitPrice);
+      return { ...l, ...changes, quantity, unitPrice, total: quantity * unitPrice };
+    });
     patch({ lines });
   };
-  const setStatus = (status: QuoteStatus) => patch({ status, sentAt: status === 'sent' ? new Date().toISOString() : quote.sentAt },
-    `Quotation ${quote.number} moved to ${status}.`);
   const revise = async () => { const next = reviseQuote(quote); await saveQuote(next, `Revision ${next.version} of ${quote.number} created.`, 'created'); router.push(`/app/quotes?id=${next.id}`); };
 
   const setOffer = (patch: Partial<OfferContent>) =>
@@ -147,12 +153,23 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
       {tab === 'commercial' && (
         <div className="grid cols-3 no-print">
           <div style={{ gridColumn: 'span 2' }}>
-            <Card title="Price lines" subtitle="Edit quantity or unit price; totals recalculate" tight>
+            <Card title="Price lines" subtitle="Edit any line; totals recalculate" tight
+              actions={writable ? (
+                <button className="btn sm" onClick={() => void saveQuote(addCustomLine(quote), 'Line added.')}>
+                  <Plus size={14} /> Add line
+                </button>
+              ) : undefined}>
               <table className="data">
-                <thead><tr><th>Item</th><th className="num">Qty</th><th>Unit</th><th className="num">Unit price</th><th className="num">Amount</th><th>Optional</th></tr></thead>
+                <thead><tr><th>Item</th><th className="num">Qty</th><th>Unit</th><th className="num">Unit price</th><th className="num">Amount</th><th>Optional</th><th /></tr></thead>
                 <tbody>{quote.lines.map(l => (
                   <tr key={l.id}>
-                    <td><b>{l.label}</b>{l.note && <div className="muted" style={{ fontSize: 11 }}>{l.note}</div>}</td>
+                    <td>
+                      {writable
+                        ? <input value={l.label} aria-label={`${l.label} description`} onChange={e => setLine(l.id, { label: e.target.value })}
+                            style={{ width: '100%', minWidth: 160, padding: '4px 6px', border: '1px solid var(--line)', background: 'var(--field)', color: 'var(--ink)', fontSize: 13 }} />
+                        : <b>{l.label}</b>}
+                      {l.note && <div className="muted" style={{ fontSize: 11, marginTop: 3 }}>{l.note}</div>}
+                    </td>
                     <td className="num"><input type="number" value={l.quantity} disabled={!writable} aria-label={`${l.label} quantity`}
                       onChange={e => setLine(l.id, { quantity: Number(e.target.value) })} style={{ width: 88, textAlign: 'right', padding: '4px 6px', border: '1px solid var(--line)', borderRadius: 6 }} /></td>
                     <td className="muted">{l.unit}</td>
@@ -160,6 +177,10 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
                       onChange={e => setLine(l.id, { unitPrice: Number(e.target.value) })} style={{ width: 104, textAlign: 'right', padding: '4px 6px', border: '1px solid var(--line)', borderRadius: 6 }} /></td>
                     <td className="num"><b>{money(l.total)}</b></td>
                     <td><input type="checkbox" checked={l.optional} disabled={!writable} aria-label={`${l.label} optional`} onChange={e => setLine(l.id, { optional: e.target.checked })} /></td>
+                    <td className="num">{writable && (
+                      <button className="btn ghost sm" aria-label={`Remove ${l.label}`} title="Remove this line"
+                        onClick={() => void saveQuote(removeLine(quote, l.id), `${l.label} removed.`)}><Trash2 size={13} /></button>
+                    )}</td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -168,7 +189,14 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
           <div className="grid" style={{ alignContent: 'start' }}>
             <Card title="Commercial terms">
               <SelectInput label="Currency" value={quote.currency} options={(Object.keys(currencies) as Currency[]).map(c => ({ value: c, label: `${c} — ${currencies[c].name}` }))}
-                onChange={currency => patch({ currency })} hint="Changing the currency relabels the document; re-issue from the project to reprice." />
+                onChange={currency => {
+                  try {
+                    const next = convertQuote(quote, currency, priceBook);
+                    void saveQuote(next, `${quote.number} restated in ${currency}.`);
+                  } catch (e) { setNote(e instanceof Error ? e.message : 'That currency could not be applied.'); }
+                }}
+                hint="Every amount is converted at the price book's own rate, so the quotation still reconciles with the build-up that produced it." />
+              {note && <p className="muted" style={{ color: 'var(--rose)', marginTop: -4 }}>{note}</p>}
               <NumberInput label="Discount" value={quote.discountPct} unit="%" min={0} max={40} step={0.5} onChange={discountPct => patch({ discountPct })} />
               <NumberInput label="Tax" value={quote.taxPct} unit="%" min={0} max={40} step={0.5} onChange={taxPct => patch({ taxPct })} />
               <NumberInput label="Freight and insurance" value={Math.round(quote.freight)} unit={quote.currency} min={0} max={1e8} step={500} onChange={freight => patch({ freight })} />
@@ -181,7 +209,14 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
               </div>
             </Card>
             <Card title="Status">
-              <SelectInput label="Quotation status" value={quote.status} options={quoteStatuses.map(s => ({ value: s, label: s.replace(/-/g, ' ') }))} onChange={setStatus} />
+              {/* Read-only on purpose. A free dropdown here let a draft become `sent` with nobody
+                  recorded as issuing it, and `approved` with no approver — the whole lifecycle
+                  bypassed by a select. The actions in the header are the only way to move it. */}
+              <KV label="Status">
+                <Badge tone={quoteTone[quote.status] ?? 'neutral'}>
+                  {customerView ? (customerStatusLabels[quote.status] ?? quote.status) : quote.status}
+                </Badge>
+              </KV>
               <KV label="Created">{date(quote.createdAt)}</KV>
               <KV label="Sent">{quote.sentAt ? date(quote.sentAt) : '—'}</KV>
               <KV label="Price book">{quote.priceBookId}</KV>
