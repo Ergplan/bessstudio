@@ -575,7 +575,9 @@ including any discrepancy between sources.
 selected product's own catalogue dimensions — including the three systems whose interiors are not
 modelled, so a site of 1.4 m cabinets is not drawn as a site of containers. Units stand in rows at
 3 m separation with 6 m access roads between rows, the converters and transformers sit in their own
-bay off one end, and the fenced plot is sized around the lot. Where the studio's assumed mechanical
+bay off one end, and the fenced plot is sized around the lot. Where the augmentation schedule adds
+units later, their pads are laid out and reserved from day one — the fence goes up once, so the
+plot is leased for the fleet the project ends with, not the one it starts with. Where the studio's assumed mechanical
 clearances need a bigger envelope than the product's stated dimensions, the inspector says so and
 says which of the two is the assumption. The field is proportioned toward
 a square rather than a single long line. The explorer lists the units and the conversion kit, the

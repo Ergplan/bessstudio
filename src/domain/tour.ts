@@ -35,7 +35,7 @@ export function walkSteps(model: Model, plan: SitePlan | null = null): WalkStep[
   const site: WalkStep[] = plan ? [{
     id: 'site', eyebrow: '', target: 'SITE',
     title: 'The whole site',
-    body: `${plan.spec.units} containers on a ${v(plan.plot[0], 0)} × ${v(plan.plot[1], 0)} m plot, with ${plan.spec.pcsCount} converters beside them. ${plan.sideGap} m between units so a fault in one cannot reach the next, ${plan.rowGap} m between rows because each one arrives and leaves on a truck.`,
+    body: `${plan.spec.units} containers on a ${v(plan.plot[0], 0)} × ${v(plan.plot[1], 0)} m plot, with ${plan.spec.pcsCount} converters beside them. ${plan.sideGap} m between units so a fault in one cannot reach the next, ${plan.rowGap} m between rows because each one arrives and leaves on a truck.${plan.spec.laterUnits ? ` ${plan.spec.laterUnits} more pads stand empty: augmentation is years away, but the fence is not moving.` : ''}`,
     visibility: { labels: true }, explode: 0, highlight: false,
   }] : [];
 

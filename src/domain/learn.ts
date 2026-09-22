@@ -26,18 +26,21 @@ const v = (n: number, digits = 1) => `${n.toLocaleString('en', { maximumFraction
 
 export function siteLesson(plan: SitePlan): Lesson {
   const s = plan.spec, units = plan.placements.filter(p => p.kind === 'container').length;
+  const later = plan.placements.filter(p => p.kind === 'reserved').length;
   return {
     title: 'The site',
-    subtitle: `${units} units · ${plan.rows} × ${plan.perRow} · ${v(plan.plot[0])} × ${v(plan.plot[1])} m`,
+    subtitle: `${units}${later ? ` + ${later} reserved` : ''} units · ${plan.rows} × ${plan.perRow} · ${v(plan.plot[0])} × ${v(plan.plot[1])} m`,
     what: `One ${s.model} holds ${v(s.energyMWh / Math.max(units, 1), 2)} MWh, and this project needs ${v(s.energyMWh, 2)} MWh, so it buys ${units} of them and stands them on a plot with the conversion equipment beside them. What the customer leases, fences and connects is this, not the container.`,
     why: [
       `The units are ${plan.sideGap} m apart shoulder to shoulder and the rows ${plan.rowGap} m apart. The side gap is separation — a thermal event in one enclosure must not propagate to its neighbour — and the row gap is an access road, because a 42-tonne container arrives on a truck and is replaced the same way.`,
       `The field is laid out ${plan.rows} × ${plan.perRow} rather than in one long line so the plot is a shape somebody would lease. A single row of ${units} would be over ${v(units * (plan.plot[0]), 0)} m long and need a road down its whole length.`,
+      ...(later ? [`${later} of the ${units + later} pads stand empty on day one. The degradation schedule says the fleet needs augmenting during the project, and nobody gets to widen the fence in year eight — so the space is fenced, graded and reserved now, and the plot is leased for the fleet the project ends with rather than the one it starts with.`] : []),
       `The ${s.pcsCount} converters and ${s.transformerCount} transformers sit off the end of the field in their own bay. Keeping conversion together shortens the medium-voltage run to the point of connection, which is the expensive cable.`,
       `The DC side stays inside each container. What leaves the converter bay is AC at ${v(s.powerMW, 2)} MW, and that is the number the grid connection is sized against.`,
     ],
     numbers: [
-      ['Units', `${units} × ${s.model}`],
+      ['Units day one', `${units} × ${s.model}`],
+      ...(later ? [['Reserved for augmentation', `${later} pads`] as [string, string]] : []),
       ['Installed DC energy', `${v(s.energyMWh, 2)} MWh`],
       ['Rated power', `${v(s.powerMW, 2)} MW`],
       ['Conversion', `${s.pcsCount} × ${s.pcsModel}`],

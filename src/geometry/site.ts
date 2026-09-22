@@ -11,7 +11,11 @@ import type { Primitive } from './primitives';
  * stand a fence around, not to pass for a civil drawing.
  */
 export type SiteSpec = {
+  /** Units installed on day one. */
   units: number;
+  /** Further units the augmentation schedule adds later. Their pads are reserved from the start,
+   *  because nobody gets to widen the fence in year eight. */
+  laterUnits: number;
   /** The product the project actually selected, and its outside dimensions in metres, L × H × W. */
   model: string; enclosure: Vec;
   /** True when the studio has an interior for this product; false means the plot is right and the
@@ -22,7 +26,7 @@ export type SiteSpec = {
   energyMWh: number; powerMW: number;
 };
 
-export type SitePlacement = { id: string; kind: 'container' | 'pcs' | 'transformer'; position: Vec; size: Vec };
+export type SitePlacement = { id: string; kind: 'container' | 'reserved' | 'pcs' | 'transformer'; position: Vec; size: Vec };
 export type SitePlan = {
   placements: SitePlacement[];
   /** Fenced plot, metres, X by Z. */
@@ -43,21 +47,25 @@ const PCS_SIZE: Vec = [2.4, 2.3, 1.6];
 const TX_SIZE: Vec = [3.2, 2.8, 2.4];
 
 export function planSite(spec: SiteSpec): SitePlan {
-  const units = Math.max(1, Math.round(spec.units));
+  const day1 = Math.max(1, Math.round(spec.units));
+  const later = Math.max(0, Math.round(spec.laterUnits));
+  const slots = day1 + later;
   const [l, h, w] = spec.enclosure;
   const pitchZ = w + SIDE_GAP, pitchX = l + ROW_GAP;
 
   // Choose the row length that comes closest to a square field, so the plot is a shape somebody
-  // would actually lease rather than a 200 m ribbon.
-  const perRow = Math.max(1, Math.min(units, Math.round(Math.sqrt(units * pitchX / pitchZ))));
-  const rows = Math.ceil(units / perRow);
+  // would actually lease rather than a 200 m ribbon. The field is laid out for every slot the
+  // project will ever need, not just the ones arriving first.
+  const perRow = Math.max(1, Math.min(slots, Math.round(Math.sqrt(slots * pitchX / pitchZ))));
+  const rows = Math.ceil(slots / perRow);
 
   const fieldX = rows * pitchX - ROW_GAP, fieldZ = perRow * pitchZ - SIDE_GAP;
   const placements: SitePlacement[] = [];
-  for (let i = 0; i < units; i++) {
+  for (let i = 0; i < slots; i++) {
     const row = Math.floor(i / perRow), col = i % perRow;
     placements.push({
-      id: `UNIT-${String(i + 1).padStart(2, '0')}`, kind: 'container',
+      id: i < day1 ? `UNIT-${String(i + 1).padStart(2, '0')}` : `RESERVED-${String(i - day1 + 1).padStart(2, '0')}`,
+      kind: i < day1 ? 'container' : 'reserved',
       position: [-fieldX / 2 + l / 2 + row * pitchX, 0, -fieldZ / 2 + w / 2 + col * pitchZ],
       size: [l, h, w],
     });
@@ -92,7 +100,7 @@ export function planSite(spec: SiteSpec): SitePlan {
   return { placements, plot, areaM2: plot[0] * plot[1], rows, perRow, sideGap: SIDE_GAP, rowGap: ROW_GAP, spec };
 }
 
-const colours = { shell: '#cfd9dd', roof: '#e6ecee', frame: '#253f4c', pcs: '#8ba5ad', tx: '#a4b0a2', road: '#161e25', pad: '#1C262E' };
+const colours = { shell: '#cfd9dd', roof: '#e6ecee', frame: '#253f4c', pcs: '#8ba5ad', tx: '#a4b0a2', road: '#161e25', pad: '#1C262E', reserved: '#2A3A31' };
 
 /** The site as drawable boxes. One container is a shell, not 4,992 cells — the fleet has to stay light. */
 export function sitePrimitives(plan: SitePlan, selected: string): Primitive[] {
@@ -105,7 +113,7 @@ export function sitePrimitives(plan: SitePlan, selected: string): Primitive[] {
   box('SITE', 'pad', [0, -0.12, 0], [px, 0.2, pz], colours.pad);
 
   // The access roads between rows, so the spacing reads as a decision rather than a gap.
-  const units = plan.placements.filter(p => p.kind === 'container');
+  const units = plan.placements.filter(p => p.kind === 'container' || p.kind === 'reserved');
   const [l, , w] = units[0].size;
   const rowXs = [...new Set(units.map(u => Number(u.position[0].toFixed(4))))].sort((a, b) => a - b);
   const zSpan = plan.perRow * (w + plan.sideGap);
@@ -116,7 +124,12 @@ export function sitePrimitives(plan: SitePlan, selected: string): Primitive[] {
   for (const p of plan.placements) {
     const [x, , z] = p.position, [sx, sy, sz] = p.size;
     const lit = selected === p.id;
-    if (p.kind === 'container') {
+    if (p.kind === 'reserved') {
+      // A pad and four posts: the space is spoken for, nothing stands on it yet.
+      box(p.id, 'pad', [x, 0.02, z], [sx + 0.2, 0.05, sz + 0.2], colours.reserved);
+      for (const dx of [-sx / 2, sx / 2]) for (const dz of [-sz / 2, sz / 2])
+        box(p.id, `post${dx}${dz}`, [x + dx, 0.22, z + dz], [0.11, 0.44, 0.11], lit ? '#dfe9c9' : colours.frame);
+    } else if (p.kind === 'container') {
       box(p.id, 'plinth', [x, 0.09, z], [sx + 0.2, 0.18, sz + 0.2], colours.frame);
       box(p.id, 'shell', [x, 0.18 + sy / 2, z], [sx, sy, sz], lit ? '#dfe9c9' : colours.shell);
       box(p.id, 'roof', [x, 0.18 + sy + 0.05, z], [sx + 0.1, 0.1, sz + 0.1], colours.roof);

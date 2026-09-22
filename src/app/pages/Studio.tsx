@@ -74,14 +74,17 @@ export function Studio() {
   let context = '';
   let units = 0;
   let site: SiteSpec | null = null;
+  // The product the project bought, whether or not the studio has an interior for it.
+  let product: { model: string; modelled: boolean } | null = null;
   if (project) {
     try {
       const s = sizeSystem(project.sizing);
       units = s.units;
+      product = { model: s.enclosure.model, modelled: !!s.enclosure.studioPreset };
       context = `${s.installedDcMWh.toFixed(2)} MWh DC · ${s.ratedPowerMW.toFixed(2)} MW`;
       // Only a fleet is worth laying out; one container is the container view.
-      if (s.units > 1) site = {
-        units: s.units,
+      if (s.totalUnits > 1) site = {
+        units: s.units, laterUnits: Math.max(0, s.totalUnits - s.units),
         // The plot is laid out from the product the project selected, even where the studio has no
         // interior for it, so a site of cabinets is not drawn as a site of 20-foot containers.
         model: s.enclosure.model, modelled: !!s.enclosure.studioPreset,
@@ -149,7 +152,7 @@ export function Studio() {
       </div>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }} ref={canvasHost}>
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#5E6C79' }}>Loading the 3D assembly…</div>}>
-          <Studio3D brandName={(org?.branding.displayName ?? brand.vendorShort).toUpperCase()} brandLogo={org?.branding.logo ?? null} projectName={project?.name} projectRef={project?.reference} state={!project?'reference':settled.current!==config?'edited':fromStore.current?'stored':'derived'} unitCount={units} site={site} />
+          <Studio3D brandName={(org?.branding.displayName ?? brand.vendorShort).toUpperCase()} brandLogo={org?.branding.logo ?? null} projectName={project?.name} projectRef={project?.reference} state={!project?'reference':settled.current!==config?'edited':fromStore.current?'stored':'derived'} unitCount={units} site={site} product={product} />
         </Suspense>
       </div>
     </div>

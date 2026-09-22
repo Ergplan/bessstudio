@@ -7,7 +7,7 @@ import { byId, enclosures } from '../catalog/products';
 
 const enclosure = buildModel(structuredClone(defaults)).dimensions.enclosure;
 const spec = (over: Partial<SiteSpec> = {}): SiteSpec => ({
-  units: 7, model: 'SWESLC1331.2V314Ah', enclosure, modelled: true,
+  units: 7, laterUnits: 0, model: 'SWESLC1331.2V314Ah', enclosure, modelled: true,
   pcsCount: 4, pcsModel: 'PCS 2507.5 kW', pcsKW: 2507.5,
   transformerCount: 2, transformerMVA: 6.3, energyMWh: 35.11, powerMW: 8, ...over,
 });
@@ -78,6 +78,24 @@ describe('the site layout', () => {
     for (const unit of plan.placements.filter(p => p.kind === 'container')) expect(unit.size).toEqual(size);
     expect(plan.plot[0]).toBeLessThan(planSite(spec({ units: 20 })).plot[0]);
     expect(cabinet.studioPreset).toBeNull();
+  });
+
+  it('reserves a pad for every unit the augmentation schedule will add', () => {
+    // The fence goes up once. A project that augments in year eight has to have leased the ground
+    // on day one, so the field is laid out for the fleet it ends with.
+    const plan = planSite(spec({ units: 7, laterUnits: 3 }));
+    expect(plan.placements.filter(p => p.kind === 'container')).toHaveLength(7);
+    expect(plan.placements.filter(p => p.kind === 'reserved')).toHaveLength(3);
+    const day1 = planSite(spec({ units: 7, laterUnits: 0 }));
+    expect(plan.areaM2).toBeGreaterThan(day1.areaM2);
+    // Reserved pads are laid out on the same grid as the units, not squeezed in beside them.
+    const all = plan.placements.filter(p => p.kind === 'container' || p.kind === 'reserved');
+    for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
+      const a = all[i], b = all[j];
+      expect(Math.abs(a.position[0] - b.position[0]) >= (a.size[0] + b.size[0]) / 2 - 1e-9
+        || Math.abs(a.position[2] - b.position[2]) >= (a.size[2] + b.size[2]) / 2 - 1e-9,
+        `${a.id} overlaps ${b.id}`).toBe(true);
+    }
   });
 
   it('agrees with what the sizing said the project needs', () => {
