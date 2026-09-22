@@ -3,8 +3,13 @@
 The live record of the build defined in [`docs/SITE.md` §17](./SITE.md#17-how-this-gets-built).
 `SITE.md` is the contract; this file is what actually happened.
 
-> **S0 through S11 are built and ready for acceptance.** S12 is the one that remains; S10 is
-> deferred by decision. Every fixture F01 to F08 has been run and passed. Writing a check into this file is not evidence that it passed.
+> **Every stage is built and ready for acceptance.** S10 is deferred by decision; S12's release
+> checks have been run but the release itself has not been performed — there are no deployment
+> credentials in this environment, and deploying is a human act on an exact revision. Every fixture
+> F01 to F08 has been run and passed.
+>
+> **Four of S12's checks cannot apply** to a browser engine, and are recorded as not applicable with
+> what stands in their place rather than passed or dropped. They are in the S12 packet. Writing a check into this file is not evidence that it passed.
 >
 > **One check cannot be passed by testing.** §17.2 asks S6 for an observed beginner walkthrough or
 > an explicit note that usability validation is pending. Nobody has watched a beginner use this,
@@ -40,7 +45,7 @@ when a prerequisite or a mandatory check fails.
 | **S9** | Indian conditions and lifecycle cost | S8 | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s9--indian-conditions-and-lifecycle-cost) |
 | **S10** | Synchronised 3D | S9 | **`DEFERRED`** by decision — 2D first | — | — |
 | **S11** | Project and quotation integration | **S9** *(revised by the S10 deferral)* | **`READY FOR ACCEPTANCE`** | review pending | [packet](#s11--project-and-quotation-integration) |
-| **S12** | Release readiness | S11 | `BUILDING` | — | — |
+| **S12** | Release readiness | S11 | **`READY FOR ACCEPTANCE`** *(release not performed)* | review pending | [packet](#s12--release-readiness) |
 
 ## Fixtures
 
@@ -1181,6 +1186,93 @@ written before it are read unchanged.
 ### 7. Decision
 
 **READY FOR ACCEPTANCE — review pending.** Next eligible stage: **S12 — Release readiness.**
+
+---
+
+## S12 — Release readiness
+
+**State:** READY FOR ACCEPTANCE — review pending. **The release has not been performed:** there are
+no deployment credentials in this environment, and releasing is a human act on an exact revision.
+**Revision under test:** `9cdca23`
+**Depends on:** S11 (READY FOR ACCEPTANCE)
+
+### 1. Scope
+
+Delivered: the checks §17.2 asks for, run against one revision; performance budgets declared before
+they were measured; a rollback and a restore actually exercised; and an honest account of the four
+checks that cannot apply here.
+
+### 2. What cannot be checked, and why
+
+§17.2 asks for production-like compute and jobs, job cancellation and timeouts, worker failure,
+cache isolation and quotas. **The engine runs in the browser**, per the departure recorded in the S2
+packet, so there is no worker, no job queue and no server cache to exercise. These are recorded as
+**NOT APPLICABLE** against that departure rather than dropped or marked passed, each with whatever
+stands in its place:
+
+| Check | Why it cannot apply | What stands in its place | Evidence |
+| --- | --- | --- | --- |
+| Job cancellation | A run is synchronous. There is no job to cancel. | A run is bounded before it starts: a scenario that would exceed the cap is refused with what to change. | `release.perf.test.ts` |
+| Timeouts | Nothing waits on anything. | The same cap, which is what makes the run finite. | `release.perf.test.ts` |
+| Worker failure | There is no worker. | A run that fails is reported as failed, with its reason and a null finish time, never as an empty success. | `sim.engine.test.ts` |
+| Cache isolation | There is no cache. | A result is refused for a configuration it was not produced for, and its evidence badge is refused with it; another tenant's result is refused by the rules. | `quoting.appendix.test.ts`, `rules.test.ts` |
+| Quotas | No server compute to meter. | The sub-step cap, and six-significant-figure rounding that bounds a stored document. | `release.perf.test.ts`, `sim.contracts.test.ts` |
+| Retention | No automatic retention policy exists. | Stated rather than implied: a kept run lives until its owner or an administrator deletes it, and the rules permit exactly those two. Nothing expires on its own. | `rules.test.ts` |
+| Observability | No server to instrument. | The activity log for what people did, the event log for what the plant did, and a failed run that says why. Both are records rather than telemetry, and neither is claimed as monitoring. | — |
+
+### 3. Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **672 passed** | **PASS** |
+| Rules suite | `npm run test:rules` | all pass | 54 passed | **PASS** |
+| Static export | `npm run build` | 17 routes | 17 routes | **PASS** |
+| Every route answers | browser | 200, with a heading | 15 routes, all 200, all headed | **PASS** |
+| No 404 served | browser | none | none, across every entity page in the workspace | **PASS** |
+| End-to-end smoke, all seven lessons | browser | each plays, changes and resets | 7 of 7: four figures, two charts, played, one control moved, reset restored the opening figure | **PASS** |
+| The chemistry comparison | browser | both tables render | comparison 9 rows, lifecycle 5 rows | **PASS** |
+| Critical journey: the offer | browser | every tab renders | all six tabs, 17,099 characters on the offer document | **PASS** |
+| Export integrity | browser | self-contained, complete, no artefacts | 557 kB, 7 images inlined, 0 external references, no NaN or undefined, no scripts | **PASS** |
+| Performance: a lesson run | unit | inside 400 ms, declared first | every lesson inside its budget | **PASS** |
+| Performance: a day comparison | unit | inside 2,000 ms | inside | **PASS** |
+| Performance: sizing and finance | unit | inside 150 ms | inside | **PASS** |
+| Performance: the India comparison | unit | inside 2,500 ms | inside, on all three presets | **PASS** |
+| Page load | browser | recorded, not budgeted | 0.6–0.8 s for every page except the two 3D routes, at 4.8 and 5.7 s | **RECORDED** — no budget was declared for these beforehand, so none is claimed now |
+| The sub-step cap | unit | refuses, and says what to change | refused, naming the cap and the remedy | **PASS** |
+| Rollback exercised | `git revert HEAD` | the previous revision builds and passes | 665 tests passed, 17 routes built | **PASS** |
+| Restore exercised | `git reset --hard 9cdca23` | back to the exact tested revision | 672 tests passed, 17 routes built, working tree clean at `9cdca23` | **PASS** |
+| Release the exact tested revision | — | the revision above, and no other | **not performed** — no deployment credentials here | **NOT DONE**, deliberately |
+
+### 4. Browser walkthrough
+
+`scratchpad/smoke.mjs` — every route, then all seven lessons played, changed and reset, then the
+comparison, then every tab of a quotation. 74 seconds end to end.
+`scratchpad/export.mjs` — the offer exported and the file inspected.
+`scratchpad/crawl.mjs` — every entity page in the workspace, for 404s and page errors.
+
+### 5. Defects
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D60 | The engine declared a cap on how many pieces one run may be advanced in, with a comment about not hanging a browser — and never used it. A solver setting nobody in the interface can reach, but anybody with a console can, took the tab with it. The performance suite found it by hanging. | **critical** | **fixed**; the cap refuses the run and says what to change. It refuses rather than coarsening, because an answer computed at a fidelity nobody asked for is exactly the failure §13.1 is about, and it would be invisible. |
+| D61 | The **Offer HTML** button exported nothing unless the offer document tab had already been opened, because the node it reads only exists while that tab is showing. It looked like it worked. | major | **fixed**; it shows the document first, as the print button already did. The exported file is now checked for completeness rather than assumed. |
+
+### 6. Demonstration and rollback
+
+Demo: the smoke script above, or **Quotations** → any quotation → **Offer HTML**, and open the file
+that lands.
+Rollback: exercised rather than described. `git revert HEAD` on `9cdca23` leaves a tree that passes
+665 tests and builds 17 routes; `git reset --hard 9cdca23` restores the tested revision, which
+passes 672 and builds 17. Nothing in this release migrates data, so a rollback needs no restore
+step beyond the code.
+
+### 7. Decision
+
+**READY FOR ACCEPTANCE — review pending, and the release itself not performed.** Everything S12 can
+check here has been checked against `9cdca23`; the four checks that belong to a server this does not
+have are recorded as not applicable with what stands in their place. Releasing is a human act, on
+that revision and no other.
 
 ---
 
