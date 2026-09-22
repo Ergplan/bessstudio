@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { Plus, Trash2, ArrowLeft, Building2 } from 'lucide-react';
 import { Card, Badge, Empty, Modal, TextInput, SelectInput, Field, stageTone, quoteTone, date, KV } from '../components/ui';
+import { newProject as makeProject } from '../../platform/projects';
 import { useWorkspace, projectsOf, quotesOf } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
 import { can, customerStages, segments, uid, nowIso, type Customer, type CustomerStage, type Segment } from '../../platform/types';
@@ -119,15 +120,13 @@ export function CustomerDetail({ id: customerId }: { id: string }) {
   const mine = projectsOf(projects, customer.id), theirQuotes = quotesOf(quotes, 'customerId', customer.id);
   const createProject = async () => {
     const name = newProject.trim(); if (!name) return;
-    const id = uid('prj');
-    await saveProject({
-      id, orgId: org!.id, customerId: customer.id, customerName: customer.name, name,
-      reference: `${customer.name.slice(0, 3).toUpperCase()}-${String(mine.length + 1).padStart(2, '0')}`,
-      status: 'sizing', site: { location: [customer.city, customer.country].filter(Boolean).join(', '), latitude: null, longitude: null, gridOperator: '', commissioningTarget: '' },
-      sizing: defaultSizingInput(), studioConfig: null, notes: '', createdAt: nowIso(), updatedAt: nowIso(), updatedBy: user!.displayName,
-    }, `Project ${name} created for ${customer.name}.`);
+    const project = makeProject({
+      orgId: org!.id, customer, name, existing: mine.length,
+      by: { uid: user!.uid, displayName: user!.displayName },
+    });
+    await saveProject(project, `Project ${name} created for ${customer.name}.`);
     setNewProject('');
-    router.push(`/app/projects?id=${id}`);
+    router.push(`/app/projects?id=${project.id}`);
   };
 
   return (

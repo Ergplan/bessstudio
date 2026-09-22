@@ -1,14 +1,36 @@
 'use client';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { Card, Badge, Empty, date } from '../components/ui';
+import { Plus } from 'lucide-react';
+import { Card, Badge, Empty, Field, Modal, TextInput, date } from '../components/ui';
 import { useWorkspace } from '../../platform/workspace';
+import { useSession } from '../../platform/auth';
+import { newProject as makeProject } from '../../platform/projects';
+import { can } from '../../platform/types';
 import { sizeSystem } from '../../sizing/engine';
 import { applications } from '../../sizing/applications';
 
 export function Projects() {
-  const { projects } = useWorkspace();
+  const { customers, projects, saveProject } = useWorkspace();
+  const { org, user, role } = useSession();
+  const router = useRouter();
   const [filter, setFilter] = useState(''), [app, setApp] = useState('all');
+
+  const [draft, setDraft] = useState<{ customerId: string; name: string } | null>(null);
+
+  const create = async () => {
+    const customer = customers.find(c => c.id === draft?.customerId);
+    if (!draft || !customer || !org || !user) return;
+    const project = makeProject({
+      orgId: org.id, customer, name: draft.name,
+      existing: projects.filter(p => p.customerId === customer.id).length,
+      by: { uid: user.uid, displayName: user.displayName },
+    });
+    await saveProject(project, `Project ${project.name} created for ${customer.name}.`);
+    setDraft(null);
+    router.push(`/app/projects?id=${project.id}`);
+  };
 
   const rows = useMemo(() => projects
     .filter(p => (app === 'all' || p.sizing.applicationId === app) && (!filter || `${p.name} ${p.customerName} ${p.reference}`.toLowerCase().includes(filter.toLowerCase())))
@@ -24,6 +46,12 @@ export function Projects() {
           <option value="all">All applications</option>
           {applications.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
         </select>
+        <div className="spacer" />
+        {can(role, 'project.write') && customers.length > 0 && (
+          <button className="btn accent" onClick={() => setDraft({ customerId: customers[0].id, name: '' })}>
+            <Plus size={15} /> New project
+          </button>
+        )}
         <div className="spacer" />
         <span className="muted">Projects are created from a customer record.</span>
       </div>
@@ -52,6 +80,20 @@ export function Projects() {
           </table>
         ) : <Empty title="No projects" message="Open a customer and add a project to start sizing." action={<Link className="btn accent" href="/app/customers">Go to customers</Link>} />}
       </Card>
+      {draft && (
+        <Modal title="New project" onClose={() => setDraft(null)} footer={<>
+          <button className="btn" onClick={() => setDraft(null)}>Cancel</button>
+          <button className="btn accent" disabled={draft.name.trim().length < 2} onClick={() => void create()}>Create project</button>
+        </>}>
+          <Field label="Customer">
+            <select value={draft.customerId} onChange={e => setDraft({ ...draft, customerId: e.target.value })}>
+              {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
+          <TextInput label="Project name" value={draft.name} onChange={name => setDraft({ ...draft, name })}
+            hint="Sizing starts from the default application preset and is editable once the project is open." />
+        </Modal>
+      )}
     </div>
   );
 }

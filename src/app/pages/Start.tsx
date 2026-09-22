@@ -6,6 +6,7 @@ import { useSession } from '../../platform/auth';
 import { repository } from '../../platform/repo';
 import { nowIso, uid, type Customer, type Project } from '../../platform/types';
 import { defaultSizingInput, sizeSystem } from '../../sizing/engine';
+import { newProject as makeProject } from '../../platform/projects';
 import { application, applications, type ApplicationId } from '../../sizing/applications';
 import { BuildSequence } from '../landing/BuildSequence';
 import '../landing/landing.css';
@@ -67,15 +68,12 @@ export function Start() {
       };
       if (!existing) await repo.save(org.id, 'customers', customer);
 
-      const project: Project = {
-        id: uid('prj'), orgId: org.id, customerId: customer.id, customerName: customer.name,
+      const already = (await repo.list(org.id, 'projects')).filter(p => p.customerId === customer.id).length;
+      const project: Project = makeProject({
+        orgId: org.id, customer, existing: already, sizing: sizingInput,
         name: `${label} ${application(applicationId).name.toLowerCase()}`,
-        reference: `NEW-${new Date().toISOString().slice(2, 10).replace(/-/g, '')}`,
-        status: 'sizing',
-        site: { location: '', latitude: null, longitude: null, gridOperator: '', commissioningTarget: '' },
-        sizing: sizingInput, studioConfig: null, studioImage: null, notes: '', ownerUid: user.uid,
-        createdAt: nowIso(), updatedAt: nowIso(), updatedBy: user.displayName,
-      };
+        by: { uid: user.uid, displayName: user.displayName },
+      });
       await repo.save(org.id, 'projects', project);
       setProjectId(project.id);
     } catch (e) {

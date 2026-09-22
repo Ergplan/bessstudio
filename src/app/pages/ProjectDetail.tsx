@@ -2,9 +2,10 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
-import { ArrowLeft, Box, FileText, RotateCcw } from 'lucide-react';
+import { ArrowLeft, Box, FileText, RotateCcw, Trash2 } from 'lucide-react';
 import { Card, Stat, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, TextArea, Field, Slider, pct, date } from '../components/ui';
 import { LineChart, BarChart, CompositionBar, series, status } from '../components/viz';
+import { quotesLeftBehind, reassign } from '../../platform/projects';
 import { useWorkspace, quotesOf } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
 import { can, quoteStatuses, isCustomerRole } from '../../platform/types';
@@ -24,7 +25,7 @@ type Tab = 'requirements' | 'losses' | 'design' | 'performance' | 'economics';
 
 export function ProjectDetail({ id: projectId }: { id: string }) {
   const router = useRouter();
-  const { projects, quotes, priceBook, saveProject, saveQuote } = useWorkspace();
+  const { customers, projects, quotes, priceBook, saveProject, saveQuote, removeRecord } = useWorkspace();
   const { org, user, role } = useSession();
   const [tab, setTab] = useState<Tab>('requirements');
   const project = projects.find(p => p.id === projectId);
@@ -71,9 +72,34 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
     <div className="grid" style={{ gap: 16 }}>
       <div className="row">
         <Link className="btn ghost sm" href={`/app/customers?id=${project.customerId}`}><ArrowLeft size={15} /> {project.customerName}</Link>
+        {/* The opening question parks every anonymous design on one holding account, so without a
+            way to move a project the second one raised there is stuck with the first one's name. */}
+        {can(role, 'project.write') && customers.length > 1 && (
+          <select aria-label="Move to customer" value={project.customerId} title="Move this project to another customer"
+            onChange={async e => {
+              const to = customers.find(c => c.id === e.target.value);
+              if (!to || !user) return;
+              const left = quotesLeftBehind(quotes, project.id);
+              if (left && !window.confirm(`Move this project to ${to.name}?\n\n${left} quotation${left === 1 ? '' : 's'} already raised will keep the customer recorded on them, because an issued offer must not change when a record is tidied up.`)) return;
+              await saveProject(reassign(project, to, { displayName: user.displayName }), `${project.name} moved to ${to.name}.`);
+            }}
+            style={{ padding: '6px 10px', border: '1px solid var(--line)', fontSize: 12.5, maxWidth: 220 }}>
+            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        )}
         <div className="spacer" />
-        <Link className="btn" href={`/studio?project=${project.id}`}><Box size={15} /> Open 3D studio</Link>
+        <Link className="btn" href={`/app/studio?project=${project.id}`}><Box size={15} /> Open 3D studio</Link>
         {can(role, 'quote.write') && <button className="btn accent" onClick={() => void issueQuote()}><FileText size={15} /> Create quotation</button>}
+        {can(role, 'project.write') && (
+          <button className="btn danger" title="Delete this project"
+            onClick={async () => {
+              const left = quotesLeftBehind(quotes, project.id);
+              const warning = left ? `\n\n${left} quotation${left === 1 ? '' : 's'} raised against it will remain, and will point at a project that no longer exists.` : '';
+              if (!window.confirm(`Delete ${project.name}? This cannot be undone.${warning}`)) return;
+              await removeRecord('projects', project.id);
+              router.push('/app/projects');
+            }}><Trash2 size={15} /></button>
+        )}
       </div>
 
       <div className="grid cols-4">

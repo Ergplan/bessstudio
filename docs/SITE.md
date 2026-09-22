@@ -436,6 +436,13 @@ country/city/website, notes, and the customer's projects and quotations.
 
 ### 4.8 Projects — `/app/projects` `LIVE`
 
+**New project** on the list, against any customer; the same action is on the customer page. A
+project can be **moved to another customer** from its header — the opening question parks every
+anonymous design on one holding account, so without this the second one raised there is stuck with
+the first one's name. Quotations keep their own customer snapshot and the move says so, because an
+issued offer must not change when a record is tidied up afterwards. **Delete** warns about
+quotations that would be left pointing at nothing.
+
 The core screen. Four tiles across the top — rated power, contracted usable, installed DC,
 delivered equipment price — then five tabs.
 
