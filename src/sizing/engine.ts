@@ -211,6 +211,14 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   const unitDcMWh = enclosureEnergyKWh(enclosure) / 1000;
   const auxDischargePerUnit = enclosure.auxMWhPerDayDischarge * L.auxScale;
   const auxChargePerUnit = enclosure.auxMWhPerDayCharge * L.auxScale;
+  /**
+   * The catalogue states auxiliary consumption per day, and a plant cycling six times a day does
+   * not run its cooling six times over. The day's discharge-side auxiliary energy is shared
+   * between the cycles that carry it; the charge-side figure is added once a day in the
+   * roll-forward below. Below one cycle a day the share is capped at a single day's worth, because
+   * the auxiliaries on the days a standby plant never discharges are not that discharge's to bear.
+   */
+  const auxDischargePerCycle = auxDischargePerUnit / Math.max(input.cyclesPerDay, 1);
 
   const retention = (age: number) => input.degradation.mode === 'table'
     ? retentionFromTable(age, input.degradation.retention)
@@ -218,7 +226,7 @@ export function sizeSystem(raw: SizingInput): SizingResult {
 
   /** Usable AC energy from `units` enclosures at a given retention, after the discharge path and auxiliaries. */
   const usableAc = (units: number, r: number) =>
-    Math.max(0, units * unitDcMWh * r * L.usableDcWindow * input.dod * dischargePathEfficiency - units * auxDischargePerUnit);
+    Math.max(0, units * unitDcMWh * r * L.usableDcWindow * input.dod * dischargePathEfficiency - units * auxDischargePerCycle);
 
   // Two independent constraints set the day-one fleet: enough usable energy in the design year,
   // and enough installed capacity that rated power stays inside the system's nameplate rating.
@@ -270,7 +278,7 @@ export function sizeSystem(raw: SizingInput): SizingResult {
     // rather than assuming a full cycle. Where nothing is spare the two are identical, which is
     // what the supplied sizing model computes.
     const acPerCycle = Math.min(meanUsable, requiredUsableMWh);
-    const dcPerCycle = Math.min(meanStored, (acPerCycle + auxDischargePerUnit * unitsAt(y)) / Math.max(dischargePathEfficiency, 0.1));
+    const dcPerCycle = Math.min(meanStored, (acPerCycle + auxDischargePerCycle * unitsAt(y)) / Math.max(dischargePathEfficiency, 0.1));
     const scale = input.cyclesPerDay * input.daysPerYear * L.availabilityFactor * input.availability;
     const deliveredMWh = acPerCycle * scale;
     const chargeMWh = y === 0 ? 0 : (dcPerCycle / Math.max(chargePathEfficiency, 0.1)) * scale + auxChargePerUnit * unitsAt(y) * input.daysPerYear * L.availabilityFactor * input.availability;
@@ -342,11 +350,11 @@ export function sizeSystem(raw: SizingInput): SizingResult {
     text: (() => {
       const stored = installedDcMWh * L.usableDcWindow * input.dod;
       const afterPath = stored * designRetention * dischargePathEfficiency;
-      const aux = auxDischargePerUnit * units;
+      const aux = auxDischargePerCycle * units;
       return `${installedDcMWh.toFixed(2)} MWh installed delivers ${requiredUsableMWh.toFixed(2)} MWh to the meter — ${headroom.toFixed(1)}× the contracted energy, and here is where it goes. `
         + `${Math.round(input.dod * 100)}% depth of discharge across a ${Math.round(L.usableDcWindow * 100)}% usable window leaves ${stored.toFixed(2)} MWh. `
         + `${Math.round(designRetention * 100)}% retention in the design year and ${(dischargePathEfficiency * 100).toFixed(1)}% on the discharge path leave ${afterPath.toFixed(2)} MWh. `
-        + `${aux.toFixed(2)} MWh of auxiliaries leave ${(afterPath - aux).toFixed(2)} MWh, against ${requiredUsableMWh.toFixed(2)} MWh contracted; the margin is the last whole unit rounding up.`;
+        + `${aux.toFixed(2)} MWh of auxiliaries — this cycle's share of the day's ${(auxDischargePerUnit * units).toFixed(2)} MWh — leave ${(afterPath - aux).toFixed(2)} MWh, against ${requiredUsableMWh.toFixed(2)} MWh contracted; the margin is the last whole unit rounding up.`;
     })(),
   });
   if (unitsForPower > unitsForEnergy) warnings.push({ code: 'power-limited', level: 'info', text: `Fleet size is set by the ${enclosure.ratedKW} kW system rating, not by the energy requirement: ${unitsForPower} units are needed for ${ratedPowerMW.toFixed(2)} MW against ${unitsForEnergy} for the energy alone.` });

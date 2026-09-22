@@ -537,7 +537,8 @@ describe('explaining the headroom', () => {
     const L = s.input.losses;
     const stored = s.installedDcMWh * L.usableDcWindow * s.input.dod;
     const afterPath = stored * s.years[1].retention * s.dischargePathEfficiency;
-    const delivered = afterPath - s.auxMWhPerDay / 2;     // the discharge half of the daily auxiliary
+    // The discharge half of the day's auxiliary energy, shared across the cycles that carry it.
+    const delivered = afterPath - s.auxMWhPerDay / 2 / Math.max(s.input.cyclesPerDay, 1);
     expect(delivered).toBeGreaterThanOrEqual(s.requiredUsableMWh - 1e-6);
     // and not wastefully more: one unit fewer would fall short
     const perUnit = s.day1UsableMWh / s.units;
@@ -577,5 +578,62 @@ describe('the converter against the string it is wired to', () => {
     expect(low.warnings.some(w => w.code === 'dc-window-low')).toBe(true);
     const matched = sizeSystem({ ...defaultSizingInput(), enclosureId: 'enc-5mwh-20ft', pcsId: 'pcs-2507' });
     expect(matched.warnings.some(w => w.code === 'dc-window-low')).toBe(false);
+  });
+});
+
+describe('auxiliary energy, which is a daily quantity', () => {
+  /**
+   * The catalogue states auxiliary consumption per day. It was being subtracted from the energy
+   * of a single cycle, so a plant cycling six times a day paid for its cooling six times over:
+   * the frequency-regulation reference bought 31 GWh a year to deliver 16, a round trip of 52%
+   * against a conversion chain that is 87% efficient end to end.
+   */
+  const at = (cyclesPerDay: number) => sizeSystem({
+    ...defaultSizingInput('energy-arbitrage'), powerMW: 5, durationH: 2, cyclesPerDay,
+    daysPerYear: 365, augmentation: 'none',
+  });
+
+  it('gets closer to the conversion chain the more the plant is used, never past it', () => {
+    let previous = 0;
+    for (const cyclesPerDay of [1, 2, 4, 6]) {
+      const s = at(cyclesPerDay), y = s.years[1];
+      const roundTrip = y.deliveredMWh / y.chargeMWh;
+      // The conversion chain is the ceiling; auxiliaries are the only thing below it.
+      expect(roundTrip, `${cyclesPerDay} cycles a day`).toBeLessThanOrEqual(s.rteAc + 1e-9);
+      // A fixed daily load spread over more cycles costs each of them less, so the round trip
+      // improves with use. It used to move the other way, and reached 52% at six cycles a day.
+      expect(roundTrip, `${cyclesPerDay} cycles a day`).toBeGreaterThan(previous);
+      previous = roundTrip;
+    }
+    // By six cycles a day the auxiliaries are a few points, not a third.
+    expect(previous).toBeGreaterThan(at(6).rteAc - 0.1);
+  });
+
+  it('spends the same auxiliary energy a year however often the plant cycles', () => {
+    const annualAux = (cyclesPerDay: number) => {
+      const s = at(cyclesPerDay), y = s.years[1];
+      // What the plant bought, less what the conversion chain alone would have needed.
+      return y.chargeMWh - y.deliveredMWh / s.rteAc;
+    };
+    const perUnit = (cyclesPerDay: number) => annualAux(cyclesPerDay) / at(cyclesPerDay).units;
+    const once = perUnit(1);
+    for (const cyclesPerDay of [2, 4, 6]) {
+      expect(perUnit(cyclesPerDay) / once, `${cyclesPerDay} cycles a day against one`).toBeCloseTo(1, 1);
+    }
+  });
+
+  it('does not buy a plant more enclosures for cycling more often', () => {
+    // Energy per cycle is what sets the fleet, and that does not change with the duty cycle;
+    // ageing does, and augmentation is what answers it.
+    const units = [1, 2, 4, 6].map(c => at(c).units);
+    expect(new Set(units).size, `unit counts were ${units.join(', ')}`).toBe(1);
+  });
+
+  it('still charges a standby plant a full day of auxiliaries for its rare discharge', () => {
+    // Below one cycle a day the share is capped at a day's worth: the auxiliaries on the days a
+    // standby plant never discharges are not that discharge's to bear.
+    const rare = sizeSystem({ ...defaultSizingInput('backup-power'), cyclesPerDay: 0.05 });
+    const daily = sizeSystem({ ...defaultSizingInput('backup-power'), cyclesPerDay: 1 });
+    expect(rare.day1UsableMWh / rare.units).toBeCloseTo(daily.day1UsableMWh / daily.units, 6);
   });
 });
