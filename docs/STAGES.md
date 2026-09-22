@@ -62,6 +62,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | Every project carries an owner, whichever path created it | `src/platform/projects.ts` | unit tests |
 | A quotation moves only through the lifecycle, never by setting a status | `src/app/pages/QuoteDetail.tsx` | browser walkthrough |
 | Changing currency converts amounts, never relabels them | `src/quoting/quote.ts` | unit tests |
+| Every quotation line multiplies out: quantity × rate is the amount printed | `src/catalog/pricing.ts`, `src/quoting/quote.ts` | unit tests |
 | A customer's stage advances with the work and never retreats | `src/platform/stages.ts` | unit tests |
 | Only the demonstration workspace is seeded | `src/platform/auth.tsx` | code; needs a live signup |
 | A customer sees only their own records | `src/platform/workspace.tsx`, `firestore.rules` | rules tests |
@@ -94,7 +95,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 Baseline commands:
 
 ```bash
-npm run test        # 267 unit tests
+npm run test        # 273 unit tests
 npm run test:rules  # 41 Firestore rules tests, against the emulator
 npm run build       # static export
 ```

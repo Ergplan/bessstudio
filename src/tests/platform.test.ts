@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { cells, enclosures, packSpecs, pcsUnits, byId, cellOf, packOf, enclosureEnergyKWh, enclosureCellCount, enclosureStrings, packEnergyKWh } from '../catalog/products';
-import { currencies, defaultPriceBook, defaultLandedCost, landedCost, localRate, offerPcsInrPerKW, formatMoney, convert } from '../catalog/pricing';
+import { atRate, currencies, defaultPriceBook, defaultLandedCost, landedCost, localRate, offerPcsInrPerKW, formatMoney, convert } from '../catalog/pricing';
 import { applications, application } from '../sizing/applications';
 import {
   defaultSizingInput, sizeSystem, normaliseSizingInput, retentionAt, retentionFromTable,
@@ -242,7 +242,8 @@ describe('quotation build-up', () => {
     expect(factor).toBeGreaterThan(1);
     const lines = buildQuoteLines(sizing, finance, 'USD', defaultPriceBook);
     const battery = lines.find(l => l.id === 'battery')!, cost = finance.lines.find(l => l.id === 'battery')!;
-    expect(battery.unitPrice).toBeCloseTo(cost.unitCostUsd * factor * localRate(defaultPriceBook, 'USD'), 6);
+    // The rate is carried at the precision the document prints it, so the line multiplies out.
+    expect(battery.unitPrice).toBe(atRate(cost.unitCostUsd * factor * localRate(defaultPriceBook, 'USD'), 'USD'));
     expect(JSON.stringify(lines)).not.toContain('margin');
   });
 
@@ -572,7 +573,7 @@ describe('offer document', () => {
     expect(localRate({ ...book, costingMode: 'direct' }, 'INR')).toBe(currencies.INR.perUsd);
     const battery = quote.lines.find(l => l.id === 'battery')!;
     const perUnitUsd = finance.lines.find(l => l.id === 'battery')!.unitCostUsd;
-    expect(battery.unitPrice).toBeCloseTo(perUnitUsd * uplift(finance) * book.landed.exchangeRateInrPerUsd, 4);
+    expect(battery.unitPrice).toBe(atRate(perUnitUsd * uplift(finance) * book.landed.exchangeRateInrPerUsd, quote.currency));
   });
 
   it('reconciles the per-enclosure build-up with the order value on the same page', () => {
@@ -588,7 +589,10 @@ describe('offer document', () => {
     // Anything outside the landed build-up — here the transformers — is carried as its own row, so
     // the three parts add up to the subtotal the customer sees.
     const other = quote.lines.filter(l => !l.optional && l.id !== 'battery' && l.id !== 'pcs').reduce((s, l) => s + l.total, 0);
-    expect(enclosures + pcs + other).toBeCloseTo(quote.subtotal, 2);
+    // The build-up is recomputed here at full precision while the order value is the sum of the
+    // printed lines, each held at the rate the document shows. They may differ by the rounding of
+    // those few lines and no more — pennies against hundreds of millions.
+    expect(Math.abs(enclosures + pcs + other - quote.subtotal)).toBeLessThan(10);
     expect(other).toBeGreaterThan(0);
     expect(quote.total).toBeCloseTo(quote.subtotal - quote.discount + quote.freight + quote.tax, 6);
 
@@ -605,7 +609,7 @@ describe('offer document', () => {
       ...book.landed, basicPriceUsdPerKWh: book.landed.basicPriceUsdPerKWh * soFactor,
       pcsCostInrPerUnit: book.landed.pcsCostInrPerUnit * soFactor, pcsCostInrPerKW: book.landed.pcsCostInrPerKW * soFactor,
     }, soFinance.landed!.kWh, soFinance.landed!.ratedKW);
-    expect(supplyOnly.units * (soSell.deliveredInr + soSell.pcsInr)).toBeCloseTo(soQuote.subtotal, 2);
+    expect(Math.abs(supplyOnly.units * (soSell.deliveredInr + soSell.pcsInr) - soQuote.subtotal)).toBeLessThan(10);
   });
 
   it('builds plant configuration, the energy schedule and its totals from the sizing', () => {

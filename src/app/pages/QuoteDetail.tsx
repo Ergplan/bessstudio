@@ -16,7 +16,7 @@ import { approvalModeOf, can, customerStatusLabels, isCustomerRole, type Quote }
 import { applyAction, availableActions, isEditable } from '../../quoting/lifecycle';
 import { Financial, useFinancialAccess } from '../components/Gate';
 import { addCustomLine, convertQuote, quoteTotals, removeLine, reviseQuote } from '../../quoting/quote';
-import { currencies, formatMoney, type Currency } from '../../catalog/pricing';
+import { atRate, currencies, formatMoney, type Currency } from '../../catalog/pricing';
 
 type Tab = 'commercial' | 'scope' | 'content' | 'offer' | 'proposal';
 
@@ -68,7 +68,7 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
     const lines = quote.lines.map(l => {
       if (l.id !== id) return l;
       const quantity = num(changes.quantity, l.quantity), unitPrice = num(changes.unitPrice, l.unitPrice);
-      return { ...l, ...changes, quantity, unitPrice, total: quantity * unitPrice };
+      return { ...l, ...changes, quantity, unitPrice, total: atRate(quantity * unitPrice, quote.currency) };
     });
     patch({ lines });
   };

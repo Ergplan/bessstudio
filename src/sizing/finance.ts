@@ -44,7 +44,7 @@ export function costLines(sizing: SizingResult, pb: PriceBook): CostLine[] {
         `FOB $${pb.landed.basicPriceUsdPerKWh}/kWh + ${pb.landed.oceanFreightPct}% freight + ${pb.landed.customsDutyPct}% duty + ${pb.landed.inlandClearancePct}% clearance`),
       pb.landed.pcsBasis === 'per-enclosure'
         ? line('pcs', 'equipment', `${sizing.pcs.model} power conversion system`, sizing.units, 'enclosure', landed.pcsInr / fx,
-            `One converter allowance per enclosure · ${sizing.pcs.approvedVendors.slice(0, 3).join(', ')}`)
+            `One converter allowance per enclosure; ${sizing.pcsCount} × ${sizing.pcs.ratedKW} kW installed · ${sizing.pcs.approvedVendors.slice(0, 3).join(', ')}`)
         : line('pcs', 'equipment', `${sizing.pcs.model} power conversion system`, sizing.pcsCount * sizing.pcs.ratedKW, 'kW', pb.landed.pcsCostInrPerKW / fx,
             `${sizing.pcsCount} × ${sizing.pcs.ratedKW} kW · ${sizing.pcs.approvedVendors.slice(0, 3).join(', ')}`),
     );

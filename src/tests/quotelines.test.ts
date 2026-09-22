@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { addCustomLine, convertQuote, quoteTotals, removeLine } from '../quoting/quote';
-import { currencies, defaultPriceBook, localRate } from '../catalog/pricing';
+import { addCustomLine, buildQuoteLines, convertQuote, quoteTotals, removeLine } from '../quoting/quote';
+import { atRate, currencies, defaultPriceBook, localRate } from '../catalog/pricing';
+import { defaultSizingInput, sizeSystem } from '../sizing/engine';
+import { evaluateFinance } from '../sizing/finance';
 import type { Quote, QuoteLine } from '../platform/types';
 
 const line = (over: Partial<QuoteLine> = {}): QuoteLine => ({
@@ -61,10 +63,13 @@ describe('changing the currency', () => {
     const q = quote([line({ unitPrice: 100, total: 200 })], { currency: 'INR', freight: 1000 });
     const usd = convertQuote(q, 'USD', pb);
     expect(usd.currency).toBe('USD');
-    expect(usd.lines[0].unitPrice).toBeCloseTo(100 / rate, 9);
-    expect(usd.lines[0].total).toBeCloseTo(200 / rate, 9);
+    // Rates are carried at the precision the document prints, so a converted line lands on the
+    // nearest cent rather than on a fraction of one.
+    expect(usd.lines[0].unitPrice).toBeCloseTo(100 / rate, 2);
+    expect(usd.lines[0].total).toBeCloseTo(200 / rate, 2);
+    expect(usd.lines[0].total).toBe(usd.lines[0].unitPrice * usd.lines[0].quantity);
     expect(usd.freight).toBeCloseTo(1000 / rate, 9);
-    expect(usd.total).toBeCloseTo(q.total / rate, 6);
+    expect(usd.total).toBeCloseTo(q.total / rate, 1);
   });
 
   it('is the bug this replaces: the number must not survive the symbol change', () => {
@@ -75,7 +80,11 @@ describe('changing the currency', () => {
   it('round-trips back to where it started', () => {
     const q = quote([line({ unitPrice: 12345.67, total: 24691.34 })], { currency: 'INR', freight: 987 });
     const back = convertQuote(convertQuote(q, 'USD', pb), 'INR', pb);
-    expect(back.total).toBeCloseTo(q.total, 6);
+    // Money stored at the precision it is printed cannot round-trip exactly — a rupee through a
+    // cent and back is a rupee either side of where it started, and a quotation that multiplies
+    // out is worth more than one that survives an imaginary round trip.
+    expect(back.total).toBeCloseTo(q.total, -1);
+    expect(Math.abs(back.total - q.total)).toBeLessThan(q.lines.length * rate);
     expect(back.freight).toBeCloseTo(q.freight, 6);
     expect(back.currency).toBe('INR');
   });
@@ -98,5 +107,48 @@ describe('changing the currency', () => {
     const recomputed = quoteTotals(usd.lines, usd.discountPct, usd.taxPct, usd.freight);
     expect(usd.total).toBeCloseTo(recomputed.total, 9);
     expect(usd.subtotal).toBeCloseTo(recomputed.subtotal, 9);
+  });
+});
+
+describe('a quotation that multiplies out', () => {
+  // A procurement officer checks quantity times rate against the amount beside it. If the document
+  // carries a rate to more precision than it prints, twelve containers at a rate ending .33 come
+  // out four rupees short of their own line total and the whole offer is queried.
+  const multipliesOut = (lines: { quantity: number; unitPrice: number; total: number }[], where: string) => {
+    for (const l of lines) {
+      expect(l.total, `${where}: ${l.quantity} x ${l.unitPrice} should be ${l.total}`)
+        .toBeCloseTo(l.quantity * l.unitPrice, 6);
+    }
+  };
+
+  it('holds for every line as built, in every currency', () => {
+    const sizing = sizeSystem({ ...defaultSizingInput(), powerMW: 10, durationH: 4 });
+    const finance = evaluateFinance(sizing, defaultPriceBook);
+    for (const currency of ['INR', 'USD', 'EUR', 'GBP', 'AED'] as const) {
+      const lines = buildQuoteLines(sizing, finance, currency, defaultPriceBook);
+      multipliesOut(lines, currency);
+      // and each rate is printed exactly: no hidden fractions of a rupee or a cent
+      for (const l of lines) expect(l.unitPrice, `${currency} rate`).toBe(atRate(l.unitPrice, currency));
+    }
+  });
+
+  it('still holds after the currency is changed', () => {
+    const sizing = sizeSystem({ ...defaultSizingInput(), powerMW: 5, durationH: 2 });
+    const finance = evaluateFinance(sizing, defaultPriceBook);
+    const lines = buildQuoteLines(sizing, finance, 'INR', defaultPriceBook);
+    const q = { ...quote(lines, { currency: 'INR' as const }), lines };
+    for (const to of ['USD', 'EUR', 'AED'] as const) {
+      const converted = convertQuote(q, to, defaultPriceBook);
+      multipliesOut(converted.lines, `after converting to ${to}`);
+    }
+  });
+
+  it('adds its lines to the subtotal it prints', () => {
+    const sizing = sizeSystem({ ...defaultSizingInput(), powerMW: 10, durationH: 4 });
+    const finance = evaluateFinance(sizing, defaultPriceBook);
+    const lines = buildQuoteLines(sizing, finance, 'INR', defaultPriceBook);
+    const totals = quoteTotals(lines, 0, 0, 0);
+    const byHand = lines.filter(l => !l.optional).reduce((s, l) => s + l.quantity * l.unitPrice, 0);
+    expect(totals.subtotal).toBeCloseTo(byHand, 6);
   });
 });

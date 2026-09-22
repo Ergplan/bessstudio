@@ -110,6 +110,19 @@ export const localRate = (pb: PriceBook, currency: Currency) =>
   pb.costingMode === 'landed-import' ? pb.landed.exchangeRateInrPerUsd : currencies[currency].perUsd;
 export const toLocal = (amountUsd: number, pb: PriceBook, currency: Currency) => amountUsd * localRate(pb, currency);
 
+/**
+ * A rate as it will be printed.
+ *
+ * A quotation has to multiply out. Carrying a unit price to full precision and rounding it only
+ * for display gives a document where quantity times rate does not equal the amount beside it —
+ * twelve containers at a rate ending .33 printed as a whole rupee came out four rupees short of
+ * its own line total, which is the first thing a procurement officer checks.
+ */
+export const atRate = (amount: number, currency: Currency) => {
+  const step = 10 ** currencies[currency].decimals;
+  return Math.round(amount * step) / step;
+};
+
 /** The minus sign leads the symbol, so a negative cash flow reads as −$1.2 M rather than $-1.2 M. */
 export function formatMoney(amount: number, currency: Currency, compact = false) {
   const c = currencies[currency], sign = amount < 0 ? '\u2212' : '', abs = Math.abs(amount);
