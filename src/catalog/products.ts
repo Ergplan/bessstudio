@@ -162,5 +162,7 @@ export const enclosureContinuousA = (enc: EnclosureSpec) => packOf(enc).continuo
 /** Discharge rate the pack BMS allows, expressed as a C-rate on the system's own energy. */
 export const enclosureCRate = (enc: EnclosureSpec) => {
   const pack = packOf(enc);
-  return pack.continuousA / cellOf(pack).ah;
+  return pack.continuousA / packAh(pack);
 };
+/** Capacity of one pack, Ah: its cell's capacity times however many sit in parallel. */
+export const packAh = (spec: PackSpec) => cellOf(spec).ah * spec.parallel;

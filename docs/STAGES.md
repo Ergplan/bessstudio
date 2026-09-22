@@ -69,6 +69,10 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 | A role cannot be minted — invitation names it, or it is `customer` | `firestore.rules` | rules tests |
 | Audit trail append-only, under the writer's own name | `firestore.rules` | rules tests |
 | Sizing reproduces the supplied workbooks | `src/sizing/`, `src/catalog/pricing.ts` | 103 unit tests |
+| Every catalogue figure agrees with the cell it is built from | `src/catalog/products.ts` | first-principles audit |
+| Energy is conserved: charge covers discharge and the losses | `src/sizing/engine.ts` | first-principles audit |
+| NPV, IRR and LCOS mean what they say | `src/sizing/finance.ts` | first-principles audit |
+| The studio geometry is the sum of its stated allowances | `src/domain/model.ts` | first-principles audit |
 | The studio checks against the project's converter, not a placeholder | `src/platform/studioBridge.ts` | unit tests |
 | A studio lesson reads the live model, never fixed copy | `src/domain/learn.ts`, `src/domain/tour.ts` | unit tests |
 | Every design-review finding has an explanation | `src/domain/learn.ts` | unit test reads the codes out of the model |
@@ -90,7 +94,7 @@ The invariants every stage inherits. Breaking one reopens the stage that broke i
 Baseline commands:
 
 ```bash
-npm run test        # 221 unit tests
+npm run test        # 267 unit tests
 npm run test:rules  # 41 Firestore rules tests, against the emulator
 npm run build       # static export
 ```
