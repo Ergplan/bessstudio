@@ -80,7 +80,7 @@ export function SelectInput<T extends string>({ label, value, options, onChange,
 }
 
 /** Numeric input that only commits a value inside the allowed range, so a half-typed number never reaches the model. */
-export function NumberInput({ label, value, onChange, min = 0, max = 1e9, step = 1, unit, hint }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number; step?: number; unit?: string; hint?: string }) {
+export function NumberInput({ label, value, onChange, min = 0, max = 1e9, step = 1, unit, hint, disabled }: { label: string; value: number; onChange: (n: number) => void; min?: number; max?: number; step?: number; unit?: string; hint?: string; disabled?: boolean }) {
   const [draft, setDraft] = useState(String(value));
   const [error, setError] = useState('');
   useEffect(() => setDraft(String(value)), [value]);
@@ -92,7 +92,7 @@ export function NumberInput({ label, value, onChange, min = 0, max = 1e9, step =
   return (
     <Field label={label} hint={hint} error={error}>
       <div className="suffix">
-        <input type="number" value={draft} min={min} max={max} step={step} aria-label={label} aria-invalid={!!error}
+        <input type="number" value={draft} min={min} max={max} step={step} disabled={disabled} aria-label={label} aria-invalid={!!error}
           onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />
         {unit && <i>{unit}</i>}
       </div>

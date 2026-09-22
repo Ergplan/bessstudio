@@ -247,23 +247,23 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
       {tab === 'content' && (built ? (
         <div className="grid cols-3 no-print">
           <Card title="Offer header" subtitle="Shown on the cover and in every page header">
-            <TextInput label="Reference" value={built.content.reference} onChange={reference => setOffer({ reference })} />
-            <TextInput label="Title" value={built.content.title} onChange={title => setOffer({ title })} hint="For example 350 MW / 700 MWh" />
-            <TextInput label="Subtitle" value={built.content.subtitle} onChange={subtitle => setOffer({ subtitle })} />
-            <TextInput label="Configuration" value={built.content.configuration} onChange={configuration => setOffer({ configuration })} />
-            <TextInput label="Submitted to" value={built.content.submittedTo} onChange={submittedTo => setOffer({ submittedTo })} />
+            <TextInput label="Reference" value={built.content.reference} disabled={!writable} onChange={reference => setOffer({ reference })} />
+            <TextInput label="Title" value={built.content.title} disabled={!writable} onChange={title => setOffer({ title })} hint="For example 350 MW / 700 MWh" />
+            <TextInput label="Subtitle" value={built.content.subtitle} disabled={!writable} onChange={subtitle => setOffer({ subtitle })} />
+            <TextInput label="Configuration" value={built.content.configuration} disabled={!writable} onChange={configuration => setOffer({ configuration })} />
+            <TextInput label="Submitted to" value={built.content.submittedTo} disabled={!writable} onChange={submittedTo => setOffer({ submittedTo })} />
             <div className="grid cols-2" style={{ gap: 0, columnGap: 12 }}>
-              <TextInput label="Kind attention" value={built.content.attentionName} onChange={attentionName => setOffer({ attentionName })} />
-              <TextInput label="Attention email" value={built.content.attentionEmail} onChange={attentionEmail => setOffer({ attentionEmail })} />
+              <TextInput label="Kind attention" value={built.content.attentionName} disabled={!writable} onChange={attentionName => setOffer({ attentionName })} />
+              <TextInput label="Attention email" value={built.content.attentionEmail} disabled={!writable} onChange={attentionEmail => setOffer({ attentionEmail })} />
             </div>
           </Card>
 
           <Card title="Commercial header">
-            <TextInput label="Price basis" value={built.content.priceBasis} onChange={priceBasis => setOffer({ priceBasis })} />
-            <TextInput label="Manufacturer" value={built.content.manufacturer} onChange={manufacturer => setOffer({ manufacturer })} />
-            <TextInput label="Supplied through" value={built.content.suppliedThrough} onChange={suppliedThrough => setOffer({ suppliedThrough })} />
-            <TextInput label="Delivery period" value={built.content.deliveryPeriod} onChange={deliveryPeriod => setOffer({ deliveryPeriod })} />
-            <NumberInput label="Validity" value={built.content.validityDays} unit="days" min={1} max={180} onChange={validityDays => setOffer({ validityDays })} />
+            <TextInput label="Price basis" value={built.content.priceBasis} disabled={!writable} onChange={priceBasis => setOffer({ priceBasis })} />
+            <TextInput label="Manufacturer" value={built.content.manufacturer} disabled={!writable} onChange={manufacturer => setOffer({ manufacturer })} />
+            <TextInput label="Supplied through" value={built.content.suppliedThrough} disabled={!writable} onChange={suppliedThrough => setOffer({ suppliedThrough })} />
+            <TextInput label="Delivery period" value={built.content.deliveryPeriod} disabled={!writable} onChange={deliveryPeriod => setOffer({ deliveryPeriod })} />
+            <NumberInput label="Validity" value={built.content.validityDays} disabled={!writable} unit="days" min={1} max={180} onChange={validityDays => setOffer({ validityDays })} />
             <label className="field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <input type="checkbox" checked={built.content.confidential} disabled={!writable} style={{ width: 'auto' }}
                 onChange={e => setOffer({ confidential: e.target.checked })} />
@@ -274,7 +274,7 @@ export function QuoteDetail({ id: quoteId }: { id: string }) {
               onChange={v => setOffer({ coverImage: v || null })} />
             <p className="muted">
               {project
-                ? <>Open the <Link href={`/studio?project=${project.id}`}>3D studio</Link> and use “Capture for offer” to place a rendered cut-away on the cover. With no image the document draws a vector cut-away from the sizing.</>
+                ? <>Open the <Link href={`/app/studio?project=${project.id}`}>3D studio</Link> and use “Capture for offer” to place a rendered cut-away on the cover. With no image the document draws a vector cut-away from the sizing.</>
                 : 'With no image the document draws a vector cut-away from the sizing.'}
             </p>
             <button className="btn sm" disabled={!writable} onClick={() => quote && void saveQuote({ ...quote, offer: {} }, 'Offer content reset to the generated defaults.')}>
