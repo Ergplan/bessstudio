@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { brand } from '../../brand/brand';
-import { atRate, formatMoney, landedCost, localRate, type Currency } from '../../catalog/pricing';
+import { atRate, formatMoney, fromLanded, landedCost, localRate, type Currency } from '../../catalog/pricing';
 import { uplift } from '../../quoting/quote';
 import { packOf, cellOf } from '../../catalog/products';
 import type { SizingResult } from '../../sizing/engine';
@@ -125,10 +125,15 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
         pcsCostInrPerKW: priceBook.landed.pcsCostInrPerKW * factor,
       }, finance.landed.kWh, finance.landed.ratedKW)
     : null;
+  // The landed build-up is struck in rupees at the offer's own rate. Quoted in any other currency
+  // every rupee figure travels back through that rate and out at the reference rate for the
+  // currency asked for — otherwise a rupee amount is printed under a dollar heading, and the
+  // build-up stops reconciling with the order value beside it.
+  const fromInr = (inr: number) => fromLanded(inr, priceBook.landed, local);
   // The table prints the rate and the amount side by side, so the amount is computed from the rate
   // as printed. Otherwise "7 × 44,791,087" sits next to a figure two rupees away from it.
-  const perEnclosure = landed ? atRate(landed.deliveredInr, local) : 0;
-  const perPcs = landed ? atRate(landed.pcsInr, local) : 0;
+  const perEnclosure = landed ? atRate(fromInr(landed.deliveredInr), local) : 0;
+  const perPcs = landed ? atRate(fromInr(landed.pcsInr), local) : 0;
   const enclosuresTotal = sizing.units * perEnclosure;
   const pcsTotal = sizing.units * perPcs;
 
@@ -357,13 +362,13 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
                   <tr><td>Ocean freight</td><td /><td className="num">{num(landed.oceanFreightUsd)}</td><td className="num">—</td></tr>
                   <tr><td>Total CIF price</td><td /><td className="num">{num(landed.cifUsd)}</td><td className="num">—</td></tr>
                   <tr><td>Exchange rate</td><td>USD / {local}</td><td className="num">—</td><td className="num">{num(rate, 2)}</td></tr>
-                  <tr><td>CIF price in {local}</td><td /><td className="num">—</td><td className="num">{num(landed.cifInr)}</td></tr>
-                  <tr><td>Customs duty</td><td>{num(landed.customsDutyInr / landed.cifInr * 100, 1)}% of CIF</td><td className="num">—</td><td className="num">{num(landed.customsDutyInr)}</td></tr>
-                  <tr><td>Inland freight and clearance</td><td>{num(landed.inlandClearanceInr / landed.cifInr * 100, 1)}% of CIF</td><td className="num">—</td><td className="num">{num(landed.inlandClearanceInr)}</td></tr>
-                  <tr className="subtotal"><td>Delivered price — BESS enclosure</td><td /><td className="num">—</td><td className="num">{num(landed.deliveredInr)}</td></tr>
-                  <tr><td>Power conversion system</td><td>per enclosure</td><td className="num">—</td><td className="num">{num(landed.pcsInr)}</td></tr>
-                  <tr className="total"><td>Total delivered price per enclosure</td><td /><td className="num">—</td><td className="num">{num(landed.totalInr)}</td></tr>
-                  <tr className="subtotal"><td>Equivalent rate</td><td>per kWh</td><td className="num">—</td><td className="num">{num(landed.totalInrPerKWh)}</td></tr>
+                  <tr><td>CIF price in {local}</td><td /><td className="num">—</td><td className="num">{num(fromInr(landed.cifInr))}</td></tr>
+                  <tr><td>Customs duty</td><td>{num(landed.customsDutyInr / landed.cifInr * 100, 1)}% of CIF</td><td className="num">—</td><td className="num">{num(fromInr(landed.customsDutyInr))}</td></tr>
+                  <tr><td>Inland freight and clearance</td><td>{num(landed.inlandClearanceInr / landed.cifInr * 100, 1)}% of CIF</td><td className="num">—</td><td className="num">{num(fromInr(landed.inlandClearanceInr))}</td></tr>
+                  <tr className="subtotal"><td>Delivered price — BESS enclosure</td><td /><td className="num">—</td><td className="num">{num(fromInr(landed.deliveredInr))}</td></tr>
+                  <tr><td>Power conversion system</td><td>per enclosure</td><td className="num">—</td><td className="num">{num(fromInr(landed.pcsInr))}</td></tr>
+                  <tr className="total"><td>Total delivered price per enclosure</td><td /><td className="num">—</td><td className="num">{num(fromInr(landed.totalInr))}</td></tr>
+                  <tr className="subtotal"><td>Equivalent rate</td><td>per kWh</td><td className="num">—</td><td className="num">{num(fromInr(landed.totalInrPerKWh))}</td></tr>
                 </tbody>
               </table>
             ) : (
@@ -394,7 +399,7 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
                   <tr className="total"><td>Total order value</td><td className="num">{num(quote.total)}</td></tr>
                   <tr><td>In words</td><td className="num">{formatMoney(quote.total, local, true)}</td></tr>
                   <tr><td>Rate per kWh delivered</td><td className="num">{money(quote.total / (sizing.installedDcMWh * 1000))} / kWh</td></tr>
-                  {landed && <tr><td>Rate per kWh — BESS only</td><td className="num">{formatMoney(landed.deliveredInr / landed.kWh, local)} / kWh</td></tr>}
+                  {landed && <tr><td>Rate per kWh — BESS only</td><td className="num">{formatMoney(fromInr(landed.deliveredInr) / landed.kWh, local)} / kWh</td></tr>}
                 </tbody>
               </table>
 

@@ -102,13 +102,28 @@ export const defaultPriceBook: PriceBook = {
 export const convert = (amountUsd: number, to: Currency) => amountUsd * currencies[to].perUsd;
 
 /**
- * Units of the quotation currency per US dollar. Under the landed-import basis the rate quoted in
- * the build-up is the authority — converting the same offer back at a different reference rate is
- * what makes a price build-up fail to reconcile with its own order value.
+ * Units of the quotation currency per US dollar.
+ *
+ * Under the landed-import basis the rate quoted in the build-up is the authority — converting the
+ * same offer back at a different reference rate is what makes a price build-up fail to reconcile
+ * with its own order value. That rate is quoted in rupees per dollar, so it is the authority for
+ * rupee amounts only. Applying it to every currency priced a $1.58 m plant at $152 m, €152 m and
+ * AED 152 m: the same figure in every currency, because the dollar amount was being multiplied by
+ * the rupee rate and then labelled whatever the customer had asked for.
  */
 export const localRate = (pb: PriceBook, currency: Currency) =>
-  pb.costingMode === 'landed-import' ? pb.landed.exchangeRateInrPerUsd : currencies[currency].perUsd;
+  pb.costingMode === 'landed-import' && currency === 'INR' ? pb.landed.exchangeRateInrPerUsd : currencies[currency].perUsd;
 export const toLocal = (amountUsd: number, pb: PriceBook, currency: Currency) => amountUsd * localRate(pb, currency);
+
+/**
+ * A rupee figure out of a landed build-up, restated in the currency the document is quoted in.
+ *
+ * The build-up is struck in rupees at the offer's own rate, so a figure taken straight out of it
+ * and printed under a dollar or euro heading is wrong by two orders of magnitude and stops the
+ * build-up reconciling with the order value printed beside it.
+ */
+export const fromLanded = (inr: number, l: LandedCost, currency: Currency) =>
+  (currency === 'INR' ? inr : convert(inr / Math.max(l.exchangeRateInrPerUsd, 1e-6), currency));
 
 /**
  * A rate as it will be printed.

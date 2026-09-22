@@ -133,16 +133,10 @@ export function removeLine(quote: Quote, id: string): Quote {
 }
 
 /**
- * Units of `currency` per US dollar.
- *
- * `localRate` answers this only for the price book's own currency — under the landed-import basis
- * it returns the offer's rupee rate whatever it is asked about, because that is the rate the
- * build-up was struck at. Asking it about a second currency silently returns the same number,
- * which is how a conversion factor of exactly 1 gets through. For the currency the book is written
- * in, that offer rate is the authority; for any other, the reference table is.
+ * Units of `currency` per US dollar: the offer's own rupee rate for rupee amounts under a
+ * landed-import build-up, and the reference table for every other currency.
  */
-const unitsPerUsd = (pb: PriceBook, currency: Currency): number =>
-  currency === pb.currency ? localRate(pb, currency) : currencies[currency].perUsd;
+const unitsPerUsd = (pb: PriceBook, currency: Currency): number => localRate(pb, currency);
 
 /**
  * Restate a quotation in another currency.

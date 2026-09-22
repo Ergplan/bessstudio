@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addCustomLine, buildQuoteLines, convertQuote, quoteTotals, removeLine } from '../quoting/quote';
-import { atRate, currencies, defaultPriceBook, localRate } from '../catalog/pricing';
+import { addCustomLine, buildQuoteLines, convertQuote, quoteTotals, removeLine, uplift } from '../quoting/quote';
+import { atRate, currencies, defaultPriceBook, fromLanded, landedCost, localRate, type Currency } from '../catalog/pricing';
 import { defaultSizingInput, sizeSystem } from '../sizing/engine';
 import { evaluateFinance } from '../sizing/finance';
 import type { Quote, QuoteLine } from '../platform/types';
@@ -150,5 +150,64 @@ describe('a quotation that multiplies out', () => {
     const totals = quoteTotals(lines, 0, 0, 0);
     const byHand = lines.filter(l => !l.optional).reduce((s, l) => s + l.quantity * l.unitPrice, 0);
     expect(totals.subtotal).toBeCloseTo(byHand, 6);
+  });
+});
+
+describe('the same plant, quoted in any currency', () => {
+  const sizing = sizeSystem(defaultSizingInput());
+  const finance = evaluateFinance(sizing, defaultPriceBook);
+
+  /**
+   * The one invariant that matters commercially: whatever currency a document is raised in, it
+   * has to describe the same amount of money. It did not. The landed build-up quotes its rate in
+   * rupees per dollar, and that rate was applied to every currency, so a plant costing $1.58 m
+   * was quoted at $152 m, €152 m and AED 152 m — the identical figure in each, because the dollar
+   * total was being multiplied by the rupee rate and then labelled whatever was asked for.
+   */
+  it('comes to the same money whichever currency it is raised in', () => {
+    const inUsd = (c: Currency) => {
+      const lines = buildQuoteLines(sizing, finance, c, { ...defaultPriceBook, currency: c });
+      return quoteTotals(lines, 0, 0, 0).subtotal / localRate({ ...defaultPriceBook, currency: c }, c);
+    };
+    const reference = inUsd('USD');
+    // Against the cost stack it was built from, to within the cent each rate is printed to.
+    expect(reference / finance.capexUsd).toBeCloseTo(1, 4);
+    for (const c of Object.keys(currencies) as Currency[]) {
+      // Within a tenth of a percent: the only difference is rounding each rate to the precision
+      // the document prints it at.
+      expect(inUsd(c) / reference, `${c} against USD`).toBeCloseTo(1, 3);
+    }
+  });
+
+  it('keeps the rupee build-up on the offer’s own rate', () => {
+    // The offer was struck at its own rate; reconciling a rupee document against a reference
+    // table is what makes a build-up disagree with its own order value.
+    expect(localRate(defaultPriceBook, 'INR')).toBe(defaultPriceBook.landed.exchangeRateInrPerUsd);
+    expect(localRate(defaultPriceBook, 'INR')).not.toBe(currencies.INR.perUsd);
+    for (const c of ['USD', 'EUR', 'GBP', 'AUD', 'AED'] as const) {
+      expect(localRate(defaultPriceBook, c), c).toBe(currencies[c].perUsd);
+    }
+  });
+});
+
+describe('the offer’s price build-up against its own order value', () => {
+  const sizing = sizeSystem(defaultSizingInput());
+  const finance = evaluateFinance(sizing, defaultPriceBook);
+
+  /**
+   * The customer's page prints "N × per-enclosure" beside a subtotal built from the quote lines.
+   * Both are drawn from the same rupee build-up, so both have to travel to the quotation currency
+   * the same way. Taking the rupee figure straight out and printing it under a dollar heading put
+   * a ₹44.8 m enclosure on the page as $44.8 m.
+   */
+  it('restates the rupee build-up into the same money the quote lines carry', () => {
+    for (const c of Object.keys(currencies) as Currency[]) {
+      const pb = { ...defaultPriceBook, currency: c };
+      const factor = uplift(finance);
+      const landed = landedCost({ ...pb.landed, basicPriceUsdPerKWh: pb.landed.basicPriceUsdPerKWh * factor, pcsCostInrPerUnit: pb.landed.pcsCostInrPerUnit * factor, pcsCostInrPerKW: pb.landed.pcsCostInrPerKW * factor }, finance.landed!.kWh, finance.landed!.ratedKW);
+      const perEnclosure = fromLanded(landed.deliveredInr, pb.landed, c);
+      const battery = buildQuoteLines(sizing, finance, c, pb).find(l => l.id === 'battery')!;
+      expect(perEnclosure / battery.unitPrice, `${c} per enclosure`).toBeCloseTo(1, 4);
+    }
   });
 });
