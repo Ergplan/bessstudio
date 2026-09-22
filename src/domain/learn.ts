@@ -1,5 +1,6 @@
 import { source } from '../config/schema';
 import type { Model, Node } from './model';
+import type { SitePlan } from '../geometry/site';
 
 /**
  * The explanations behind the assembly.
@@ -22,6 +23,30 @@ export type Lesson = {
 };
 
 const v = (n: number, digits = 1) => `${n.toLocaleString('en', { maximumFractionDigits: digits })}`;
+
+export function siteLesson(plan: SitePlan): Lesson {
+  const s = plan.spec, units = plan.placements.filter(p => p.kind === 'container').length;
+  return {
+    title: 'The site',
+    subtitle: `${units} units · ${plan.rows} × ${plan.perRow} · ${v(plan.plot[0])} × ${v(plan.plot[1])} m`,
+    what: `One container holds ${v(s.energyMWh / Math.max(units, 1), 2)} MWh, and this project needs ${v(s.energyMWh, 2)} MWh, so it buys ${units} of them and stands them on a plot with the conversion equipment beside them. What the customer leases, fences and connects is this, not the container.`,
+    why: [
+      `The units are ${plan.sideGap} m apart shoulder to shoulder and the rows ${plan.rowGap} m apart. The side gap is separation — a thermal event in one enclosure must not propagate to its neighbour — and the row gap is an access road, because a 42-tonne container arrives on a truck and is replaced the same way.`,
+      `The field is laid out ${plan.rows} × ${plan.perRow} rather than in one long line so the plot is a shape somebody would lease. A single row of ${units} would be over ${v(units * (plan.plot[0]), 0)} m long and need a road down its whole length.`,
+      `The ${s.pcsCount} converters and ${s.transformerCount} transformers sit off the end of the field in their own bay. Keeping conversion together shortens the medium-voltage run to the point of connection, which is the expensive cable.`,
+      `The DC side stays inside each container. What leaves the converter bay is AC at ${v(s.powerMW, 2)} MW, and that is the number the grid connection is sized against.`,
+    ],
+    numbers: [
+      ['Units', `${units}`],
+      ['Installed DC energy', `${v(s.energyMWh, 2)} MWh`],
+      ['Rated power', `${v(s.powerMW, 2)} MW`],
+      ['Conversion', `${s.pcsCount} × ${s.pcsModel}`],
+      ['Transformers', s.transformerCount ? `${s.transformerCount} × ${v(s.transformerMVA, 1)} MVA` : 'None'],
+      ['Fenced plot', `${v(plan.plot[0])} × ${v(plan.plot[1])} m · ${Math.round(plan.areaM2).toLocaleString()} m²`],
+    ],
+    consequence: `Plot area moves with the unit count, not with the energy: a longer duration fills the same containers deeper, while more power needs more of them. Double-click a unit to step inside it.`,
+  };
+}
 
 export function lessonFor(model: Model, id: string): Lesson {
   const s = model.stats, d = model.dimensions;

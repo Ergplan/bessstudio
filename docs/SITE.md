@@ -570,7 +570,15 @@ capacity, string current, nominal duration. Calculated DC performance. Dimension
 controls — cold plates, dry-break ports. Protection — combiner, external PCS. Input provenance,
 including any discrepancy between sources.
 
-**Learn.** A tab that explains whatever is selected — container, string, pack, cell or ancillary:
+**Site view.** Where a project needs more than one unit, the studio lays the fleet out: containers
+in rows at 3 m separation with 6 m access roads between rows, the converters and transformers in
+their own bay off one end, and a fenced plot sized around the lot. The field is proportioned toward
+a square rather than a single long line. The explorer lists the units and the conversion kit, the
+statistics strip speaks for the fleet, and double-clicking a unit steps inside it. A unit is drawn
+as a shell, not as 4,992 cells, so a twenty-two unit site stays under a thousand boxes.
+
+**Learn.** A tab that explains whatever is selected — site, container, string, pack, cell or
+ancillary:
 what it is, the engineering reasoning in plain English, the numbers that follow from this design,
 and what moves if it changes. Every figure is read from the live model. A ladder at the foot of the
 panel moves between scales.

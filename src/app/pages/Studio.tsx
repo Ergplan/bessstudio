@@ -10,6 +10,7 @@ import { useStudio } from '../../state/store';
 import { configSchema } from '../../config/schema';
 import { sizeSystem } from '../../sizing/engine';
 import { limitsFromSizing } from '../../platform/studioBridge';
+import type { SiteSpec } from '../../geometry/site';
 import { byId, enclosures } from '../../catalog/products';
 
 // The 3D studio pulls in three.js and its own stylesheet, so it is loaded only when opened.
@@ -64,11 +65,18 @@ export function Studio() {
 
   let context = '';
   let units = 0;
+  let site: SiteSpec | null = null;
   if (project) {
     try {
       const s = sizeSystem(project.sizing);
       units = s.units;
       context = `${s.installedDcMWh.toFixed(2)} MWh DC · ${s.ratedPowerMW.toFixed(2)} MW`;
+      // Only a fleet is worth laying out; one container is the container view.
+      if (s.units > 1) site = {
+        units: s.units, pcsCount: s.pcsCount, pcsModel: s.pcs.model, pcsKW: s.pcs.ratedKW,
+        transformerCount: s.transformerCount, transformerMVA: s.transformer ? s.transformer.ratedKVA / 1000 : 0,
+        energyMWh: s.installedDcMWh, powerMW: s.ratedPowerMW,
+      };
     } catch { context = project.customerName; }
   }
 
@@ -126,7 +134,7 @@ export function Studio() {
       </div>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }} ref={canvasHost}>
         <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#5E6C79' }}>Loading the 3D assembly…</div>}>
-          <Studio3D brandName={(org?.branding.displayName ?? brand.vendorShort).toUpperCase()} brandLogo={org?.branding.logo ?? null} projectName={project?.name} unitCount={units} />
+          <Studio3D brandName={(org?.branding.displayName ?? brand.vendorShort).toUpperCase()} brandLogo={org?.branding.logo ?? null} projectName={project?.name} unitCount={units} site={site} />
         </Suspense>
       </div>
     </div>
