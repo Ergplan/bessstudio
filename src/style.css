@@ -220,7 +220,7 @@
 .app .field-note{margin:10px 0 0;padding:9px 11px;background:rgba(147,190,73,.08);border-left:2px solid rgba(147,190,73,.45);color:var(--s-muted);font-size:12.2px;line-height:1.55}
 /* The section tool sits with the other scene controls; the row wraps rather than pushing the walk
    control off the edge on a narrower canvas. */
-.app .scene-controls{flex-wrap:wrap;row-gap:8px}
+.app .scene-controls{flex-wrap:wrap;row-gap:8px;height:auto;min-height:57px;padding-top:8px;padding-bottom:8px}
 .app .axis-pick{display:inline-flex;gap:0}
 .app .axis-pick button{padding:6px 10px;border-radius:0;margin-left:-1px;font-family:var(--s-mono);font-size:11px;letter-spacing:.06em}
 .app .axis-pick button:first-child{margin-left:0}
