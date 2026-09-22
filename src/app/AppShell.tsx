@@ -93,7 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {mode === 'firestore' ? <Cloud size={12} /> : <HardDrive size={12} />}{mode === 'firestore' ? 'Cloud' : 'Demo'}
           </span>
           <div className="avatar" title={`${user?.displayName} · ${user?.email}`}>{initials}</div>
-          <button className="btn ghost sm" onClick={() => void signOutUser()} title="Sign out"><LogOut size={15} /></button>
+          <button className="btn ghost sm" onClick={() => void signOutUser()} aria-label="Sign out" title="Sign out"><LogOut size={15} /></button>
         </header>
         <div className={bleed ? 'page bleed' : 'page'}>
           {!bleed && <VerifyBanner />}
