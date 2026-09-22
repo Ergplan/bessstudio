@@ -544,3 +544,38 @@ describe('explaining the headroom', () => {
     expect((s.units - 1) * perUnit).toBeLessThan(s.requiredUsableMWh);
   });
 });
+
+describe('the converter against the string it is wired to', () => {
+  /**
+   * The moment a battery plant is hardest to build is the bottom of its DC window: the same
+   * kilowatts have to arrive as current, and the converter's DC limit decides whether the plant
+   * can still hold its rating there. Because the fleet takes one converter for every `ratedKW` it
+   * has to deliver, no converter is ever asked for more than its own rating — which makes this a
+   * property of each catalogue entry rather than of any particular plant, and the one place it
+   * can go wrong is a data sheet that was never checked against itself.
+   */
+  it('lets every converter in the catalogue reach its own rating at its own minimum voltage', () => {
+    for (const pcs of pcsUnits) {
+      const needed = pcs.ratedKW * 1000 / (pcs.dcMinV * pcs.efficiency);
+      expect(needed, `${pcs.model} needs ${needed.toFixed(0)} A at ${pcs.dcMinV} V`).toBeLessThanOrEqual(pcs.dcMaxA);
+    }
+  });
+
+  it('never asks a converter in a sized plant for more than its DC limit', () => {
+    for (const enclosure of enclosures) for (const pcs of pcsUnits) {
+      const s = sizeSystem({ ...defaultSizingInput(), powerMW: 5, durationH: 2, enclosureId: enclosure.id, pcsId: pcs.id });
+      // The converter will not operate below its own minimum, so that is the worst case it sees.
+      const workingMinV = Math.max(s.enclosure.dcMinV, s.pcs.dcMinV);
+      const perConverterA = s.ratedPowerMW * 1e6 / (workingMinV * s.pcs.efficiency) / s.pcsCount;
+      expect(perConverterA, `${enclosure.model} + ${pcs.model}`).toBeLessThanOrEqual(s.pcs.dcMaxA * 1.001);
+    }
+  });
+
+  it('says so when the string drops below the voltage the converter can work at', () => {
+    const low = sizeSystem({ ...defaultSizingInput(), enclosureId: 'enc-5mwh-alt', pcsId: 'pcs-2507' });
+    expect(low.enclosure.dcMinV).toBeLessThan(low.pcs.dcMinV);
+    expect(low.warnings.some(w => w.code === 'dc-window-low')).toBe(true);
+    const matched = sizeSystem({ ...defaultSizingInput(), enclosureId: 'enc-5mwh-20ft', pcsId: 'pcs-2507' });
+    expect(matched.warnings.some(w => w.code === 'dc-window-low')).toBe(false);
+  });
+});

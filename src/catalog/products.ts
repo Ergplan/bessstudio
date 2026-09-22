@@ -138,7 +138,9 @@ export const pcsUnits: PcsSpec[] = [
   { id: 'pcs-1725', model: 'PCS 1725 kW', ratedKW: 1725, dcMinV: 900, dcMaxV: 1500, dcMaxA: 2200, efficiency: 0.985, acV: 630, topology: 'central', approvedVendors: ['Sungrow', 'Sineng', 'Newen'], provenance: 'indicative' },
   { id: 'pcs-630', model: 'PCS 630 kW', ratedKW: 630, dcMinV: 700, dcMaxV: 1500, dcMaxA: 1000, efficiency: 0.985, acV: 400, topology: 'string', approvedVendors: ['Innovance', 'Sungrow'], provenance: 'indicative' },
   { id: 'pcs-125', model: 'PCS 125 kW', ratedKW: 125, dcMinV: 600, dcMaxV: 1000, dcMaxA: 240, efficiency: 0.98, acV: 400, topology: 'string', approvedVendors: ['Innovance', 'BEELECTRIQ'], provenance: 'supplied' },
-  { id: 'pcs-5', model: 'PCS 5 kW hybrid', ratedKW: 5, dcMinV: 40, dcMaxV: 60, dcMaxA: 120, efficiency: 0.97, acV: 230, topology: 'hybrid', approvedVendors: ['Innovance'], provenance: 'indicative' },
+  // 5 kW at the bottom of a 40 V window is 129 A after conversion losses, so a 120 A DC limit
+  // could not have delivered the rating it was sold at.
+  { id: 'pcs-5', model: 'PCS 5 kW hybrid', ratedKW: 5, dcMinV: 40, dcMaxV: 60, dcMaxA: 140, efficiency: 0.97, acV: 230, topology: 'hybrid', approvedVendors: ['Innovance'], provenance: 'indicative' },
 ];
 
 export const transformers: TransformerSpec[] = [
