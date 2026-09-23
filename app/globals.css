@@ -351,6 +351,22 @@ h2.project-title{border-color:transparent}
   font-family:var(--mono)}
 .cascade-check b{color:var(--ink);font-family:var(--font)}
 
+/* The rungs a container actually comes in, and what each would do with this duty. */
+.ladder{margin-top:16px;padding-top:14px;border-top:1px solid var(--line-soft)}
+.ladder-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--slate-light);margin:0 0 4px}
+.ladder-lede{margin:0 0 10px;font-size:12px;line-height:1.65;color:var(--slate);max-width:80ch}
+table.ladder-t{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+table.ladder-t th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--slate-light);
+  font-weight:500;text-align:right;padding:0 0 5px}
+table.ladder-t th:first-child,table.ladder-t td:first-child{text-align:left}
+table.ladder-t td{padding:6px 0 6px 12px;border-top:1px solid var(--line-soft);font-size:12.5px;text-align:right}
+table.ladder-t td:first-child{padding-left:0}
+table.ladder-t tr.ours td{background:rgba(147,190,73,.07)}
+table.ladder-t tr.ours td:first-child b{color:var(--ink)}
+.ladder-tag{display:inline-block;margin-left:7px;font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--slate-light);border:1px solid var(--line);border-radius:3px;padding:1px 5px;vertical-align:1px}
+.ladder-src{display:block;font-size:10.5px;color:var(--slate-light);line-height:1.45;margin-top:1px;max-width:44ch}
+
 /* The derivation from a requirement to a quantity of equipment: two chains, a verdict, the causes. */
 .rationale-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--slate-light);margin:0 0 6px}
 table.rationale{width:100%;border-collapse:collapse}

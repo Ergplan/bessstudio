@@ -1504,11 +1504,51 @@ conservative side of the ohmic floor in all six validation cases, but the headro
 third; `docs/VALIDATION.md` now derives the tightest case and its margin from the run instead of
 asserting a crossover in prose.
 
-**What was not done, and why.** The 6.26 MWh container is the real fix for the granularity that
-makes a 5 MWh duty buy two 5.015 MWh containers — but it was not added to the catalogue. There is no
+**"Containers are not made to order."** Put that way, the granularity question stops being about
+rounding and becomes answerable: a 20 ft container is a standard product, the ladder moves when the
+cell generation moves, and the only honest answer to *why does 5 MWh buy two containers* is what
+every rung on that ladder would do with the same duty. `src/sizing/ladder.ts` computes it from the
+same cascade that sized the plant — `src/tests/ladder.test.ts` holds the two to the same
+kilowatt-hour — and it is on screen under the cascade, unpriced, with the catalogue rung marked as
+the only quotable one.
+
+**It also overturns what this register said one section ago.** The claim that the 6.26 MWh container
+was *"the real fix for the granularity"* is wrong, and the ladder is how that was found. At 1 MW /
+5 MWh:
+
+| Standard size | Reaches the meter | Units | Installed | Beyond the duty |
+| --- | ---: | ---: | ---: | ---: |
+| 3.44 MWh | 2.36 MWh | 3 | 10.32 MWh | 41% |
+| 5.0 MWh | 3.43 MWh | 2 | 10.00 MWh | 37% |
+| **5.016 MWh — ours** | **3.44 MWh** | **2** | **10.03 MWh** | **38%** |
+| 6.26 MWh | 4.29 MWh | 2 | 12.52 MWh | 72% |
+| 6.9 MWh | 4.73 MWh | 2 | 13.80 MWh | 89% |
+
+A single container would have to carry **7.29 MWh** of nameplate to deliver 5 MWh at the connection
+in year one — about a fifth of a nameplate goes to the usable window, the depth of discharge, the
+path and the auxiliaries before anything reaches a meter. That is larger than anything anyone lists.
+Every larger rung still needs two units and leaves *more* nameplate standing idle, not less: the
+6.9 MWh container would deliver 89% more than the duty asks for, against 38% for ours. So two
+containers is not waste at this size, and buying a bigger box would have been a worse answer.
+
+The ladder does earn its keep higher up: at 5 MW / 25 MWh the 6.26 MWh rung is six units at 3% spare
+against eight of ours at 10%. That is where a price for the current generation would be worth
+asking for.
+
+**What was not done, and why.** The 6.26 MWh container is still not in the catalogue. There is no
 price for it here, and a unit entered at an invented price would move every quotation in the studio
 on a number nobody supplied. The same rule that keeps the 8 000-cycle figure in place keeps this out
-until a price and a data sheet arrive.
+until a price and a data sheet arrive — but it can now be *named* on screen without being sold,
+which was the useful half of adding it.
+
+**Four vendor sites, four refusals.** `catl.com`, `reptbattero.com`, `en.highstar.com` and
+`sunwodaenergy.com` are all blocked by this environment's network policy, along with the reseller
+listings and the one PDF copy of a Sunwoda data sheet that search turned up. Web search is the only
+channel that works, which means every manufacturer figure in the register is `secondary` and none of
+it is a data sheet. Highstar is an approved vendor on our own 314 Ah cell and its product page
+cannot be read from here. Three independent manufacturers now publish 10 000–12 000 cycles for this
+cell format against the 8 000 our schedule carries; that is a question for the supplier, not a
+change to make from search results.
 
 ### Still open for a decision
 

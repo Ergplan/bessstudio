@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { energyCascade, type Cascade, type CascadeStep } from '../../sizing/cascade';
+import { containerLadder, type LadderRung } from '../../sizing/ladder';
 import type { SizingResult } from '../../sizing/engine';
 import * as units from '../../domain/units';
 import { Card } from './ui';
@@ -73,7 +74,83 @@ export function EnergyCascade({ sizing }: { sizing: SizingResult }) {
         {' '}The arithmetic is one line. The five factors above it are the whole argument — each is
         settled by somebody other than this studio, and <b>Who settles this</b> on any step says who.
       </p>
+
+      {sizing.enclosure.family === 'container' && <ContainerLadder sizing={sizing} />}
     </Card>
+  );
+}
+
+/**
+ * "Would a bigger container have done it in one?"
+ *
+ * The question every buyer asks when a 5 MWh duty comes back as two containers, and the studio was
+ * answering it with a sentence about rounding. Containers are not made to order — they come in the
+ * rungs the cell generation gives them — so the answer is the ladder: what every size on the market
+ * would do with this same duty, and what a single container would have to carry to do it alone.
+ * Often that number is above every rung that exists, and then two units is not waste, it is the
+ * shape of the product.
+ */
+function ContainerLadder({ sizing }: { sizing: SizingResult }) {
+  const ladder = containerLadder(sizing);
+  const need = ladder.singleUnitNeedsKWh;
+  const ours = ladder.rungs.find(r => r.isCatalogue);
+  const biggest = ladder.rungs[ladder.rungs.length - 1];
+
+  return (
+    <div className="ladder">
+      <p className="ladder-head">Containers are not made to order</p>
+      <p className="ladder-lede">
+        A 20 ft container is a standard product, and the ladder moves when the cell generation moves.
+        This duty needs <b>{units.energyText(ladder.requiredKWh / 1000)}</b> usable at year{' '}
+        {ladder.atYear}, so one container would have to carry{' '}
+        <b>{units.energyText(need / 1000)}</b> of nameplate to do it alone —{' '}
+        {ladder.singleUnitAtKWh === null
+          ? <>more than the largest size anyone lists ({biggest.label}). Two units is not rounding
+            waste here; it is what the market builds.</>
+          : <>which the {(ladder.singleUnitAtKWh / 1000).toFixed(2)} MWh rung meets.</>}
+        {' '}Nothing below is priced: only the catalogue rung can be quoted.
+      </p>
+      <table className="ladder-t">
+        <thead>
+          <tr>
+            <th>Standard size</th><th>Reaches the meter</th><th>Units</th>
+            <th>Installed</th><th>Beyond the duty</th>
+          </tr>
+        </thead>
+        <tbody>
+          {ladder.rungs.map(r => <Rung key={r.nameplateKWh} rung={r} />)}
+        </tbody>
+      </table>
+      {ours && ladder.rungs.some(r => r.nameplateKWh > ours.nameplateKWh && r.units >= ours.units) && (
+        <p className="cascade-check" style={{ marginTop: 10 }}>
+          Note the rungs above ours that still need {ours.units}: a larger container does not always
+          buy fewer of them, and when it does not it is simply more nameplate standing idle. That is
+          the test a bigger box has to pass before it is worth asking for a price.
+        </p>
+      )}
+    </div>
+  );
+}
+
+const EVIDENCE: Record<LadderRung['evidence'], string> = {
+  catalogue: 'quotable',
+  published: 'published',
+  announced: 'announced',
+};
+
+function Rung({ rung }: { rung: LadderRung }) {
+  return (
+    <tr className={rung.isCatalogue ? 'ours' : undefined}>
+      <td>
+        <b>{rung.label}</b>
+        <span className="ladder-tag">{EVIDENCE[rung.evidence]}</span>
+        <span className="ladder-src">{rung.publisher}</span>
+      </td>
+      <td>{units.energyText(rung.deliverableKWh / 1000)}</td>
+      <td>{rung.units}</td>
+      <td>{units.energyText(rung.installedKWh / 1000)}</td>
+      <td>{(rung.sparePortion * 100).toFixed(0)}%</td>
+    </tr>
   );
 }
 

@@ -115,6 +115,41 @@ export const externalSources: ExternalSource[] = [
     ],
   },
   {
+    id: 'sunwoda-cells',
+    publisher: 'Sunwoda',
+    document: 'Energy storage cells — product page',
+    url: 'https://www.sunwodaenergy.com/energy-storage-cells/battery-cells.html',
+    retrieval: 'secondary',
+    retrievalNote: 'Host blocked by the environment network policy (403 to CONNECT), as are the reseller listings and the one PDF copy found. Figures from published summaries.',
+    accessed: '2026-09-23',
+    figures: [
+      {
+        label: '314 Ah cell life and efficiency',
+        value: '> 12 000 cycles, 95%+ round-trip efficiency, 180 Wh/kg, 395 Wh/L',
+        bearsOn: 'cell-lfp-314',
+        verdict: 'open',
+        note: 'A third manufacturer quoting well above our supplied 8 000 cycles for the same 314 Ah format. Three sources now agree the format is published at 10 000 to 12 000; ours stays at 8 000 because it is the figure the schedule we quote from actually carries, and lifting it would improve every retention, augmentation and price in the studio on somebody else\'s cell.',
+      },
+      {
+        label: '625 Ah "Xinyue" cell for 2000 V systems',
+        value: '625 Ah, > 430 Wh/L, built for 2000 V system voltage',
+        bearsOn: 'enc-5mwh-20ft',
+        verdict: 'open',
+        note: 'The rung above the 392 Ah generation, and it changes more than the nameplate: a 2000 V string is outside the 1518 V DC window this container presents and outside every converter in the catalogue. A container built on it is not a drop-in larger box, it is a different electrical system.',
+      },
+    ],
+  },
+  {
+    id: 'highstar-container-ess',
+    publisher: 'Highstar',
+    document: 'Container ESS and battery product pages',
+    url: 'https://en.highstar.com/Container_ESS',
+    retrieval: 'unreachable',
+    retrievalNote: 'Host blocked by the environment network policy (403 to CONNECT). Search returned descriptive copy only — liquid cooling, three-level fire protection, a non-walk-in cabinet — with no specification table, so nothing quantitative was taken. Notable because Highstar is one of the approved cell vendors on `cell-lfp-314`.',
+    accessed: '2026-09-23',
+    figures: [],
+  },
+  {
     id: 'catl-enerone',
     publisher: 'CATL',
     document: 'Energy storage product brochure (Japanese site)',
@@ -124,4 +159,45 @@ export const externalSources: ExternalSource[] = [
     accessed: '2026-09-23',
     figures: [],
   },
+];
+
+/** One standard 20 ft container size, as manufacturers list it. */
+export type ContainerRung = {
+  nameplateKWh: number;
+  label: string;
+  /** Who lists it. Named rather than aggregated, so a reader can go and check. */
+  publisher: string;
+  evidence:
+    /** Ours: in `enclosures`, priced, quotable. */
+    | 'catalogue'
+    /** Listed as a shipping product by more than one integrator. */
+    | 'published'
+    /** Announced, not yet a product anybody has quoted us. */
+    | 'announced';
+  /** The cell generation it is built on, which is what moves the rung. */
+  cell: string;
+};
+
+/**
+ * The rungs a 20 ft battery container actually comes in.
+ *
+ * Containers are not made to order: a 20 ft battery container is a standard product off a
+ * manufacturer's catalogue, and the ladder moves when the cell generation moves — 280 Ah gave about
+ * 3.4 MWh, 314 Ah gives about 5 MWh, 392 Ah gives about 6.3 MWh. It is recorded here so the studio
+ * can answer "would a bigger container have done it in one?" with the sizes that exist rather than
+ * with a size somebody would like to exist.
+ *
+ * **Nothing here is priced and nothing here is quotable but the catalogue rung.** These nameplates
+ * come from manufacturers' published listings, reached through search rather than from data sheets
+ * in our hands — the three vendor sites this was checked against (`catl.com`, `reptbattero.com`,
+ * `highstar.com`) are all refused by this environment's network policy. A rung entered here changes
+ * what the studio can *say*; only an entry in `enclosures`, with a landed price, changes what it
+ * sells.
+ */
+export const publishedContainerLadder: ContainerRung[] = [
+  { nameplateKWh: 3440, label: '3.44 MWh', publisher: 'The 280 Ah generation, widely listed', evidence: 'published', cell: '280 Ah LFP' },
+  { nameplateKWh: 5000, label: '5.0 MWh', publisher: 'StarCharge, Billion, NextG, Highstar and others', evidence: 'published', cell: '314 Ah LFP' },
+  { nameplateKWh: 5015, label: '5.015 MWh', publisher: 'Solarworld schedule — this catalogue', evidence: 'catalogue', cell: '314 Ah LFP' },
+  { nameplateKWh: 6260, label: '6.26 MWh', publisher: 'REPT Battero', evidence: 'published', cell: '392 Ah LFP' },
+  { nameplateKWh: 6900, label: '6.9 MWh', publisher: 'Announced on next-generation cells; not quoted to us', evidence: 'announced', cell: '564 Ah LFP' },
 ];
