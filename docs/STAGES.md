@@ -1738,6 +1738,54 @@ real polygon following the charge, two gauges with the reason for the second sta
 offtake renaming themselves per occasion, both signal panels rendering real geometry, and the model
 rerunning rather than redrawing when the occasion changes).
 
+### R10 — the same treatment for all seven, and the clutter that made it necessary
+
+R9 drew the first card as a dashboard and put everything on one page to do it. That page was then
+the scene, the words, the goal, Play, four figures, an isometric, two gauges, four charts, two more
+charts, the stack, the ergOS card, two state rows, the event log, the conclusion and the model
+caveats — stacked. Each piece was right and the page was unreadable.
+
+**Four sections, and the dial above them.** A card is now a header — scene, words, Play, the four
+figures and **Change one thing** — and then one of: *The plant*, *The two devices*, *Inside a cell*,
+*What it meant*. The controls sit above the switcher on purpose: §15.1's loop is play, change,
+compare, and a reader who has to scroll past a wall of instruments to find the dial has been given a
+dashboard instead of a lesson.
+
+**Every card, not the first.** The plant view reads the supply and the offtake **off the run** — an
+array that is generating names an array, a site with no grid behind it is islanded, and a solar card
+resting at midnight correctly names the grid. That derivation is the whole reason one view serves
+all seven without any of them configuring it, and it is unit-tested against synthetic series
+(`src/tests/plantview.test.ts`) rather than only through a browser, because what the flow says
+depends on the moment being shown.
+
+**The devices are instruments now.** A line chart is what an analyst opens afterwards, not what
+either device shows. Each panel is a tag, a lamp, a state and a wall of live values, and every
+signal with a limit is drawn **against that limit** with the derate band marked. The management
+system reports the extreme cells, not an average — an average has never tripped a plant — and where
+the extremes are identical it says why (one representative cell; spread is injected, not modelled).
+What a commissioned device shows and this model does not carry is named as absent rather than
+estimated.
+
+Building it found a reading that was wrong: **held back** was measured against the battery side, and
+on a discharge the cells supply the losses as well as the load, so the panel reported **−15 kW held
+back** on a run where nothing was limiting anything. It is measured at the connection, where the
+request was made, and a test now refuses a negative on any card.
+
+**Inside a cell.** The plateau is asserted everywhere in this product and was explained nowhere. LFP
+converts between two crystals — LiFePO₄ and FePO₄ — with a boundary moving through each particle,
+and while both are present the potential is set by the equilibrium between them and not by the
+proportion. That is the flat plateau; it is why a management system counts coulombs rather than
+reading a voltmeter; and the two ends are the only places a voltage reading locates you. The panel
+animates lithium across the separator and the converted shell growing through each particle, and it
+says plainly that it is a schematic: the engine has no particles, phases or boundary in it, and what
+is drawn is driven by the run's charge level and current direction alone.
+
+**Checks:** `src/tests/plantview.test.ts` (3) and `browser/player.test.ts` (7), the latter run
+across **every built card** — four sections present and opening on the plant, the enclosure filled to
+the charge level with two gauges and never one, both instruments with their limit bars and derate
+bands and their absent-signals note, no negative held-back reading anywhere, and the chemistry panel
+explaining either the plateau or the end it has reached.
+
 ### Still open for a decision
 
 1. **The pack data sheet.** `pack-16s-314` stays `assumed` at 150 A / 200 A until the supplier's

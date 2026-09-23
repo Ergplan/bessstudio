@@ -1,141 +1,96 @@
 'use client';
 import type { Readout } from '../../sim/lessons';
-import { LineChart, series as palette } from './viz';
+import { Instrument, Row, lampFor, type Reading } from './instruments';
 
 /**
- * The first card, drawn as the thing it is describing.
+ * The plant, drawn rather than tabulated — for every card, not only the first.
  *
- * A reader meeting a battery plant for the first time was shown four numbers and two line charts.
- * Both were true and neither was a picture of anything: nothing on the screen said that energy
- * arrives from somewhere, crosses a converter, sits in cells and leaves again, which is the entire
- * content of the lesson.
+ * Three pieces, and they are deliberately three rather than one long wall. {@link PlantView} is
+ * where the energy is coming from and going to, with the enclosure filling and emptying between
+ * them. {@link Instruments} is what the two devices in the container are reading. The cell
+ * chemistry lives in its own component. A card shows whichever of them its own section is for, so
+ * nothing has to compete with anything else for the same square inch.
  *
- * So the left is the machine — an isometric enclosure with the supply on one side and the load on
- * the other, and arrows that run in the direction the energy is actually going at this moment. The
- * right is what an engineer reads: the battery management system's own signals, and the converter's.
- *
- * **The fill is deliberately two bars, not one.** A water cup tells you how full it is by how hard
- * it pushes, and lithium iron phosphate does not: the cell sits within about a tenth of a volt from
- * nine-tenths full down to a fifth, which is why a voltage reading is a bad fuel gauge and why the
- * management system counts charge in and out instead. Drawing the charge level alone would teach
- * the water-cup intuition this chemistry spends its whole life breaking.
+ * The supply and the offtake are read off the run rather than passed in. A lesson with an array in
+ * its scenario shows an array; one with a site behind an outage shows the site; one with neither
+ * shows the grid on whichever side the energy is going. That is what lets the same view serve all
+ * seven cards without any of them configuring it.
  */
 
-const W = 300, H = 210;
-/** Isometric projection: x to the right and down, y to the left and down, z straight up. */
+const W = 300, H = 196;
 const iso = (x: number, y: number, z: number): [number, number] => [
   W / 2 + (x - y) * 0.866,
   H / 2 + (x + y) * 0.5 - z,
 ];
 const face = (points: [number, number, number][]) => points.map(p => iso(...p).join(',')).join(' ');
+const at = <T,>(arr: T[], i: number): T => arr[Math.min(Math.max(i, 0), arr.length - 1)];
 
-type Flow = { label: string; side: 'in' | 'out'; kW: number; tone: string };
+/** What is on the other side of the converter, this run, in the reader's words. */
+export function ends(s: Readout['series'], act: number) {
+  const genKW = at(s.generationW, act) / 1000;
+  const loadKW = at(s.siteLoadW, act) / 1000;
+  const acKW = at(s.achievedPowerW, act) / 1000;
+  const islanded = loadKW > 1 && Math.abs(at(s.gridImportW, act)) < 1 && Math.abs(at(s.gridExportW, act)) < 1;
+  return {
+    acKW,
+    discharging: acKW > 1,
+    supply: genKW > 1
+      ? { label: 'Rooftop array', detail: `${genKW.toFixed(0)} kW generated`, tone: '#E8AE3F' }
+      : { label: 'The grid', detail: 'importing', tone: '#4FA8DA' },
+    offtake: loadKW > 1
+      ? { label: islanded ? 'The site, islanded' : 'The site', detail: `${loadKW.toFixed(0)} kW of load`, tone: '#E2685E' }
+      : { label: 'The grid', detail: 'exporting', tone: '#4FA8DA' },
+  };
+}
 
-export function PlantDashboard({ readout, occasion }: { readout: Readout; occasion: number }) {
+export function PlantView({ readout }: { readout: Readout }) {
   const { series: s, act } = readout;
-  const soc = s.soc[Math.min(act, s.soc.length - 1)] ?? 0;
-  const cellV = s.cellVoltageV[Math.min(act, s.cellVoltageV.length - 1)] ?? 0;
-  const dcKW = (s.dcPowerW[Math.min(act, s.dcPowerW.length - 1)] ?? 0) / 1000;
-  const acKW = (s.achievedPowerW[Math.min(act, s.achievedPowerW.length - 1)] ?? 0) / 1000;
-  const genKW = (s.generationW[Math.min(act, s.generationW.length - 1)] ?? 0) / 1000;
-  const loadKW = (s.siteLoadW[Math.min(act, s.siteLoadW.length - 1)] ?? 0) / 1000;
-  const discharging = dcKW > 1;
-
-  // Where the energy is coming from and going to, named for the occasion the learner chose.
-  const supply: Flow = occasion === -2
-    ? { label: 'Rooftop array', side: 'in', kW: Math.max(genKW, Math.abs(acKW)), tone: '#E8AE3F' }
-    : { label: 'The grid', side: 'in', kW: Math.abs(acKW), tone: '#4FA8DA' };
-  const offtake: Flow = occasion === 2
-    ? { label: 'The site, islanded', side: 'out', kW: loadKW, tone: '#E2685E' }
-    : { label: 'The grid', side: 'out', kW: Math.abs(acKW), tone: '#4FA8DA' };
-  const active = discharging ? offtake : supply;
+  const soc = at(s.soc, act);
+  const cellV = at(s.cellVoltageV, act);
+  const e = ends(s, act);
+  const active = e.discharging ? e.offtake : e.supply;
 
   return (
-    <div className="dash">
-      <div className="dash-machine">
-        <Enclosure soc={soc} discharging={discharging} dcKW={dcKW} />
-        <div className="dash-flow">
-          <span className="from" style={{ borderColor: discharging ? undefined : active.tone }}>
-            <b>{discharging ? 'Cells' : supply.label}</b>
-            <i>{discharging ? 'giving up charge' : 'supplying'}</i>
-          </span>
-          <em aria-hidden className={discharging ? 'out' : 'in'}>→</em>
-          <span className="to" style={{ borderColor: discharging ? active.tone : undefined }}>
-            <b>{discharging ? offtake.label : 'Cells'}</b>
-            <i>{discharging ? 'taking the energy' : 'storing it'}</i>
-          </span>
-          <b className="rate">{Math.abs(acKW).toFixed(0)} kW<small>at the connection</small></b>
-        </div>
-        <Gauges soc={soc} cellV={cellV} series={s} act={act} />
+    <div className="plant">
+      <svg viewBox={`0 0 ${W} ${H}`} className="iso" role="img"
+        aria-label={`Enclosure at ${(soc * 100).toFixed(0)} percent charge, ${e.discharging ? 'discharging' : at(s.dcPowerW, act) < -1000 ? 'charging' : 'idle'}`}>
+        {(() => {
+          const L = 150, D = 62, Hh = 78, level = Hh * Math.min(1, Math.max(0, soc));
+          return (
+            <>
+              <polygon points={face([[-14, -14, 0], [L + 14, -14, 0], [L + 14, D + 14, 0], [-14, D + 14, 0]])} className="iso-pad" />
+              <polygon points={face([[0, 0, level], [L, 0, level], [L, D, level], [0, D, level]])} className="iso-level-top" />
+              <polygon points={face([[0, D, 0], [L, D, 0], [L, D, level], [0, D, level]])} className="iso-level" />
+              <polygon points={face([[L, 0, 0], [L, D, 0], [L, D, level], [L, 0, level]])} className="iso-level dark" />
+              <polygon points={face([[0, 0, Hh], [L, 0, Hh], [L, D, Hh], [0, D, Hh]])} className="iso-top" />
+              <polygon points={face([[0, D, 0], [L, D, 0], [L, D, Hh], [0, D, Hh]])} className="iso-side" />
+              <polygon points={face([[L, 0, 0], [L, D, 0], [L, D, Hh], [L, 0, Hh]])} className="iso-side dark" />
+              {Array.from({ length: 5 }, (_, i) => {
+                const x = (L / 6) * (i + 1);
+                const [x1, y1] = iso(x, D, 0), [x2, y2] = iso(x, D, Hh);
+                return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} className="iso-rib" />;
+              })}
+              <text {...xy(iso(L / 2, D / 2, Hh + 16))} className="iso-label">{(soc * 100).toFixed(0)}%</text>
+            </>
+          );
+        })()}
+      </svg>
+
+      <div className="plant-flow">
+        <span style={{ borderColor: e.discharging ? undefined : active.tone }}>
+          <b>{e.discharging ? 'The cells' : e.supply.label}</b>
+          <i>{e.discharging ? 'giving up charge' : e.supply.detail}</i>
+        </span>
+        <em aria-hidden className={e.discharging ? 'out' : 'in'}>→</em>
+        <span style={{ borderColor: e.discharging ? active.tone : undefined }}>
+          <b>{e.discharging ? e.offtake.label : 'The cells'}</b>
+          <i>{e.discharging ? e.offtake.detail : 'storing it'}</i>
+        </span>
+        <b className="rate">{Math.abs(e.acKW).toFixed(0)} kW<small>at the connection</small></b>
       </div>
-      <div className="dash-charts">
-        <Panel title="The battery management system sees" subtitle="Cell voltage against the window it protects, and the current through the pack">
-          <LineChart height={150} yLabel="V/cell" format={n => `${n.toFixed(2)}`}
-            data={[
-              { name: 'Highest cell', color: palette[2], points: pts(s, s.cellVoltageMaxV) },
-              { name: 'Lowest cell', color: palette[1], points: pts(s, s.cellVoltageMinV) },
-            ]} />
-          <LineChart height={130} yLabel="A" format={n => `${n.toFixed(0)}`}
-            data={[{ name: 'Pack current', color: palette[0], points: pts(s, s.packCurrentA) }]} />
-        </Panel>
-        <Panel title="The converter sees" subtitle="What was asked, what crossed the direct-current side, and what reached the connection">
-          <LineChart height={150} yLabel="kW" format={n => `${n.toFixed(0)}`}
-            data={[
-              { name: 'Asked for', color: palette[3], dashed: true, points: pts(s, s.requestedPowerW.map(v => v / 1000)) },
-              { name: 'Battery side', color: palette[0], points: pts(s, s.dcPowerW.map(v => v / 1000)) },
-              { name: 'At the connection', color: palette[1], points: pts(s, s.achievedPowerW.map(v => v / 1000)) },
-            ]} />
-          <LineChart height={130} yLabel="kW lost" format={n => `${n.toFixed(1)}`}
-            data={[
-              { name: 'In the converter', color: palette[4], points: pts(s, s.converterLossW.map(v => v / 1000)) },
-              { name: "In the cells' resistance", color: palette[2], points: pts(s, s.batteryLossW.map(v => v / 1000)) },
-              { name: 'Auxiliaries', color: palette[5], points: pts(s, s.auxiliaryW.map(v => v / 1000)) },
-            ]} />
-        </Panel>
-      </div>
+
+      <Gauges soc={soc} cellV={cellV} series={s} act={act} />
     </div>
-  );
-}
-
-const pts = (s: Readout['series'], values: number[]) =>
-  values.map((y, i) => ({ x: s.timeSeconds[i] / 60, y }));
-
-function Panel({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
-  return (
-    <section className="dash-panel">
-      <h4>{title}</h4>
-      <p>{subtitle}</p>
-      {children}
-    </section>
-  );
-}
-
-/** The enclosure, filling and emptying, with the racks inside it showing through. */
-function Enclosure({ soc, discharging, dcKW }: { soc: number; discharging: boolean; dcKW: number }) {
-  const L = 150, D = 62, Hh = 78;
-  const level = Hh * Math.min(1, Math.max(0, soc));
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="iso" role="img"
-      aria-label={`Enclosure at ${(soc * 100).toFixed(0)} percent charge, ${discharging ? 'discharging' : dcKW < -1 ? 'charging' : 'idle'}`}>
-      {/* The pad it stands on. */}
-      <polygon points={face([[-14, -14, 0], [L + 14, -14, 0], [L + 14, D + 14, 0], [-14, D + 14, 0]])}
-        className="iso-pad" />
-      {/* The charge, drawn as a solid the height of the state of charge, inside the shell. */}
-      <polygon points={face([[0, 0, level], [L, 0, level], [L, D, level], [0, D, level]])} className="iso-level-top" />
-      <polygon points={face([[0, D, 0], [L, D, 0], [L, D, level], [0, D, level]])} className="iso-level" />
-      <polygon points={face([[L, 0, 0], [L, D, 0], [L, D, level], [L, 0, level]])} className="iso-level dark" />
-      {/* The shell, drawn after so its edges sit over the fill. */}
-      <polygon points={face([[0, 0, Hh], [L, 0, Hh], [L, D, Hh], [0, D, Hh]])} className="iso-top" />
-      <polygon points={face([[0, D, 0], [L, D, 0], [L, D, Hh], [0, D, Hh]])} className="iso-side" />
-      <polygon points={face([[L, 0, 0], [L, D, 0], [L, D, Hh], [L, 0, Hh]])} className="iso-side dark" />
-      {/* Rack divisions, so it reads as a container of racks rather than a block. */}
-      {Array.from({ length: 5 }, (_, i) => {
-        const x = (L / 6) * (i + 1);
-        const [x1, y1] = iso(x, D, 0), [x2, y2] = iso(x, D, Hh);
-        return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} className="iso-rib" />;
-      })}
-      <text {...xy(iso(L / 2, D / 2, Hh + 16))} className="iso-label">{(soc * 100).toFixed(0)}%</text>
-    </svg>
   );
 }
 
@@ -144,24 +99,21 @@ const xy = ([x, y]: [number, number]) => ({ x, y, textAnchor: 'middle' as const 
 /**
  * Two gauges, because one of them would be a lie.
  *
- * The charge level is what the management system counts. The cell voltage is what a meter reads,
- * and on this chemistry it is nearly flat across the middle of the range — the bar barely moves
- * while the one above it empties. That is the whole reason a lithium iron phosphate pack needs a
- * management system counting coulombs rather than a voltmeter on the terminals.
+ * A water cup tells you how full it is by how hard it pushes. Lithium iron phosphate does not, and
+ * the sentence underneath counts the millivolts off the run on the screen rather than asserting it.
  */
 function Gauges({ soc, cellV, series: s, act }: {
   soc: number; cellV: number; series: Readout['series']; act: number;
 }) {
   const lo = 2.5, hi = 3.65;
   const v = Math.min(1, Math.max(0, (cellV - lo) / (hi - lo)));
-  // Measured off the run on the screen, not asserted: the closing sample is left out because the
-  // current stops there and the terminal voltage rebounds to open circuit, which is a real effect
-  // and not part of the plateau.
+  // The closing sample is left out: the current stops there and the terminal voltage rebounds to
+  // open circuit, which is a real effect and not part of the plateau.
   const upTo = Math.max(1, Math.min(act, s.soc.length - 2));
-  const volts = s.cellVoltageV.slice(0, upTo + 1);
-  const socs = s.soc.slice(0, upTo + 1);
+  const volts = s.cellVoltageV.slice(0, upTo + 1), socs = s.soc.slice(0, upTo + 1);
   const mV = volts.length > 1 ? (Math.max(...volts) - Math.min(...volts)) * 1000 : 0;
   const points = socs.length > 1 ? Math.abs(Math.max(...socs) - Math.min(...socs)) * 100 : 0;
+
   return (
     <div className="gauges">
       <div className="gauge">
@@ -176,13 +128,89 @@ function Gauges({ soc, cellV, series: s, act }: {
           On a {lo}–{hi} V scale.{' '}
           {points > 1
             ? <>So far this run the charge level has moved <b>{points.toFixed(0)} points</b> and the
-              cell has moved <b>{mV.toFixed(0)} mV</b>. That is the whole reason there are two bars
-              here: a voltmeter on the terminals would barely have noticed.</>
+              cell has moved <b>{mV.toFixed(0)} mV</b>. That is why there are two bars: a voltmeter
+              on the terminals would barely have noticed.</>
             : <>This chemistry is flat across the middle of its range, so the voltage is a poor fuel
-              gauge and the counting above is the real one. Press Play and watch the two bars
-              disagree.</>}
+              gauge and the counting above is the real one.</>}
         </small>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The two devices, as the devices show themselves.
+ *
+ * Every signal that has a limit is drawn against that limit, with the band where the protection
+ * starts pulling the request back marked on it. A management system's whole job is judging single
+ * cells against thresholds, so the extremes are what is shown — an average cell voltage has never
+ * tripped anything.
+ */
+export function Instruments({ readout, pcsState, bmsState, constraint, limits }: {
+  readout: Readout;
+  pcsState: string; bmsState: string; constraint: string;
+  limits: { cellMinV: number; cellMaxV: number; tempMaxC: number; currentMaxA: number };
+}) {
+  const { series: s, act } = readout;
+  const held = constraint && constraint !== 'Request met in full';
+  const maxV = at(s.cellVoltageMaxV, act), minV = at(s.cellVoltageMinV, act);
+  const tempMax = at(s.cellTempMaxC, act), temp = at(s.cellTempC, act);
+  const amps = at(s.packCurrentA, act);
+  const askedKW = at(s.requestedPowerW, act) / 1000;
+  const dcKW = at(s.dcPowerW, act) / 1000;
+  const acKW = at(s.achievedPowerW, act) / 1000;
+  const lossKW = (at(s.converterLossW, act) + at(s.auxiliaryW, act)) / 1000;
+  const throughput = Math.max(Math.abs(dcKW), Math.abs(acKW));
+  const efficiency = throughput > 1
+    ? (Math.abs(acKW) > Math.abs(dcKW) ? Math.abs(dcKW) / Math.abs(acKW) : Math.abs(acKW) / Math.abs(dcKW))
+    : null;
+
+  const bms: Reading[] = [
+    { label: 'Charge level', value: (at(s.soc, act) * 100).toFixed(1), unit: '%',
+      bar: { value: at(s.soc, act) * 100, min: 0, max: 100 } },
+    { label: 'Highest cell', value: maxV.toFixed(3), unit: 'V', from: 'of 104 in series',
+      bar: { value: maxV, min: limits.cellMinV, max: limits.cellMaxV, derateFrom: limits.cellMaxV - 0.08, derateTo: limits.cellMaxV },
+      tone: maxV > limits.cellMaxV - 0.08 ? 'warn' : undefined },
+    { label: 'Lowest cell', value: minV.toFixed(3), unit: 'V', from: 'of 104 in series',
+      bar: { value: minV, min: limits.cellMinV, max: limits.cellMaxV, derateFrom: limits.cellMinV, derateTo: limits.cellMinV + 0.15 },
+      tone: minV < limits.cellMinV + 0.15 ? 'warn' : undefined },
+    { label: 'Spread, highest to lowest', value: ((maxV - minV) * 1000).toFixed(0), unit: 'mV',
+      // Zero on every card but the weak-cell one, and saying why is the point: a reader who sees
+      // two identical numbers should be told the model carries one representative cell rather than
+      // left to conclude the panel is broken.
+      from: maxV - minV < 1e-6 ? 'one representative cell — spread is injected, not modelled' : undefined },
+    { label: 'String voltage', value: Math.round(at(s.packVoltageV, act)).toLocaleString('en'), unit: 'V' },
+    { label: 'Current', value: Math.round(amps).toLocaleString('en'), unit: 'A',
+      from: amps > 0 ? 'out of the battery' : amps < 0 ? 'into the battery' : 'at rest',
+      bar: { value: Math.abs(amps), min: 0, max: limits.currentMaxA * 1.3, derateFrom: limits.currentMaxA, derateTo: limits.currentMaxA * 1.3 } },
+    { label: 'Hottest cell', value: tempMax.toFixed(1), unit: '°C', from: `mean ${temp.toFixed(1)} °C`,
+      bar: { value: tempMax, min: 0, max: limits.tempMaxC + 5, derateFrom: limits.tempMaxC - 10, derateTo: limits.tempMaxC },
+      tone: tempMax > limits.tempMaxC - 10 ? 'warn' : undefined },
+  ];
+
+  const pcs: Reading[] = [
+    { label: 'Asked for', value: askedKW.toFixed(0), unit: 'kW' },
+    { label: 'Battery side, direct current', value: dcKW.toFixed(0), unit: 'kW' },
+    { label: 'At the connection, alternating', value: acKW.toFixed(0), unit: 'kW' },
+    // Measured where the request was made — at the connection. Against the battery side it reads
+    // negative on a discharge, because the cells have to supply the losses as well as the load.
+    { label: 'Held back', value: Math.max(0, Math.abs(askedKW) - Math.abs(acKW)).toFixed(0), unit: 'kW',
+      from: held ? constraint : 'nothing is limiting', tone: held ? 'warn' : undefined },
+    { label: 'Conversion efficiency', value: efficiency === null ? '—' : (efficiency * 100).toFixed(1), unit: '%',
+      from: efficiency === null ? 'not dispatching' : undefined },
+    { label: 'Lost as heat and auxiliaries', value: lossKW.toFixed(1), unit: 'kW' },
+  ];
+
+  return (
+    <div className="instruments">
+      <Instrument tag="BMS-01" name="Battery management system" state={bmsState} lamp={lampFor(bmsState)}
+        absent="A commissioned system also reports insulation resistance, contactor cycles and per-module balancing current. This model does not carry them, so they are not shown.">
+        {bms.map(r => <Row key={r.label} r={r} />)}
+      </Instrument>
+      <Instrument tag="PCS-01" name="Power conversion system" state={pcsState} lamp={lampFor(pcsState)}
+        absent="Grid voltage, frequency and reactive power are on a real converter's panel and are outside this model, so they are absent rather than estimated.">
+        {pcs.map(r => <Row key={r.label} r={r} />)}
+      </Instrument>
     </div>
   );
 }

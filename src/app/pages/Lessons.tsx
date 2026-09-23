@@ -3,9 +3,10 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Pause, Play, RotateCcw, Zap } from 'lucide-react';
-import { Card, Stat, Badge, Empty, Slider, KV, type Tone } from '../components/ui';
+import { Card, Stat, Badge, Empty, Slider, KV, Tabs, type Tone } from '../components/ui';
 import { LineChart, series as chartSeries } from '../components/viz';
-import { PlantDashboard } from '../components/PlantDashboard';
+import { PlantView, Instruments } from '../components/PlantDashboard';
+import { CellChemistry } from '../components/CellChemistry';
 import { useWorkspace } from '../../platform/workspace';
 import {
   lessons, lessonById, defaultControls, holdSystem, resizeSystem, acts, actOf, nextLesson,
@@ -269,10 +270,14 @@ function NewWords({ ids }: { ids: string[] }) {
   );
 }
 
+/** The four questions a card answers, one at a time rather than all at once. */
+type Section = 'plant' | 'instruments' | 'cell' | 'meaning';
+
 function Player({ card, projectId }: { card: LessonCard; projectId: string | null }) {
   const router = useRouter();
   const { keepRun } = useWorkspace();
   const [values, setValues] = useState(() => defaultControls(card));
+  const [section, setSection] = useState<Section>('plant');
   // At rest the whole run is on the charts, because a learner should see the shape of the thing
   // before deciding to watch it happen. Play rewinds and reveals it.
   const [cursor, setCursor] = useState(Number.MAX_SAFE_INTEGER);
@@ -375,46 +380,11 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
         {metrics.map(m => <Stat key={m.label} label={m.label} value={m.value} unit={m.unit} foot={m.foot} />)}
       </div>
 
-      {/* The first card is where a reader meets the machine, so it is drawn rather than tabulated:
-          the enclosure with its supply and its offtake, and beside it the two sets of signals an
-          engineer would actually open — the management system's and the converter's. The later
-          cards are about a site, a tariff or a limit, and a picture of a box does not help them. */}
-      {card.template.id === 'lesson-1' && (
-        <Card title="The plant, at this moment"
-          subtitle="Where the energy is coming from, what it is doing to the cells, and what each subsystem is reading">
-          <PlantDashboard readout={readout} occasion={values.direction ?? 1} />
-        </Card>
-      )}
-
-      <div className={`grid cols-${Math.min(2, Math.max(1, plots.length))}`}>
-        {plots.map(plot => (
-          <Card key={plot.title} title={plot.title} subtitle={plot.subtitle} tight>
-            <LineChart xLabel={xLabel} format={plot.format} rule={plot.rule} yMin={plot.yMin}
-              data={plot.lines.map(l => ({
-                name: l.name, color: chartSeries[l.colour % chartSeries.length], dashed: l.dashed,
-                points: upTo(l.values).map((y, i) => ({ x: xAt(i), y })),
-              }))} />
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid cols-2">
-        <Card title="What the plant is doing, and who decided" tight>
-          <Stack owner={s.bindingOwner[act]} discharging={s.achievedPowerW[act] > 0} />
-          {decision && <Ergos decision={decision} achievedW={s.achievedPowerW[act]} constraint={constraint} />}
-          {constraint && constraint !== 'Request met in full' && (
-            <div className="notice warning"><b>{constraint}</b>
-              <p>{decision?.appliedLimits.find(l => l.reason.startsWith(constraint))?.reason.split(': ').slice(1).join(': ')}</p></div>
-          )}
-          <div style={{ marginTop: 10 }}>
-            <KV label="Cell voltage">{s.cellVoltageV[act].toFixed(3)} V</KV>
-            <KV label="String voltage">{Math.round(s.packVoltageV[act]).toLocaleString()} V</KV>
-            <KV label="Battery current">{Math.round(s.packCurrentA[act]).toLocaleString()} A</KV>
-            <KV label="Cell temperature">{s.cellTempC[at].toFixed(1)} °C</KV>
-          </div>
-        </Card>
-
-        <Card title="Change one thing" subtitle="Then play it again from the same starting point" tight>
+      {/* Change one thing sits with the run rather than four cards below it: §15.1's loop is play,
+          change, compare, and a reader who has to scroll past a wall of instruments to find the
+          dial has been given a dashboard instead of a lesson. */}
+      <Card title="Change one thing" subtitle="Then play it again from the same starting point" tight>
+        <div className="controls-row">
           {card.controls.map(c => (c.kind === 'slider'
             ? <Slider key={c.id} label={c.label} value={values[c.id]} min={c.min} max={c.max} step={c.step}
                 unit={c.unit} scale={c.scale} decimals={c.decimals ?? 0} hint={c.hint} onChange={n => change(c.id, n)} />
@@ -429,69 +399,127 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
                 <p className="hint">{c.hint}</p>
               </div>
           ))}
-          {previous && (
-            <div className="notice info"><b>What changed, and why</b>
-              <p>
-                Moving {previous.label.toLowerCase()} took {previous.headline.label.toLowerCase()} from {previous.headline.value}{previous.headline.unit ? ` ${previous.headline.unit}` : ''} to
-                {' '}{metrics[0]?.value}{metrics[0]?.unit ? ` ${metrics[0].unit}` : ''}, and {previous.second.label.toLowerCase()} from {previous.second.value}{previous.second.unit ? ` ${previous.second.unit}` : ''} to
-                {' '}{metrics[1]?.value}{metrics[1]?.unit ? ` ${metrics[1].unit}` : ''}. The ending charge level went from {(previous.endSoc * 100).toFixed(1)}% to {(s.soc[steps - 1] * 100).toFixed(1)}%.
-              </p></div>
+        </div>
+        {previous && (
+          <div className="notice info"><b>What changed, and why</b>
+            <p>
+              Moving {previous.label.toLowerCase()} took {previous.headline.label.toLowerCase()} from {previous.headline.value}{previous.headline.unit ? ` ${previous.headline.unit}` : ''} to
+              {' '}{metrics[0]?.value}{metrics[0]?.unit ? ` ${metrics[0].unit}` : ''}, and {previous.second.label.toLowerCase()} from {previous.second.value}{previous.second.unit ? ` ${previous.second.unit}` : ''} to
+              {' '}{metrics[1]?.value}{metrics[1]?.unit ? ` ${metrics[1].unit}` : ''}. The ending charge level went from {(previous.endSoc * 100).toFixed(1)}% to {(s.soc[steps - 1] * 100).toFixed(1)}%.
+            </p></div>
+        )}
+        <div className="row" style={{ marginTop: 12 }}>
+          <button className="btn sm" onClick={reset}><RotateCcw size={14} /> Reset</button>
+          {projectId && <button className="btn sm" onClick={() => router.push(`/app/projects?id=${projectId}`)}>Back to the design</button>}
+          {projectId && <button className="btn sm accent" onClick={() => setConverting(true)}>Take this duty into the design</button>}
+          {projectId && out.run.status === 'complete' && (
+            <button className="btn sm" disabled={kept} onClick={async () => {
+              // Written once and never edited: the rules refuse an update from every role, so a
+              // changed configuration becomes a new run rather than a correction to this one.
+              await keepRun({
+                run: out.run, series: s, decisions: out.decisions, events: out.events,
+                label: card.template.label, projectId,
+              });
+              setKept(true);
+            }}>{kept ? 'Result kept' : 'Keep this result with the project'}</button>
           )}
-          <div className="row" style={{ marginTop: 12 }}>
-            <button className="btn sm" onClick={reset}><RotateCcw size={14} /> Reset</button>
-            {projectId && <button className="btn sm" onClick={() => router.push(`/app/projects?id=${projectId}`)}>Back to the design</button>}
-            {projectId && <button className="btn sm accent" onClick={() => setConverting(true)}>Take this duty into the design</button>}
-            {projectId && out.run.status === 'complete' && (
-              <button className="btn sm" disabled={kept} onClick={async () => {
-                // Written once and never edited: the rules refuse an update from every role, so a
-                // changed configuration becomes a new run rather than a correction to this one.
-                await keepRun({
-                  run: out.run, series: s, decisions: out.decisions, events: out.events,
-                  label: card.template.label, projectId,
-                });
-                setKept(true);
-              }}>{kept ? 'Result kept' : 'Keep this result with the project'}</button>
-            )}
+        </div>
+      </Card>
+
+      {/* Four sections, because everything at once was everything at once. A reader asking "what is
+          happening" is not, in the same breath, asking what the contactors are doing or why the
+          voltage is flat — and putting all three on one page meant none of them was read. The
+          question each section answers is its label. */}
+      <Tabs<Section> active={section} onChange={setSection} tabs={[
+        { id: 'plant', label: 'The plant' },
+        { id: 'instruments', label: 'The two devices' },
+        { id: 'cell', label: 'Inside a cell' },
+        { id: 'meaning', label: 'What it meant' },
+      ]} />
+
+      {section === 'plant' && (
+        <>
+          <Card title="What is happening" subtitle="Where the energy is coming from, where it is going, and what it is doing to the charge">
+            <PlantView readout={readout} />
+          </Card>
+          <div className={`grid cols-${Math.min(2, Math.max(1, plots.length))}`}>
+            {plots.map(plot => (
+              <Card key={plot.title} title={plot.title} subtitle={plot.subtitle} tight>
+                <LineChart xLabel={xLabel} format={plot.format} rule={plot.rule} yMin={plot.yMin}
+                  data={plot.lines.map(l => ({
+                    name: l.name, color: chartSeries[l.colour % chartSeries.length], dashed: l.dashed,
+                    points: upTo(l.values).map((y, i) => ({ x: xAt(i), y })),
+                  }))} />
+              </Card>
+            ))}
           </div>
-        </Card>
-      </div>
-
-      {card.baseline && (
-        <Comparison card={card} setup={setup} />
+        </>
       )}
 
-      {card.sizing && (
-        <Sizing card={card} values={values}
-          onHold={() => { setValues(v => holdSystem(v)); setPrevious(null); }}
-          onResize={() => { setValues(v => resizeSystem(v)); setPrevious(null); }}
-          onSet={(id, value) => { setValues(v => ({ ...v, [id]: value })); setPrevious(null); }} />
+      {section === 'instruments' && (
+        <>
+          <Card title="What the two devices are reading"
+            subtitle="Every signal against the limit it is judged by, and the band where the protection starts pulling the request back">
+            <Instruments readout={readout} constraint={constraint ?? ''}
+              pcsState={s.pcsState[act]} bmsState={s.bmsState[act]}
+              limits={{
+                cellMinV: lfpParameterSet.cell.minV, cellMaxV: lfpParameterSet.cell.maxV,
+                tempMaxC: lfpParameterSet.cell.limits.dischargeTempC[1],
+                currentMaxA: lfpParameterSet.cell.limits.dischargeCurrentMaxA,
+              }} />
+          </Card>
+          <div className="grid cols-2">
+            <Card title="Who decided" subtitle="The request, and each layer's answer to it" tight>
+              <Stack owner={s.bindingOwner[act]} discharging={s.achievedPowerW[act] > 0} />
+              {decision && <Ergos decision={decision} achievedW={s.achievedPowerW[act]} constraint={constraint} />}
+              {constraint && constraint !== 'Request met in full' && (
+                <div className="notice warning"><b>{constraint}</b>
+                  <p>{decision?.appliedLimits.find(l => l.reason.startsWith(constraint))?.reason.split(': ').slice(1).join(': ')}</p></div>
+              )}
+              <StateRow
+                title="Converter"
+                state={s.pcsState[act]}
+                owner={pcsStateOwner[s.pcsState[act] as PcsState] ?? 'PCS'}
+                meaning={pcsStateMeaning[s.pcsState[act] as PcsState] ?? ''}
+              />
+              <StateRow
+                title="Battery management"
+                state={s.bmsState[act]}
+                owner="BMS"
+                meaning={bmsStateMeaning[s.bmsState[at] as BmsState] ?? ''}
+              />
+              <p className="muted" style={{ margin: '10px 0 0' }}>
+                A state names who is deciding. The converter can be dispatching below what was asked;
+                only the battery management system can refuse outright, and it is the one that opens
+                the contactors.
+              </p>
+            </Card>
+
+            <Card title="What happened, and when" subtitle="Every limit, alarm and trip in the order it occurred" tight>
+              <EventLog events={out.events.events.filter(e => e.atSeconds <= s.timeSeconds[at] + 0.001)} />
+            </Card>
+          </div>
+        </>
       )}
 
-      <div className="grid cols-2">
-        <Card title="What each subsystem is in" subtitle="The state the converter and the battery management system are in at this moment" tight>
-          <StateRow
-            title="Converter"
-            state={s.pcsState[act]}
-            owner={pcsStateOwner[s.pcsState[act] as PcsState] ?? 'PCS'}
-            meaning={pcsStateMeaning[s.pcsState[act] as PcsState] ?? ''}
-          />
-          <StateRow
-            title="Battery management"
-            state={s.bmsState[act]}
-            owner="BMS"
-            meaning={bmsStateMeaning[s.bmsState[at] as BmsState] ?? ''}
-          />
-          <p className="muted" style={{ margin: '10px 0 0' }}>
-            A state names who is deciding. The converter can be dispatching below what was asked; only
-            the battery management system can refuse outright, and it is the one that opens the contactors.
-          </p>
+      {section === 'cell' && (
+        <Card title="Inside one cell"
+          subtitle="Why the voltage barely moves, which is the single most useful thing to know about this chemistry">
+          <CellChemistry soc={s.soc[at]} currentA={s.packCurrentA[act]} cellV={s.cellVoltageV[act]} playing={playing} />
         </Card>
+      )}
 
-        <Card title="What happened, and when" subtitle="Every limit, alarm and trip in the order it occurred" tight>
-          <EventLog events={out.events.events.filter(e => e.atSeconds <= s.timeSeconds[at] + 0.001)} />
-        </Card>
-      </div>
-
+      {section === 'meaning' && (
+        <>
+          {card.baseline && <Comparison card={card} setup={setup} />}
+          {card.sizing && (
+            <Sizing card={card} values={values}
+              onHold={() => { setValues(v => holdSystem(v)); setPrevious(null); }}
+              onResize={() => { setValues(v => resizeSystem(v)); setPrevious(null); }}
+              onSet={(id, value) => { setValues(v => ({ ...v, [id]: value })); setPrevious(null); }} />
+          )}
+        </>
+      )}
       {converting && projectId && (
         <Conversion card={card} values={values} projectId={projectId} onClose={() => setConverting(false)} />
       )}

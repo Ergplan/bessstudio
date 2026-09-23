@@ -1190,7 +1190,48 @@ if clearly identified, but a changed input must run, or retrieve the exactly mat
 While computation is pending the last valid result is retained with an explicit updating state.
 **An animation is never substituted for a simulation result.**
 
-### 15.1b The first card is a dashboard
+### 15.1b Every card is a dashboard, in four parts
+
+`BUILT`. A card is **the header and four sections**, never one page of everything. The header carries
+the scene, the words the card introduces, Play, the four headline figures and — deliberately above
+the sections — **Change one thing**, because §15.1's loop is play, change, compare and a reader who
+must scroll past a wall of instruments to find the dial has been handed a dashboard instead of a
+lesson.
+
+| Section | The question it answers |
+| --- | --- |
+| **The plant** | What is happening — the enclosure filling and emptying, the supply and the offtake, and the card's own two charts |
+| **The two devices** | What the management system and the converter are reading, who decided, and what happened when |
+| **Inside a cell** | Why the voltage barely moves |
+| **What it meant** | The comparison and the sizing this card supports |
+
+**The supply and the offtake are read off the run**, not passed in: a run with an array generating
+names an array, a site with no grid behind it names the site as islanded, and a solar card resting at
+midnight correctly names the grid. That derivation is what lets one view serve all seven cards.
+
+**The two devices are drawn as instruments, not charts.** A line chart is what an analyst opens
+afterwards; it is not what either device shows. Each panel is a tag, a lamp, a state and a wall of
+live values, and **every signal that has a limit is drawn against that limit** with the derate band
+marked — a bar against its own maximum teaches nothing. The management system reports the extreme
+cells rather than an average, because an average has never tripped a plant. What a commissioned
+device would also show and this model does not carry — insulation resistance, contactor cycles,
+balancing current; grid voltage, frequency and reactive power — is **named as absent rather than
+estimated**.
+
+### 15.1c Inside a cell
+
+`BUILT`. The plateau is stated everywhere in the product; this is where it is explained. Lithium iron
+phosphate converts between two distinct crystals — LiFePO₄ and FePO₄ — with a boundary moving
+through each particle, and while both are present the potential is fixed by the equilibrium between
+them rather than by the proportion. That is the flat plateau, and it is why a management system
+counts coulombs instead of reading a voltmeter, and why the two ends are the only places a voltage
+reading locates you.
+
+It is **a schematic and says so**: the engine models a cell as an open-circuit curve with a series
+resistance and carries no particles, phases or boundary. What is drawn is driven by the run's own
+charge level and current direction and nothing else.
+
+### 15.1a The factory — one site, one bill, six rounds
 
 `BUILT`. Lesson 1 renders an isometric enclosure whose fill follows the charge level, the supply and
 the offtake named for the occasion chosen, and two engineering panels — the battery management
