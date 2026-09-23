@@ -456,3 +456,62 @@ describe('how the requirement became this much equipment', () => {
     expect(design.value).toBeGreaterThan(forced.ratedPowerMW);
   });
 });
+
+/**
+ * Two containers for five megawatt-hours, and whether that is a design or an accident.
+ */
+describe('granularity, and what it costs', () => {
+  const at = (h: number) => plant(1, h, 'peak-shaving');
+
+  it('never charges more for a shorter duty', () => {
+    // At 1 MW over four hours the fit proposed twenty-five cabinets at ₹10.23 crore delivered when
+    // two containers were ₹9.98 crore for more energy, because it ranked on a scope nobody was
+    // buying. A price that falls as the duty grows is not a rounding artefact, it is a wrong answer.
+    let previous = 0;
+    for (const h of [1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6, 8]) {
+      const capex = at(h).capexInr;
+      expect(capex, `1 MW × ${h} h`).toBeGreaterThanOrEqual(previous - 1e-6);
+      previous = capex;
+    }
+  });
+
+  it('sizes each candidate as it will be built, transformer and all', () => {
+    // Every candidate used to be sized with no transformer and then delivered with one, so the fit
+    // ranked a fleet a unit or two smaller than the one it went on to build.
+    const s = at(4).sizing;
+    const rebuilt = sizeSystem({
+      ...s.input, equipment: 'pinned',
+      enclosureId: s.enclosure.id, pcsId: s.pcs.id, transformerId: s.input.transformerId,
+    });
+    expect(rebuilt.units).toBe(s.units);
+    expect(rebuilt.pcsCount).toBe(s.pcsCount);
+    expect(rebuilt.installedDcMWh).toBeCloseTo(s.installedDcMWh, 9);
+  });
+
+  it('says when the plant that is cheapest to buy is not cheapest to install', () => {
+    // Both answers are honest; which one matters depends on who pays for the foundations. Acting on
+    // the installed one while quoting the delivered one puts the dearer plant on the invoice.
+    const four = at(4).sizing;
+    const cheapest = evaluateFinance(four, defaultPriceBook).capexUsd;
+    for (const alternative of [enclosures.find(e => e.id === 'enc-261-ci')!]) {
+      const alt = sizeSystem({ ...four.input, equipment: 'pinned', enclosureId: alternative.id, pcsId: 'pcs-630' });
+      expect(evaluateFinance(alt, defaultPriceBook).capexUsd).toBeGreaterThanOrEqual(cheapest - 1e-6);
+    }
+    const note = four.rationale.reasons.find(r => r.code === 'installed-cost');
+    if (note) expect(note.text).toMatch(/cheapest plant to buy.*not the cheapest to install/);
+  });
+
+  it('shows two containers carrying more duty than the duty that bought them', () => {
+    // The answer to "does buying two containers for 5 MWh make sense": the same two carry 1 MW for
+    // anything from four hours to six at the same price, because the price steps and the duty does
+    // not. Contract for the step, or drop to the step below.
+    const four = at(4), six = at(6);
+    expect(six.sizing.units).toBe(four.sizing.units);
+    expect(six.capexInr).toBeCloseTo(four.capexInr, 6);
+    expect(six.sizing.requiredUsableMWh).toBeGreaterThan(four.sizing.requiredUsableMWh * 1.4);
+    // And one container carries three hours, for a little over half the money.
+    const three = at(3);
+    expect(three.sizing.units).toBe(1);
+    expect(three.capexInr).toBeLessThan(four.capexInr * 0.6);
+  });
+});

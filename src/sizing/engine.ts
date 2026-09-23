@@ -353,6 +353,30 @@ export function fitEquipment(raw: SizingInput) {
   const neededKW = Math.max(0.001, (raw.mode === 'power-duration'
     ? raw.powerMW : raw.usableEnergyMWh / Math.max(raw.durationH, 0.01)) * 1000);
 
+  /**
+   * A transformer only where there is something for it to do.
+   *
+   * Below a couple of hundred kVA a plant connects at low voltage and a distribution transformer is
+   * neither needed nor available in any size that fits — and putting a 3,150 kVA unit next to a
+   * five-kilowatt battery was the clearest single sign that nothing was choosing anything. A design
+   * with no transformer keeps none: that is a decision about scope — supply-only, or a connection
+   * somebody else is making — and fitting one in would be answering a question nobody asked.
+   *
+   * Decided here, before the candidates, because every candidate has to be *sized as it will be
+   * built*. Sizing them all without one and then delivering one with made the fit rank a design
+   * that was never on offer: the transformer costs a point of discharge efficiency, so the real
+   * fleet is a unit or two larger than the one that was priced. At 1 MW over four hours that gap
+   * ranked twenty-three cabinets, built twenty-five, and came out dearer than the same plant over
+   * *five* hours — more duty for less money, which is not a thing.
+   */
+  const kVA = neededKW / 0.95;
+  const transformerId = raw.transformerId === null
+    ? null
+    : kVA < 250
+      ? null
+      : (transformers.filter(t => t.ratedKVA >= kVA).sort((a, b) => a.ratedKVA - b.ratedKVA)[0]
+        ?? transformers.slice().sort((a, b) => b.ratedKVA - a.ratedKVA)[0]).id;
+
   const candidates = enclosures.flatMap(enclosure => {
     const dcNominalV = (enclosure.dcMinV + enclosure.dcMaxV) / 2;
     const fits = pcsUnits
@@ -375,7 +399,7 @@ export function fitEquipment(raw: SizingInput) {
     // of two and a half, which chose four cabinets for a duty that turned out to need ten.
     const sized = sizeSystem({
       ...raw, equipment: 'pinned',
-      enclosureId: enclosure.id, pcsId: pcs.pcs.id, transformerId: null,
+      enclosureId: enclosure.id, pcsId: pcs.pcs.id, transformerId,
     });
     if (sized.units > Math.min(MAX_ENCLOSURES, MAX_ENCLOSURES_BY_FAMILY[enclosure.family] ?? MAX_ENCLOSURES)) return [];
     return [{ enclosure, pcs: pcs.pcs, pcsCount: pcs.n, units: sized.units, installedMWh: sized.installedDcMWh, sized }];
@@ -404,19 +428,24 @@ export function fitEquipment(raw: SizingInput) {
    * quietly disagree with the number on the screen.
    */
   /**
-   * Priced as if somebody had to install it, whatever the quotation's own scope is.
+   * Ranked on the money the customer actually pays.
    *
-   * A supply-only quotation charges for boxes and nothing else, so under it eighty-eight cabinets
-   * genuinely undercut five containers — the eighty-three extra foundations, terminations and
-   * commissioning visits are real but appear on nobody's invoice. Ranking on that basis proposed
-   * 88 cabinets for 2.5 MW and 240 for 20 MW: cheaper on paper, not a plant. The choice of
-   * equipment is a question about the installed system, so the candidates are compared at turnkey
-   * scope even where the offer stops at the gate. The quotation still prices the scope that was
-   * actually sold.
+   * This ranked at turnkey scope for a while, because a supply-only quotation charges for boxes and
+   * nothing else and under it eighty-eight cabinets undercut five containers — the eighty-three
+   * extra foundations and commissioning visits being real but on nobody's invoice. Two things have
+   * since made that unnecessary and then wrong. Charging each enclosure its own import rate stopped
+   * a 261 kWh cabinet costing the same per kilowatt-hour as a 5 MWh container, which was what made
+   * cabinet fleets look cheap; and scaling the per-unit services to the size of the unit stopped
+   * the installed cost being a flat lot. The two now agree almost everywhere.
+   *
+   * Where they still differ, ranking on a scope nobody is buying produces a *higher* bill: at 1 MW
+   * over four hours it proposed twenty-five cabinets at ₹10.23 crore delivered when two containers
+   * were ₹9.98 crore for more energy — "I picked the dearer one because installing it would have
+   * been cheaper for your contractor". So the quoted scope decides, and where the installed-cost
+   * answer is a different plant the design says so instead of acting on it.
    */
-  const yardstick: PriceBook = { ...defaultPriceBook, supplyScope: 'turnkey' };
-  const capexUsd = (c: typeof candidates[number]) => {
-    try { return evaluateFinance(c.sized, yardstick).capexUsd; } catch { return Number.POSITIVE_INFINITY; }
+  const priceAt = (c: typeof candidates[number], pb: PriceBook) => {
+    try { return evaluateFinance(c.sized, pb).capexUsd; } catch { return Number.POSITIVE_INFINITY; }
   };
   /**
    * A combination that cannot carry the duty is not the cheap answer; it is not an answer.
@@ -426,31 +455,25 @@ export function fitEquipment(raw: SizingInput) {
    * catalogue is always the one that is too small.
    */
   const errors = (c: typeof candidates[number]) => c.sized.warnings.filter(w => w.level === 'error').length;
-  const priced = candidates.map(c => ({ c, errs: errors(c), usd: capexUsd(c) }));
-  const best = priced.slice().sort((a, b) => a.errs - b.errs || a.usd - b.usd
-    || a.c.installedMWh - b.c.installedMWh || (a.c.units + a.c.pcsCount) - (b.c.units + b.c.pcsCount))[0].c;
+  const rank = (pb: PriceBook) => candidates
+    .map(c => ({ c, errs: errors(c), usd: priceAt(c, pb) }))
+    .sort((a, b) => a.errs - b.errs || a.usd - b.usd
+      || a.c.installedMWh - b.c.installedMWh || (a.c.units + a.c.pcsCount) - (b.c.units + b.c.pcsCount))[0];
+  const installed: PriceBook = { ...defaultPriceBook, supplyScope: 'turnkey' };
+  const chosen = rank(defaultPriceBook);
+  const best = chosen.c;
+  // Where the installed-cost answer is a different plant, name it rather than quietly acting on it.
+  const byInstalled = defaultPriceBook.supplyScope === 'turnkey' ? chosen : rank(installed);
+  const cheaperInstalled = byInstalled.c.enclosure.id !== best.enclosure.id || byInstalled.c.units !== best.units
+    ? {
+      units: byInstalled.c.units, model: byInstalled.c.enclosure.model,
+      pcsCount: byInstalled.c.pcsCount, pcsKW: byInstalled.c.pcs.ratedKW,
+      nameplateMWh: byInstalled.c.installedMWh,
+      installedUsd: byInstalled.usd, thisInstalledUsd: priceAt(best, installed),
+    }
+    : null;
 
-  /**
-   * A transformer only where there is something for it to do.
-   *
-   * Below a couple of hundred kVA a plant connects at low voltage and a distribution transformer is
-   * neither needed nor available in any size that fits — and putting a 3,150 kVA unit next to a
-   * five-kilowatt battery was the clearest single sign that nothing was choosing anything.
-   */
-  //
-  // A design with no transformer keeps none: that is a decision about scope — supply-only, or a
-  // connection somebody else is making — and fitting one in would be answering a question nobody
-  // asked. Where there is one, it is sized to the plant rather than left at whatever the default
-  // was, which is how a five-kilowatt battery came to be quoted with a 3,150 kVA transformer.
-  const kVA = neededKW / 0.95;
-  const transformerId = raw.transformerId === null
-    ? null
-    : kVA < 250
-      ? null
-      : (transformers.filter(t => t.ratedKVA >= kVA).sort((a, b) => a.ratedKVA - b.ratedKVA)[0]
-        ?? transformers.slice().sort((a, b) => b.ratedKVA - a.ratedKVA)[0]).id;
-
-  return { enclosureId: best.enclosure.id, pcsId: best.pcs.id, transformerId };
+  return { enclosureId: best.enclosure.id, pcsId: best.pcs.id, transformerId, cheaperInstalled };
 }
 
 /**
@@ -485,7 +508,10 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   // The equipment follows the duty unless somebody pinned it. `fitEquipment` sizes each candidate
   // with this same function, which is why it pins them: without that this recurses forever.
   const fitted = (raw.equipment ?? 'auto') === 'auto' ? fitEquipment({ ...raw, equipment: 'pinned' }) : null;
-  const input = normaliseSizingInput(fitted ? { ...raw, ...fitted } : raw);
+  // Only the three ids belong in the input; what else the fit found travels to the rationale.
+  const input = normaliseSizingInput(fitted
+    ? { ...raw, enclosureId: fitted.enclosureId, pcsId: fitted.pcsId, transformerId: fitted.transformerId }
+    : raw);
   const enclosure = byId(enclosures, input.enclosureId), pcs = byId(pcsUnits, input.pcsId);
   const transformer = input.transformerId ? byId(transformers, input.transformerId) : null;
   const pack = packOf(enclosure), cell = cellOf(pack), app = application(input.applicationId);
@@ -646,6 +672,14 @@ export function sizeSystem(raw: SizingInput): SizingResult {
     code: 'pcs-granularity',
     text: `Conversion rounds up as well: ${pcsCountFor(designPowerMW)} × ${pcs.ratedKW} kW is ${powerText(pcsInstalledMW)} installed against ${powerText(designPowerMW)} asked for. It is the smallest converter in the catalogue that suits this string voltage.`,
   });
+  if (fitted?.cheaperInstalled) {
+    const alt = fitted.cheaperInstalled;
+    const saving = (alt.thisInstalledUsd - alt.installedUsd) / Math.max(alt.thisInstalledUsd, 1e-9);
+    reasons.push({
+      code: 'installed-cost',
+      text: `This is the cheapest plant to buy. It is not the cheapest to install: ${alt.units} × ${alt.model} with ${alt.pcsCount} × ${alt.pcsKW} kW would cost about ${(saving * 100).toFixed(0)}% less installed, on ${energyText(alt.nameplateMWh)} of nameplate against ${energyText(installedNominal)}. Which matters depends on who is paying for the foundations.`,
+    });
+  }
   if (input.augmentation === 'oversize-day1' && designRetention < 0.999) reasons.push({
     code: 'oversize-day1',
     text: `Capacity maintenance is set to oversize on day one, so the fleet is sized for year ${designYear} at ${pc(designRetention)} retention rather than for year one. Augmenting instead would size it on year one.`,
