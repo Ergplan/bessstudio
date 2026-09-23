@@ -1400,14 +1400,45 @@ warning.
 | Cold browser walkthrough | 5 kW from the opening question | headline, selectors and price agree | agree; no page error | **PASS** |
 | Lesson story | unit + browser | a closing sentence per card, changing with the controls | 7 of 7 | **PASS** |
 
-### Open for a decision
+### The three decisions, and what they changed
 
-1. **The pack rating.** `pack-16s-314` is marked `assumed` at 100 A until the data sheet settles it.
-   At the supplied 50 A the smallest design this studio can sell is a 261 kWh cabinet.
-2. **`oversize-day1` as the default** for duties under one cycle a day. It buys 2.5× the contracted
-   energy on day one so the plant needs no augmentation for twenty years. Defensible, and a large
-   commercial assumption to make on a customer's behalf.
-3. **jouleWise on a white-labelled proposal**, still open from R2.
+Put to the customer with the evidence, and taken. Revision `912c862`.
+
+| Decision | Taken | Effect |
+| --- | --- | --- |
+| **The 314 Ah rack pack** — the schedule's 50 A against its own cabinet's 5 kW rating | *Check the market.* The standard rate quoted for 314 Ah cells is 0.5 C; published racks in this format carry 150 A continuous or a 200 A BMS, some rate 1 C, and nothing is rated near 50 A | 150 A continuous, 200 A maximum, marked `assumed` until the data sheet lands. The conservative reading of the published range |
+| **Augmentation** — oversize on day one, or top up across the term | *Periodic, whatever the duty cycle* | The 2.5 MW / 10 MWh reference opens at 15 MWh and ₹15.28 cr instead of 25 MWh and ₹25.01 cr. `oversize-day1` stays selectable |
+| **Scope** — supply-only, turnkey, or both | *Both on the quotation* | The order value stays the equipment at the gate; the installed cost travels beside it, labelled indicative and outside the scope offered |
+
+Showing the installed cost exposed **D74**: the book's lot rates are grid-scale, and ₹27 lakh of
+detailed engineering plus ₹4.7 lakh of commissioning per unit charged in full against a 16 kWh wall
+battery made its installed cost ₹42 lakh — eleven times the equipment. **Fixed**: engineering
+follows the square root of the plant and per-unit services the size of the unit, both floored and
+anchored on the reference design so the book's own figures are unchanged where they were set.
+
+### The ladder as it now stands
+
+| Duty | Fitted | Installed DC | Supply-only | Installed | ₹/kWh DC |
+| --- | --- | --- | --- | --- | --- |
+| 5 kW × 1 h backup | 1 × SB51314 rack, 1 × 5 kW | 16 kWh | ₹3.88 L | ₹5.70 L | 24,127 |
+| 50 kW × 2 h peak | 1 × SWESLC832V314Ah, 1 × 125 kW | 261 kWh | ₹42.98 L | ₹56.35 L | 16,454 |
+| 250 kW × 2 h peak | 4 × SWESLC832V314Ah, 2 × 125 kW, 500 kVA | 1.05 MWh | ₹1.79 cr | ₹2.25 cr | 17,114 |
+| 1 MW × 4 h microgrid | 23 × SWESLC832V314Ah, 8 × 125 kW, 1 600 kVA | 6.01 MWh | ₹9.38 cr | ₹11.64 cr | 15,609 |
+| 2.5 MW × 4 h solar | 3 × SWESLC1331.2V314Ah, 1 × 2 507.5 kW, 3 150 kVA | 15.05 MWh | ₹15.28 cr | ₹20.67 cr | 10,155 |
+| 10 MW × 4 h arbitrage | 11 × SWESLC1331.2V314Ah, 2 × 5 000 kW, 2 × 6 300 kVA | 55.18 MWh | ₹55.83 cr | ₹74.97 cr | 10,118 |
+| 100 MW × 4 h arbitrage | 110 × SWESLC1331.2V314Ah, 20 × 5 000 kW, 17 × 6 300 kVA | 551.76 MWh | ₹554.79 cr | ₹743.33 cr | 10,055 |
+
+Installed cost runs 1.2× to 1.5× the equipment throughout, highest at the small end, which is where
+installation is the largest share of a job.
+
+**Checks after the three decisions:** typecheck clean, **711 unit tests pass**, 17 routes export,
+and the 5 kW design reads 5 kW / 5 kWh / 16.1 kWh / ₹3.88 L with ₹5.70 L installed beside it.
+
+### Still open for a decision
+
+1. **The pack data sheet.** `pack-16s-314` stays `assumed` at 150 A / 200 A until the supplier's
+   sheet replaces it. Nothing else in the schedule is `assumed`.
+2. **jouleWise on a white-labelled proposal**, still open from R2.
 
 ---
 
