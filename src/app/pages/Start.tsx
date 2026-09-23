@@ -5,7 +5,7 @@ import { brand } from '../../brand/brand';
 import { useSession } from '../../platform/auth';
 import { repository } from '../../platform/repo';
 import { nowIso, uid, type Customer, type Project } from '../../platform/types';
-import { connectionKV, defaultSizingInput, sizeSystem } from '../../sizing/engine';
+import { defaultSizingInput, sizeSystem } from '../../sizing/engine';
 import { newProject as makeProject, HOLDING_ACCOUNT } from '../../platform/projects';
 import { application, applications, type ApplicationId } from '../../sizing/applications';
 import { BuildSequence } from '../landing/BuildSequence';
@@ -71,10 +71,7 @@ export function Start() {
 
       const already = (await repo.list(org.id, 'projects')).filter(p => p.customerId === customer.id).length;
       const project: Project = makeProject({
-        // The opening question asks for power and hours, not for a connection voltage, so the
-        // design opens at the one it actually makes: a five-kilowatt supply with a 230 V inverter
-        // and no transformer should not open carrying the grid-scale default of 33 kV.
-        orgId: org.id, customer, existing: already, sizing: { ...sizingInput, gridKV: connectionKV(sizing) },
+        orgId: org.id, customer, existing: already, sizing: sizingInput,
         name: `${label} · ${application(applicationId).name}`,
         by: { uid: user.uid, displayName: user.displayName },
       });

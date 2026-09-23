@@ -3,6 +3,7 @@ import { connectionKV, defaultSizingInput, fitEquipment, sizeSystem, type Sizing
 import { evaluateFinance, landedForSizing } from '../sizing/finance';
 import { defaultPriceBook, landedRatesFor, offerPcsInrPerKW } from '../catalog/pricing';
 import { enclosures, packSpecs, transformers, enclosureCRate } from '../catalog/products';
+import { newProject } from '../platform/projects';
 import type { ApplicationId } from '../sizing/applications';
 
 const fx = defaultPriceBook.landed.exchangeRateInrPerUsd;
@@ -61,7 +62,13 @@ describe('fitting equipment to the duty', () => {
     const { sizing } = plant(2.5, 4, 'solar-shifting');
     expect(sizing.enclosure.id).toBe('enc-5mwh-20ft');
     expect(sizing.pcs.id).toBe('pcs-2507');
-    expect(sizing.units).toBe(5);
+    // Three day-one containers for 10 MWh contracted, topped up across the term. Oversizing on day
+    // one bought five up front and needed nothing afterwards; both are honest answers to the same
+    // duty, and which one is the default is a commercial decision rather than an engineering one.
+    expect(sizing.units).toBe(3);
+    expect(sizing.augmentations.length).toBeGreaterThan(0);
+    expect(sizing.years.at(-1)!.usableMWh).toBeGreaterThanOrEqual(sizing.requiredUsableMWh - 1e-9);
+    expect(plant(2.5, 4, 'solar-shifting', { augmentation: 'oversize-day1' }).sizing.units).toBe(5);
   });
 
   it('never proposes a design that cannot carry the duty while one that can is available', () => {
@@ -206,5 +213,100 @@ describe('the connection voltage', () => {
     const big = sizeSystem({ ...defaultSizingInput('solar-shifting'), mode: 'power-duration', powerMW: 2.5, durationH: 4, chargeDurationH: 4, gridKV: 33 });
     expect(connectionKV(big)).toBe(33);
     expect(big.warnings.some(w => w.code === 'grid-voltage')).toBe(false);
+  });
+});
+
+/**
+ * Three decisions taken on the evidence, each of which moves every number the customer reads.
+ */
+describe('the commercial defaults', () => {
+  it('augments when capacity falls short rather than buying twenty years up front', () => {
+    for (const [name, mw, h, app] of ladder) {
+      const { sizing } = plant(mw, h, app);
+      expect(sizing.input.augmentation, name).toBe('periodic');
+      // Whatever the strategy, the plant must still meet its contract in its final year.
+      expect(sizing.years.at(-1)!.usableMWh, name).toBeGreaterThanOrEqual(sizing.requiredUsableMWh - 1e-9);
+    }
+    // The 2.5 MW reference: 25 MWh installed on day one became 15 MWh with top-ups across the term.
+    const periodic = plant(2.5, 4, 'solar-shifting');
+    const upfront = plant(2.5, 4, 'solar-shifting', { augmentation: 'oversize-day1' });
+    expect(periodic.sizing.installedDcMWh).toBeLessThan(upfront.sizing.installedDcMWh * 0.7);
+    expect(periodic.capexInr).toBeLessThan(upfront.capexInr);
+    expect(upfront.sizing.augmentations).toHaveLength(0);
+  });
+
+  it('carries the installed cost beside a price that is only the equipment', () => {
+    const { finance } = plant(2.5, 4, 'solar-shifting');
+    expect(defaultPriceBook.supplyScope).toBe('supply-only');
+    // Everything a supply-only order value leaves out: switchgear and cabling, foundations and
+    // site works, installation, commissioning, and detailed engineering.
+    expect(finance.indicativeInstalledUsd).not.toBeNull();
+    expect(finance.indicativeInstalledUsd!).toBeGreaterThan(finance.capexUsd);
+    expect(finance.lines.some(l => l.category === 'balance-of-plant')).toBe(false);
+
+    const turnkey = evaluateFinance(plant(2.5, 4, 'solar-shifting').sizing, { ...defaultPriceBook, supplyScope: 'turnkey' });
+    // Where the book already sells the installed plant, the order value is the installed cost and
+    // printing a second figure beside it would only invite the reader to add them together.
+    expect(turnkey.indicativeInstalledUsd).toBeNull();
+    expect(finance.indicativeInstalledUsd!).toBeCloseTo(turnkey.capexUsd, 6);
+  });
+
+  it('rates the 314 Ah rack pack at what the market rates it, not at a sixth of it', () => {
+    const rack = packSpecs.find(p => p.id === 'pack-16s-314')!;
+    // 0.5 C is the standard charge and discharge rate quoted for 314 Ah cells, and every other pack
+    // in the supplied schedule carries it. 50 A on this one was 0.16 C, and read as carried over
+    // from the 100 Ah pack beside it, for which 50 A is exactly 0.5 C.
+    expect(rack.continuousA / 314).toBeGreaterThan(0.4);
+    expect(rack.continuousA).toBeLessThanOrEqual(rack.maxA);
+    // And it has to support the rating its own cabinet is sold at.
+    const cabinet = enclosures.find(e => e.id === 'enc-16-small')!;
+    expect(rack.nominalV * rack.continuousA / 1000).toBeGreaterThanOrEqual(cabinet.ratedKW);
+    expect(rack.provenance).toBe('assumed');
+  });
+});
+
+/**
+ * A lot rate quoted for a grid-scale plant, charged in full against a wall battery.
+ */
+describe('what it costs to install', () => {
+  const installedOver = (mw: number, h: number, app: ApplicationId) => {
+    const p = plant(mw, h, app);
+    return p.finance.indicativeInstalledUsd! / p.finance.capexUsd;
+  };
+
+  it('does not charge a grid-scale engineering lot against a wall battery', () => {
+    // ₹27 lakh of detailed engineering and ₹4.7 lakh of commissioning, both quoted for a plant of
+    // the reference scale, made the installed cost of a ₹3.9 lakh system ₹42 lakh.
+    const small = plant(0.005, 1, 'backup-power');
+    expect(small.finance.indicativeInstalledUsd! * fx).toBeLessThan(1_000_000);
+    for (const [name, mw, h, app] of ladder) {
+      const ratio = installedOver(mw, h, app);
+      expect(ratio, `${name} installs at ${ratio.toFixed(2)}× its equipment`).toBeGreaterThan(1.1);
+      expect(ratio, `${name} installs at ${ratio.toFixed(2)}× its equipment`).toBeLessThan(1.7);
+    }
+  });
+
+  it('leaves the reference plant own lot rate where the book put it', () => {
+    // The scale is anchored on the platform's default design, so the book's figures still mean
+    // what a person setting them in Settings thinks they mean.
+    const reference = plant(2.5, 4, 'solar-shifting');
+    const turnkey = evaluateFinance(reference.sizing, { ...defaultPriceBook, supplyScope: 'turnkey' });
+    const engineering = turnkey.lines.find(l => l.id === 'engineering')!;
+    expect(engineering.totalUsd / defaultPriceBook.engineeringFixed).toBeCloseTo(1, 1);
+  });
+
+  it('opens a design at the connection it actually makes', () => {
+    const project = newProject({
+      orgId: 'o', customer: { id: 'c', name: 'C', city: '', country: '' }, name: 'N', existing: 0,
+      by: { uid: 'u', displayName: 'U' },
+      sizing: { ...defaultSizingInput('backup-power'), mode: 'power-duration', powerMW: 0.005, durationH: 1, chargeDurationH: 1 },
+    });
+    expect(project.sizing.gridKV).toBeCloseTo(0.23, 6);
+    expect(sizeSystem(project.sizing).warnings.some(w => w.code === 'grid-voltage')).toBe(false);
+    // And a grid-scale design still opens at the grid.
+    expect(newProject({
+      orgId: 'o', customer: { id: 'c', name: 'C', city: '', country: '' }, name: 'N', existing: 0,
+      by: { uid: 'u', displayName: 'U' }, sizing: defaultSizingInput(),
+    }).sizing.gridKV).toBe(33);
   });
 });

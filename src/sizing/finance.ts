@@ -14,6 +14,15 @@ export type FinanceResult = {
   lifetimeDischargeMWh: number; lcosPerMWhUsd: number;
   npvUsd: number; irrPct: number | null; paybackYears: number | null;
   annualBenefitUsd: number; augmentationUsd: number;
+  /**
+   * What the same plant costs installed, where the quotation only sells the equipment.
+   *
+   * A supply-only price is the invoice at the gate: no foundations, no cabling, no commissioning,
+   * no engineering. Printed on its own it invites a customer to compare it with somebody else's
+   * turnkey number and conclude the wrong thing. Null where the book already quotes turnkey,
+   * because then the order value is the installed cost.
+   */
+  indicativeInstalledUsd: number | null;
 };
 
 /**
@@ -51,6 +60,36 @@ export const landedForSizing = (sizing: SizingResult, pb: PriceBook, factor = 1)
  * charged again as a separate line. `supply-only` stops at delivered equipment; `turnkey` adds
  * the balance of plant, installation, commissioning and engineering.
  */
+/**
+ * The energy of the plant these lot rates were quoted for: the platform's own default design,
+ * 2.5 MW over four hours. A book's `engineeringFixed` is the engineering for a plant of that size.
+ */
+const REFERENCE_PLANT_KWH = 15_047.88;
+/** And the enclosure the per-unit service rates were quoted for: one supplied container. */
+const REFERENCE_UNIT_KWH = 5_015.96;
+
+/**
+ * How a lot rate moves with the size of the job.
+ *
+ * A plant a thousandth the size does not take a thousandth of the engineering, and it does not take
+ * all of it either: detailed engineering, grid studies and documentation follow roughly the square
+ * root of the plant, which is the usual shape of a fixed-cost curve. Left flat, the book's
+ * ₹27 lakh engineering lot was charged in full against a 16 kWh wall battery and made the installed
+ * cost of a ₹3.9 lakh system ₹42 lakh — eleven times the equipment, which is not a number anybody
+ * would recognise. Floored, because the smallest job still takes a drawing and a form, and capped,
+ * because a hundred-megawatt plant is not sixty times the paperwork of a two-megawatt one.
+ */
+const lotScale = (kWh: number) => Math.min(6, Math.max(0.015, Math.sqrt(kWh / REFERENCE_PLANT_KWH)));
+
+/**
+ * How a per-unit service rate moves with the size of the unit.
+ *
+ * Commissioning a five-megawatt-hour container is a team for several days; commissioning a wall
+ * rack is a visit. Linear in the unit's energy — more strings to test — with a floor for the visit
+ * itself and a little headroom above the reference.
+ */
+const unitScale = (unitKWh: number) => Math.min(1.5, Math.max(0.02, unitKWh / REFERENCE_UNIT_KWH));
+
 export function costLines(sizing: SizingResult, pb: PriceBook): CostLine[] {
   const enc = sizing.enclosure, kwh = sizing.installedDcMWh * 1000, kw = sizing.ratedPowerMW * 1000;
   const txRate = sizing.transformer ? pb.transformerPerKVA[sizing.transformer.id] ?? 20 : 0;
@@ -78,7 +117,7 @@ export function costLines(sizing: SizingResult, pb: PriceBook): CostLine[] {
     lines.push(
       line('battery', 'equipment', `${enc.model} ${enc.family} · ${(sizing.installedDcMWh / sizing.units).toFixed(3)} MWh each`, kwh, 'kWh DC', batteryRate, `${sizing.units} × ${enc.model}`),
       line('pcs', 'equipment', `${sizing.pcs.model} power conversion system`, sizing.pcsCount * sizing.pcs.ratedKW, 'kW', pcsRate, `${sizing.pcsCount} × ${sizing.pcs.ratedKW} kW`),
-      line('freight', 'services', 'Inland and ocean freight', sizing.units, 'unit', pb.freightPerUnit),
+      line('freight', 'services', 'Inland and ocean freight', sizing.units, 'unit', pb.freightPerUnit * unitScale(kwh / sizing.units)),
     );
   }
   if (sizing.transformer) lines.push(line('transformer', 'equipment', `${sizing.transformer.model} inverter duty transformer`, sizing.transformerCount * sizing.transformer.ratedKVA, 'kVA', txRate, `${sizing.transformerCount} × ${sizing.transformer.ratedKVA} kVA`));
@@ -87,8 +126,10 @@ export function costLines(sizing: SizingResult, pb: PriceBook): CostLine[] {
     line('bop', 'balance-of-plant', 'MV/LV switchgear, cabling, protection and earthing', kw, 'kW', pb.bopPerKW),
     line('civil', 'balance-of-plant', 'Foundations, plinths, access and site works', sizing.footprintM2 * 1.8, 'm²', pb.civilPerM2, 'Footprint plus service clearance'),
     line('epc', 'services', 'Installation, integration and cable termination', kwh, 'kWh DC', pb.epcPerKWh),
-    line('commissioning', 'services', 'Commissioning, site acceptance testing and handover', sizing.units, 'unit', pb.commissioningPerUnit),
-    line('engineering', 'services', 'Detailed engineering, grid studies and documentation', 1, 'lot', pb.engineeringFixed),
+    line('commissioning', 'services', 'Commissioning, site acceptance testing and handover', sizing.units, 'unit', pb.commissioningPerUnit * unitScale(kwh / sizing.units),
+      sizing.enclosure.family === 'container' ? undefined : `Scaled from the ${pb.commissioningPerUnit.toLocaleString()} rate quoted per container`),
+    line('engineering', 'services', 'Detailed engineering, grid studies and documentation', 1, 'lot', pb.engineeringFixed * lotScale(kwh),
+      Math.abs(lotScale(kwh) - 1) < 0.01 ? undefined : `Scaled from the rate quoted for a ${(REFERENCE_PLANT_KWH / 1000).toFixed(1)} MWh plant`),
   );
   return lines;
 }
@@ -132,6 +173,18 @@ export function chargingEnergyMWh(sizing: SizingResult, year: { deliveredMWh: nu
   const grossUp = year.chargeMWh > 0 ? year.gridChargeMWh / year.chargeMWh : 1;
   return (year.deliveredMWh * factor + lossesAndAux) * grossUp;
 }
+
+/**
+ * The same plant priced as an installed system: balance of plant, civil works, installation,
+ * commissioning and engineering, on the book's own rates and its own commercial mark-ups.
+ */
+const installedCostUsd = (sizing: SizingResult, pb: PriceBook): number | null => {
+  if (pb.supplyScope === 'turnkey') return null;
+  const subtotal = costLines(sizing, { ...pb, supplyScope: 'turnkey' }).reduce((s, l) => s + l.totalUsd, 0);
+  const contingency = subtotal * pb.contingencyPct / 100;
+  const margin = (subtotal + contingency) * pb.marginPct / 100;
+  return (subtotal + contingency + margin) * (1 + pb.taxPct / 100);
+};
 
 export function evaluateFinance(sizing: SizingResult, pb: PriceBook): FinanceResult {
   const lines = costLines(sizing, pb);
@@ -182,6 +235,7 @@ export function evaluateFinance(sizing: SizingResult, pb: PriceBook): FinanceRes
 
   return {
     lines, landed: pb.costingMode === 'landed-import' ? landedForSizing(sizing, pb) : null,
+    indicativeInstalledUsd: installedCostUsd(sizing, pb),
     equipmentUsd, bopUsd, servicesUsd, subtotalUsd, contingencyUsd, marginUsd, taxUsd, capexUsd,
     capexPerKWhUsd: capexUsd / Math.max(kwh, 1), capexPerKWUsd: capexUsd / Math.max(kw, 1),
     rows, lifetimeDischargeMWh: rows.reduce((s, x) => s + x.dischargedMWh, 0),

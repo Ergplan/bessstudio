@@ -73,14 +73,23 @@ export const packSpecs: PackSpec[] = [
   { id: 'pack-4s-100', model: 'SB12100', cellId: 'cell-lfp-100', series: 4, parallel: 1, rows: 1, columns: 4, nominalV: 12.8, maxV: 14.6, minV: 10.0, labelKWh: 1.28, continuousA: 50, maxA: 80, massKg: 11.5, certifications: ['IS 16270', 'IEC 62619 or UL 1973', 'UN 38.3'], provenance: 'supplied' },
   { id: 'pack-8s-100', model: 'SB24100', cellId: 'cell-lfp-100', series: 8, parallel: 1, rows: 2, columns: 4, nominalV: 25.6, maxV: 29.2, minV: 20.0, labelKWh: 2.56, continuousA: 50, maxA: 80, massKg: 22, certifications: ['IS 16270', 'IEC 62619 or UL 1973', 'UN 38.3'], provenance: 'supplied' },
   { id: 'pack-16s-100', model: 'SB51100', cellId: 'cell-lfp-100', series: 16, parallel: 1, rows: 2, columns: 8, nominalV: 51.2, maxV: 58.4, minV: 40.0, labelKWh: 5.12, continuousA: 50, maxA: 80, massKg: 42, certifications: ['IS 16270', 'IEC 62619 or UL 1973', 'UN 38.3'], provenance: 'supplied' },
-  // 100 A continuous, not the 50 A the 100 Ah packs above carry. The schedule rates this pack's own
-  // cabinet at 5 kW, which at 51.2 V is 98 A; 50 A on a 314 Ah pack would be 2.6 kW and 0.16 C,
-  // against 0.5 C for every other pack in the schedule. The two supplied figures cannot both be
-  // right, and the 50 A reads as carried over from the 100 Ah pack it sits beside. Taken at 50 A
-  // the sizing refused every small design outright — a 5 kW backup supply came back as an error
-  // and then as a 261 kWh cabinet — so it is reconciled to the cabinet rating, below the 150 A
-  // maximum. Confirm against the pack data sheet before issue.
-  { id: 'pack-16s-314', model: 'SB51314', cellId: 'cell-lfp-314', series: 16, parallel: 1, rows: 2, columns: 8, nominalV: 51.2, maxV: 58.4, minV: 40.0, labelKWh: 16.076, continuousA: 100, maxA: 150, massKg: 112, certifications: ['IS 16270', 'IEC 62619 or UL 1973', 'UN 38.3'], provenance: 'assumed' },
+  /**
+   * 150 A continuous and 200 A maximum, not the 50 A and 150 A the schedule carried.
+   *
+   * The schedule's own two figures for this product contradict each other: it rates the cabinet
+   * this pack fills at 5 kW, which at 51.2 V is 98 A, against a pack said to sustain 50 A — 2.6 kW.
+   * 50 A on a 314 Ah pack is 0.16 C, where every other pack in the same schedule is 0.5 C, and it
+   * reads as carried over from the 100 Ah pack it sits beside, for which 50 A is exactly 0.5 C.
+   *
+   * Checked against the market for this format — 51.2 V, 314 Ah, 16 kWh, 16S1P — because the
+   * schedule could not settle it. The standard charge and discharge rate quoted for 314 Ah cells is
+   * 0.5 C, which is 157 A; published rack products in this format carry 150 A continuous or a 200 A
+   * BMS, and some rate 1 C. Nothing in the format is rated anywhere near 50 A. 150 A is therefore
+   * the conservative reading — 0.48 C, in line with the rest of the schedule and at the low end of
+   * what the market publishes — and the maximum follows the 200 A BMS that is the commonest
+   * fitment. Marked `assumed`: replace both with the supplier's data sheet before issue.
+   */
+  { id: 'pack-16s-314', model: 'SB51314', cellId: 'cell-lfp-314', series: 16, parallel: 1, rows: 2, columns: 8, nominalV: 51.2, maxV: 58.4, minV: 40.0, labelKWh: 16.076, continuousA: 150, maxA: 200, massKg: 112, certifications: ['IS 16270', 'IEC 62619 or UL 1973', 'UN 38.3'], provenance: 'assumed' },
   { id: 'pack-52s', model: 'SB166314', cellId: 'cell-lfp-314', series: 52, parallel: 1, rows: 4, columns: 13, nominalV: 166.4, maxV: 189.8, minV: 130, labelKWh: 52.25, continuousA: 157, maxA: 157, massKg: 340, certifications: moduleCerts, provenance: 'supplied' },
   { id: 'pack-104s', model: 'SB332314', cellId: 'cell-lfp-314', series: 104, parallel: 1, rows: 8, columns: 13, nominalV: 332.8, maxV: 379.6, minV: 260, labelKWh: 104.45, continuousA: 157, maxA: 157, massKg: 660, certifications: moduleCerts, provenance: 'supplied' },
 ];

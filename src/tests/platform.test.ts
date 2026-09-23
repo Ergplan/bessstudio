@@ -473,13 +473,18 @@ describe('editable design inputs', () => {
   const base = () => defaultSizingInput('solar-shifting');
 
   it('responds to every loss slider in the expected direction', () => {
+    // Per unit, because a fleet sized against a contract answers a loss by buying another
+    // enclosure: the fleet figure steps *up*, and what the slider actually moves is the energy each
+    // unit yields. Asserting the fleet total here only passed while the default bought twenty years
+    // of margin on day one and the fleet therefore never moved.
     const reference = sizeSystem(base());
+    const perUnit = (s: ReturnType<typeof sizeSystem>) => s.day1UsableMWh / s.units;
     const lossier = sizeSystem({ ...base(), losses: { ...defaultLossChain(), pcsLoss: 0.05 } });
-    expect(lossier.day1UsableMWh).toBeLessThan(reference.day1UsableMWh);
+    expect(perUnit(lossier)).toBeLessThan(perUnit(reference));
     expect(lossier.units).toBeGreaterThanOrEqual(reference.units);
 
     const narrower = sizeSystem({ ...base(), losses: { ...defaultLossChain(), usableDcWindow: 0.8 } });
-    expect(narrower.day1UsableMWh).toBeLessThan(reference.day1UsableMWh);
+    expect(perUnit(narrower)).toBeLessThan(perUnit(reference));
 
     const thirstier = sizeSystem({ ...base(), losses: { ...defaultLossChain(), auxScale: 2 } });
     expect(thirstier.auxMWhPerDay / thirstier.units).toBeGreaterThan(reference.auxMWhPerDay / reference.units);
@@ -659,7 +664,10 @@ describe('offer document', () => {
     expect(augmented.augmentations.length).toBeGreaterThan(0);
     const content = defaultOfferContent({ org, sizing: augmented, customerName: 'X', projectName: 'Y', number: 'N', deliveryWeeks: 20, warrantyYears: 5 });
     expect(content.qualifications.join(' ')).toContain('augmentation deliveries');
-    const plain = defaultOfferContent({ org, sizing, customerName: 'X', projectName: 'Y', number: 'N', deliveryWeeks: 20, warrantyYears: 5 });
+    // A plant that carries its own twenty years, which is what the qualification is about.
+    const unaugmented = sizeSystem({ ...defaultSizingInput(), augmentation: 'oversize-day1' });
+    expect(unaugmented.augmentations).toHaveLength(0);
+    const plain = defaultOfferContent({ org, sizing: unaugmented, customerName: 'X', projectName: 'Y', number: 'N', deliveryWeeks: 20, warrantyYears: 5 });
     expect(plain.qualifications.join(' ')).toContain('assume no augmentation');
   });
 });

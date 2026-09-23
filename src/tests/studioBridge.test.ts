@@ -28,7 +28,10 @@ describe('studio limits from the project', () => {
     for (const powerMW of [2.5, 25, 100]) {
       const sizing = sized({ powerMW, durationH: 2 });
       const limits = limitsFromSizing(sizing);
-      expect(limits.usable.acKW! * sizing.totalUnits).toBeCloseTo(powerMW * 1000, 0);
+      // The day-one fleet, which is the plant that has to carry the rated power. Augmentation
+      // units arrive later and lower what any one enclosure is asked for; sizing the studio's
+      // limits on the end-of-life fleet would understate every share for the first decade.
+      expect(limits.usable.acKW! * sizing.units).toBeCloseTo(powerMW * 1000, 0);
       expect(limits.usable.acKW!).toBeLessThanOrEqual(sizing.enclosure.ratedKW);
     }
   });

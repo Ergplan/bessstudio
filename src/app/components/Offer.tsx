@@ -406,6 +406,14 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
                   <tr><td>In words</td><td className="num">{formatMoney(quote.total, local, true)}</td></tr>
                   <tr><td>Rate per kWh delivered</td><td className="num">{money(quote.total / (sizing.installedDcMWh * 1000))} / kWh</td></tr>
                   {landed && <tr><td>Rate per kWh — BESS only</td><td className="num">{formatMoney(fromInr(landed.deliveredInr) / landed.kWh, local)} / kWh</td></tr>}
+                  {/* The order value is equipment delivered to site. The installed figure is not
+                      part of it and is not offered — it is here so the number above is not read as
+                      the cost of a working plant, and so a comparison with a turnkey bid from
+                      somebody else is made against the right figure. */}
+                  {finance.indicativeInstalledUsd !== null && (
+                    <tr><td>Indicative installed cost — not in this scope</td>
+                      <td className="num">{num(quote.total * finance.indicativeInstalledUsd / Math.max(finance.capexUsd, 1e-9))}</td></tr>
+                  )}
                 </tbody>
               </table>
 

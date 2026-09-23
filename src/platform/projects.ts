@@ -1,4 +1,4 @@
-import { defaultSizingInput } from '../sizing/engine';
+import { connectionKV, defaultSizingInput, sizeSystem } from '../sizing/engine';
 
 /**
  * The account a design lands on when it is raised from the opening question, before anybody has
@@ -21,6 +21,11 @@ import type { SizingInput } from '../sizing/engine';
 export const projectReference = (customerName: string, existing: number) =>
   `${customerName.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'PRJ'}-${String(existing + 1).padStart(2, '0')}`;
 
+/** The same input, with the stated connection voltage set to the one the fitted design presents. */
+const atItsOwnConnection = (sizing: SizingInput): SizingInput => {
+  try { return { ...sizing, gridKV: connectionKV(sizeSystem(sizing)) }; } catch { return sizing; }
+};
+
 export function newProject(args: {
   orgId: string;
   customer: Pick<Customer, 'id' | 'name' | 'city' | 'country'>;
@@ -41,7 +46,10 @@ export function newProject(args: {
       location: [args.customer.city, args.customer.country].filter(Boolean).join(', '),
       latitude: null, longitude: null, gridOperator: '', commissioningTarget: '',
     },
-    sizing: args.sizing ?? defaultSizingInput(),
+    // Opened at the connection the design actually makes. The grid-scale default of 33 kV on a
+    // five-kilowatt supply with a 230 V inverter and no transformer is not a setting anybody chose,
+    // and the design opens carrying a warning it did not earn.
+    sizing: atItsOwnConnection(args.sizing ?? defaultSizingInput()),
     studioConfig: null, studioImage: null, notes: '',
     ownerUid: args.by.uid,
     createdAt: at, updatedAt: at, updatedBy: args.by.displayName,

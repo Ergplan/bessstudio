@@ -145,8 +145,12 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
           foot={`${sizing.pcsCount} × ${sizing.pcs.model}${sizing.chargePowerMW > sizing.ratedPowerMW * 1.001 ? ` · sized on ${units.powerText(sizing.chargePowerMW)} charging` : ''}`} />
         <Stat label="Contracted usable" {...units.energy(sizing.requiredUsableMWh)} foot={`${sizing.effectiveDurationH.toFixed(2)} h duration`} />
         <Stat label="Installed DC" {...units.energy(sizing.installedDcMWh)} foot={`${sizing.units} × ${sizing.enclosure.model}${sizing.augmentations.length ? ` + ${sizing.totalUnits - sizing.units} augmentation` : ''}`} />
+        {/* A supply-only price is the invoice at the gate. Printed alone it invites a comparison
+            with somebody else's installed cost, so the installed figure travels beside it. */}
         <Stat label={priceBook.supplyScope === 'turnkey' ? 'Turnkey price' : 'Delivered equipment price'}
-          value={money(finance.capexUsd)} foot={`${money(finance.capexPerKWhUsd, false)} per kWh DC`} />
+          value={money(finance.capexUsd)}
+          foot={`${money(finance.capexPerKWhUsd, false)} per kWh DC${finance.indicativeInstalledUsd
+            ? ` · ${money(finance.indicativeInstalledUsd)} installed, indicative` : ''}`} />
       </div>
 
       {errors.length > 0 && (

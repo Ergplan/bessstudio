@@ -137,7 +137,15 @@ export const defaultSizingInput = (applicationId: ApplicationId = 'peak-shaving'
     chargeDurationH: a.durationH,
     cyclesPerDay: a.cyclesPerDay, daysPerYear: a.daysPerYear, projectYears: 20, dod: a.dod, availability: a.availability,
     ambientC: 35, altitudeM: 100, enclosureId: 'enc-5mwh-20ft', pcsId: 'pcs-2507', transformerId: 'tx-3150',
-    augmentation: a.cyclesPerDay * a.dod > 1 ? 'periodic' : 'oversize-day1',
+    // Periodic, whatever the duty cycle. Oversizing on day one was the default below one cycle a
+    // day, and it bought two and a half times the contracted energy up front so the plant would
+    // need nothing for twenty years: a 2.5 MW / 10 MWh solar plant opened at 25 MWh installed and
+    // ₹25 crore. That is a defensible engineering answer and a very large commercial assumption to
+    // make on a customer's behalf before they have said a word. Augmenting when capacity falls
+    // short opens at roughly 1.4× instead, with the top-ups priced across the term where they can
+    // be discussed. `oversize-day1` stays selectable, for the sites where a truck visit is the
+    // thing being avoided.
+    augmentation: 'periodic',
     gridKV: 33, frequencyHz: 50, powerFactor: 0.95,
     losses: defaultLossChain(), degradation: defaultDegradation(),
   };
