@@ -30,7 +30,7 @@ const number = (value: string | null, fallback: number) => {
 export function Start() {
   const params = useSearchParams();
   const router = useRouter();
-  const { ready, user, org, signInAsDemo } = useSession();
+  const { ready, user, org, signInAsDemo, authReachable } = useSession();
   const [error, setError] = useState('');
   const [projectId, setProjectId] = useState<string | null>(null);
   const [played, setPlayed] = useState(false);
@@ -104,15 +104,16 @@ export function Start() {
           <>
             <h2 className="l-question-title" style={{ marginBottom: 14 }}>Where should this live?</h2>
             <p style={{ color: 'var(--l-muted)', fontSize: 13.5, lineHeight: 1.6, margin: '0 0 22px' }}>
-              Your answer is kept. Open the demonstration workspace to carry on in this browser, or sign in to
-              save the project to your organization.
+              {authReachable
+                ? 'Your answer is kept. Open the demonstration workspace to carry on in this browser, or sign in to save the project to your organization.'
+                : 'Your answer is kept. The sign-in service could not be reached from here, so signing in will not work until it can — but the demonstration workspace runs entirely in this browser and needs nothing.'}
             </p>
             <button className="l-btn primary l-question-go" onClick={() => void signInAsDemo()}>
               Continue in the demo workspace
             </button>
             <button className="l-btn" style={{ width: '100%', justifyContent: 'center', marginTop: 10 }}
               onClick={() => router.push(`/sign-in/?next=${encodeURIComponent(`/start/?${params.toString()}`)}`)}>
-              Sign in instead
+              {authReachable ? 'Sign in instead' : 'Try signing in anyway'}
             </button>
           </>
         ) : (

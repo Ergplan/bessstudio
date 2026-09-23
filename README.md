@@ -34,9 +34,20 @@ npm run build        # static export to out/
 npm run preview      # serve the export exactly as Firebase Hosting will
 ```
 
-With no Firebase project configured the studio opens a **local demo workspace** stored in the
-browser, seeded with a reference pipeline of five customers, projects and quotations. Everything
-works offline, which is what you want in front of a customer on hotel wifi.
+The studio opens straight into a **local workspace** stored in the browser, seeded with a reference
+pipeline of five customers, projects and quotations. There is no sign-in, no account and no network
+call: everything works offline, which is what you want in front of a customer on hotel wifi — and
+on a train, and behind an office proxy.
+
+Accounts, the shared workspace and the multi-tenant rules are **off unless you ask for them**:
+
+```bash
+NEXT_PUBLIC_FIREBASE_ENABLED=true npm run dev
+```
+
+Until that is set, no Firebase code runs at all. It used to be the other way round, and every visit
+began by asking a sign-in service for permission to exist — which on any connection that could not
+reach Google left the application sitting on "Opening your workspace…" indefinitely.
 
 ```bash
 npm test             # 61 tests across the geometry, sizing, finance, quoting and tenancy layers
@@ -51,7 +62,9 @@ https://bessstudio-e55e1.web.app.
 
 1. In the console, enable **Authentication** (Email/Password, and Google for single sign-on) and
    **Cloud Firestore**.
-2. `npm run deploy` — builds, publishes hosting, and pushes the Firestore rules and indexes. The
+2. Set `NEXT_PUBLIC_FIREBASE_ENABLED=true` wherever the site is built. Without it the studio stays
+   local, whatever else is configured.
+3. `npm run deploy` — builds, publishes hosting, and pushes the Firestore rules and indexes. The
    web app configuration is committed in `src/platform/firebaseConfig.ts`, so there is nothing to
    set up first.
 

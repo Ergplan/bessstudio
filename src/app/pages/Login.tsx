@@ -7,7 +7,7 @@ import { publicOrgId } from '../../platform/joining';
 import Link from 'next/link';
 
 export function Login() {
-  const { signIn, signUp, signInWithGoogle, signInAsDemo, resetPassword } = useSession();
+  const { signIn, signUp, signInWithGoogle, signInAsDemo, resetPassword, ready, authReachable } = useSession();
   const [mode, setMode] = useState<'in' | 'up'>('in');
   const [email, setEmail] = useState(''), [password, setPassword] = useState('');
   const [name, setName] = useState(''), [orgName, setOrgName] = useState('');
@@ -51,7 +51,13 @@ export function Login() {
           <div className="body">
             <h2 style={{ fontSize: 20 }}>{mode === 'in' ? 'Sign in' : 'Create a workspace'}</h2>
             <p className="muted" style={{ marginTop: 6, marginBottom: 20 }}>
-              {firebaseEnabled ? 'Your workspace, customers and quotes are stored in Firestore.' : 'No Firebase project is configured, so this session runs as a local demo workspace in this browser.'}
+              {!firebaseEnabled
+                ? 'No Firebase project is configured, so this session runs as a local demo workspace in this browser.'
+                : ready && !authReachable
+                  // Said here rather than discovered by typing a password and waiting: the service
+                  // never answered, so nothing on this form can work until it does.
+                  ? 'The sign-in service could not be reached from this network, so signing in will not work here. The demonstration workspace below runs entirely in this browser.'
+                  : 'Your workspace, customers and quotes are stored in Firestore.'}
             </p>
             <form onSubmit={e => { e.preventDefault(); void run(() => (mode === 'in' ? signIn(email, password) : signUp(email, password, name, orgName))); }}>
               {mode === 'up' && <>
