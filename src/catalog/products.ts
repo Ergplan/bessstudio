@@ -132,7 +132,18 @@ export const enclosures: EnclosureSpec[] = [
     id: 'enc-16-small', model: 'SB51314 cabinet', family: 'rack', packSpecId: 'pack-16s-314',
     racks: 1, packsPerRack: 1, packsInSeries: 1, labelKWh: 16.076, ratedKW: 5,
     lengthMm: 600, widthMm: 400, heightMm: 900, massKg: 130, cooling: 'air', ipRating: 'IP21',
-    auxMWhPerDayCharge: 0.004, auxMWhPerDayDischarge: 0.004, dcMaxV: 58.4, dcMinV: 40,
+  /**
+   * Auxiliary consumption, corrected for a box with no active cooling in it.
+   *
+   * The schedule gave this rack 4 kWh a day each way — 167 W of continuous standby on a 16 kWh
+   * wall battery, a quarter of its nameplate every day, on a product whose only powered parts are
+   * a management board and a communications port. It reads as the liquid-cooled figures scaled by
+   * energy, which is exactly wrong: what those figures pay for is a chiller and a pump, and an
+   * air-cooled rack has neither. Left as it was, the auxiliaries ate a third of a small plant's
+   * deliverable energy and bought whole extra enclosures to replace it. A BMS and a display draw
+   * of the order of ten watts. Confirm against the product's own standby figure before issue.
+   */
+    auxMWhPerDayCharge: 0.00024, auxMWhPerDayDischarge: 0.00024, dcMaxV: 58.4, dcMinV: 40,
     bms: 'BMSer or Simila', certifications: ['IS 16270', 'IEC 62619 or UL 1973'],     batteryIpRating: 'IP21', doorBaysPerSide: 1, communications: 'CAN, RS485',
     operatingRangeC: [-10, 45], fireSafety: 'Pack-level detection',
     studioPreset: null, provenance: 'supplied',
@@ -151,7 +162,7 @@ export const enclosures: EnclosureSpec[] = [
     id: 'enc-5-small', model: 'SB51100 rack', family: 'rack', packSpecId: 'pack-16s-100',
     racks: 1, packsPerRack: 1, packsInSeries: 1, labelKWh: 5.12, ratedKW: 2.5,
     lengthMm: 480, widthMm: 200, heightMm: 620, massKg: 42, cooling: 'air', ipRating: 'IP21',
-    auxMWhPerDayCharge: 0.0015, auxMWhPerDayDischarge: 0.0015, dcMaxV: 58.4, dcMinV: 40,
+    auxMWhPerDayCharge: 0.00012, auxMWhPerDayDischarge: 0.00012, dcMaxV: 58.4, dcMinV: 40,
     bms: 'BMSer or Simila', certifications: ['IS 16270', 'IEC 62619 or UL 1973'],
     batteryIpRating: 'IP21', doorBaysPerSide: 1, communications: 'CAN, RS485',
     operatingRangeC: [-10, 45], fireSafety: 'Pack-level detection',
@@ -161,7 +172,7 @@ export const enclosures: EnclosureSpec[] = [
     id: 'enc-2-small', model: 'SB24100 rack', family: 'rack', packSpecId: 'pack-8s-100',
     racks: 1, packsPerRack: 1, packsInSeries: 1, labelKWh: 2.56, ratedKW: 1.25,
     lengthMm: 480, widthMm: 180, heightMm: 400, massKg: 22, cooling: 'air', ipRating: 'IP21',
-    auxMWhPerDayCharge: 0.0008, auxMWhPerDayDischarge: 0.0008, dcMaxV: 29.2, dcMinV: 20,
+    auxMWhPerDayCharge: 0.00008, auxMWhPerDayDischarge: 0.00008, dcMaxV: 29.2, dcMinV: 20,
     bms: 'BMSer or Simila', certifications: ['IS 16270', 'IEC 62619 or UL 1973'],
     batteryIpRating: 'IP21', doorBaysPerSide: 1, communications: 'CAN, RS485',
     operatingRangeC: [-10, 45], fireSafety: 'Pack-level detection',
@@ -171,7 +182,8 @@ export const enclosures: EnclosureSpec[] = [
     id: 'enc-52-rack', model: 'SB166314 rack', family: 'rack', packSpecId: 'pack-52s',
     racks: 1, packsPerRack: 1, packsInSeries: 1, labelKWh: 52.25, ratedKW: 26,
     lengthMm: 700, widthMm: 600, heightMm: 1400, massKg: 380, cooling: 'air', ipRating: 'IP21',
-    auxMWhPerDayCharge: 0.008, auxMWhPerDayDischarge: 0.008, dcMaxV: 189.8, dcMinV: 130,
+    // As above: air-cooled, so a management board and comms, not a chiller. 8 kWh a day was 333 W.
+    auxMWhPerDayCharge: 0.00036, auxMWhPerDayDischarge: 0.00036, dcMaxV: 189.8, dcMinV: 130,
     bms: 'BMSer or Simila', certifications: moduleCerts,     batteryIpRating: 'IP21', doorBaysPerSide: 1, communications: 'CAN, RS485',
     operatingRangeC: [-10, 45], fireSafety: 'Pack-level detection',
     studioPreset: null, provenance: 'supplied',

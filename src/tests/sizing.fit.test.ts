@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { connectionKV, defaultSizingInput, fitEquipment, recoveryHours, sizeSystem, type SizingInput } from '../sizing/engine';
+import { connectionKV, defaultSizingInput, enclosureHierarchy, fitEquipment, recoveryHours, sizeSystem, type SizingInput } from '../sizing/engine';
 import { evaluateFinance, landedForSizing } from '../sizing/finance';
 import { defaultPriceBook, landedRatesFor, offerPcsInrPerKW } from '../catalog/pricing';
 import { enclosures, packSpecs, transformers, enclosureCRate, enclosureEnergyKWh } from '../catalog/products';
@@ -344,5 +344,99 @@ describe('what it costs to install', () => {
       orgId: 'o', customer: { id: 'c', name: 'C', city: '', country: '' }, name: 'N', existing: 0,
       by: { uid: 'u', displayName: 'U' }, sizing: defaultSizingInput(),
     }).sizing.gridKV).toBe(33);
+  });
+});
+
+/**
+ * A design a reader can check.
+ *
+ * Written from the customer's own correction note on a 5 MW / 1 h design: three containers and two
+ * 5 MW converters for a 5 MW / 5 MWh requirement, with "1.15 h to put back at rated power" printed
+ * beside a fleet that had been sized on a one-hour recharge. The arithmetic was right and the page
+ * was mute, so the quantities could not be approved — correctly.
+ */
+describe('how the requirement became this much equipment', () => {
+  const fiveMW = (chargeDurationH: number) => sizeSystem({
+    ...defaultSizingInput('energy-arbitrage'), mode: 'power-duration',
+    powerMW: 5, durationH: 1, chargeDurationH,
+  });
+
+  it('unwinds the energy chain one division at a time, ending where the sizing ended', () => {
+    const s = fiveMW(1);
+    const e = s.rationale.energy;
+    // The auxiliary step appears wherever the enclosure has auxiliaries, which is everywhere in
+    // this catalogue: it is what turns a nominal capacity into what an enclosure actually delivers,
+    // and leaving it out of the chain turned 1.87 enclosures into 3 with nothing on the page.
+    expect(e.map(x => x.id)).toEqual(['contracted', 'dc-terminals', 'nominal-bol', 'nominal-install', 'aux', 'units-energy']);
+    expect(e.find(x => x.id === 'aux')!.value).toBeLessThan(s.installedDcMWh / s.units);
+    expect(e[0].value).toBeCloseTo(s.requiredUsableMWh, 9);
+    expect(e[1].value).toBeCloseTo(e[0].value / s.dischargePathEfficiency, 9);
+    expect(e[2].value).toBeCloseTo(e[1].value / (s.input.dod * s.input.losses.usableDcWindow), 9);
+    expect(e.at(-1)!.value).toBe(s.rationale.unitsForEnergy);
+    // Through the requirement chain each step is bigger than the one before it: nothing between the
+    // load and the cell gives energy back.
+    for (let i = 1; i < 4; i++) expect(e[i].value).toBeGreaterThan(e[i - 1].value);
+    // And the fleet is the requirement divided by what one enclosure actually delivers.
+    expect(e.at(-1)!.value).toBe(Math.ceil(s.requiredUsableMWh / e.find(x => x.id === 'aux')!.value - 1e-9));
+  });
+
+  it('names the charge window as what bought the extra equipment', () => {
+    const forced = fiveMW(1);
+    expect(forced.rationale.binding).toBe('power');
+    expect(forced.rationale.unitsForPower).toBeGreaterThan(forced.rationale.unitsForEnergy);
+    const why = forced.rationale.reasons.map(r => r.code);
+    expect(why).toContain('power-binds');
+    expect(why).toContain('charge-window');
+    expect(forced.rationale.reasons.find(r => r.code === 'charge-window')!.text)
+      .toContain(forced.recoveryDurationH.toFixed(2));
+
+    // And relaxing it to what the losses actually need removes both the extra enclosure and the
+    // extra converter, which is the whole of the customer's point.
+    const relaxed = fiveMW(Math.ceil(forced.recoveryDurationH * 100) / 100);
+    expect(relaxed.units).toBeLessThan(forced.units);
+    expect(relaxed.pcsCount).toBeLessThan(forced.pcsCount);
+    expect(relaxed.rationale.reasons.map(r => r.code)).not.toContain('charge-window');
+    expect(relaxed.pcsCount * relaxed.pcs.ratedKW / 1000).toBeGreaterThanOrEqual(relaxed.ratedPowerMW);
+  });
+
+  it('accounts for every enclosure between the duty and the invoice', () => {
+    for (const [name, mw, h, app] of ladder) {
+      const { sizing } = plant(mw, h, app);
+      const r = sizing.rationale;
+      expect(r.units, name).toBe(sizing.units);
+      expect(r.installedDcMWh, name).toBeCloseTo(sizing.installedDcMWh, 9);
+      expect(r.units, name).toBe(Math.max(1, r.unitsForEnergy, r.unitsForPower));
+      // Where more is installed than the duty strictly needs, the page says why. Silence is only
+      // allowed when the fleet is exactly what one of the two chains asked for.
+      const exact = r.binding === 'power' ? r.unitsForPower : r.unitsForEnergy;
+      if (r.units > exact || r.unitsForPower !== r.unitsForEnergy) {
+        expect(r.reasons.length, `${name} installs ${r.units} and explains nothing`).toBeGreaterThan(0);
+      }
+      for (const reason of r.reasons) expect(reason.text.length, `${name}/${reason.code}`).toBeGreaterThan(40);
+    }
+  });
+
+  it('says what a catalogue label is a label for', () => {
+    // "SWESLC1331.2V314Ah" names a string: 1 331.2 V at 314 Ah, which is 418 kWh. The product is a
+    // container of twelve of them. Read alone the label says 418 kWh, and a reader checking three
+    // against 15 MWh finds 1.25 MWh and concludes the quantity is wrong.
+    const container = enclosures.find(e => e.id === 'enc-5mwh-20ft')!;
+    const text = enclosureHierarchy(container);
+    expect(text).toContain('5.02 MWh container');
+    expect(text).toContain('12 strings');
+    expect(text).toContain('418 kWh');
+    expect(text).toContain('1331.2 V');
+    // A single-string product has no hierarchy to explain, and says its own arrangement instead.
+    expect(enclosureHierarchy(enclosures.find(e => e.id === 'enc-16-small')!)).toContain('16S1P');
+  });
+
+  it('states contracted power and installed conversion as two numbers', () => {
+    const forced = fiveMW(1);
+    expect(forced.ratedPowerMW).toBe(5);
+    expect(forced.pcsCount * forced.pcs.ratedKW / 1000).toBeGreaterThan(forced.ratedPowerMW);
+    // The step that explains the gap has to carry the figure that caused it.
+    const design = forced.rationale.power.find(x => x.id === 'design-power')!;
+    expect(design.value).toBeCloseTo(forced.chargePowerMW, 9);
+    expect(design.value).toBeGreaterThan(forced.ratedPowerMW);
   });
 });

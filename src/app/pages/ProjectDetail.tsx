@@ -11,7 +11,7 @@ import { useSession } from '../../platform/auth';
 import { can, quoteStatuses, isCustomerRole } from '../../platform/types';
 import { applications, application } from '../../sizing/applications';
 import {
-  defaultSizingInput, sizeSystem, normaliseSizingInput, enclosureSummary, defaultLossChain, defaultDegradation,
+  defaultSizingInput, sizeSystem, normaliseSizingInput, enclosureSummary, enclosureHierarchy, defaultLossChain, defaultDegradation,
   suppliedRetention, retentionAt, cellTemperature, temperatureFactor, warningTitle,
   type AugmentationStrategy, type SizingMode, type DegradationMode, type LossChain, type SizingResult,
 } from '../../sizing/engine';
@@ -23,6 +23,64 @@ import { formatMoney, localRate } from '../../catalog/pricing';
 import type { ApplicationId } from '../../sizing/applications';
 
 type Tab = 'requirements' | 'losses' | 'design' | 'performance' | 'economics';
+
+/**
+ * How a requirement became this much equipment.
+ *
+ * Two chains — energy and power — each unwound one division at a time, then the one that won, then
+ * every named reason the installed figure is above the contracted one. Read top to bottom it is
+ * the engineering justification for the quantities on the invoice; read bottom to top it is the
+ * list of things to change if they are too large.
+ */
+function Rationale({ sizing, onRelaxCharge }: { sizing: SizingResult; onRelaxCharge: () => void }) {
+  const r = sizing.rationale;
+  const chain = (steps: typeof r.energy, won: boolean) => (
+    <table className="data rationale">
+      <tbody>
+        {steps.map((st, i) => (
+          <tr key={st.id} className={i === steps.length - 1 ? 'last' : undefined}>
+            <td>{st.label}<div className="muted">{st.detail}</div></td>
+            <td className="num">
+              <b>{st.unit === 'units' ? st.value.toFixed(0) : st.value.toFixed(st.value < 10 ? 3 : 2)}</b>
+              <span className="muted"> {st.unit === 'units' ? (st.value === 1 ? 'enclosure' : 'enclosures') : st.unit}</span>
+            </td>
+          </tr>
+        ))}
+        <tr className="verdict"><td colSpan={2}>{won ? 'This chain sets the fleet.' : 'The other chain asks for more, so this one does not set the fleet.'}</td></tr>
+      </tbody>
+    </table>
+  );
+  return (
+    <Card title="Why this much equipment"
+      subtitle={`From ${units.powerText(sizing.ratedPowerMW)} over ${sizing.effectiveDurationH.toFixed(2)} h to ${r.units} × ${sizing.enclosure.model}`}>
+      <div className="grid cols-2" style={{ gap: 16 }}>
+        <div>
+          <h4 className="rationale-head">Energy · needs {r.unitsForEnergy}</h4>
+          {chain(r.energy, r.binding === 'energy')}
+        </div>
+        <div>
+          <h4 className="rationale-head">Power · needs {r.unitsForPower}</h4>
+          {chain(r.power, r.binding === 'power')}
+        </div>
+      </div>
+      <div className="rationale-result">
+        <b>{r.units} × {sizing.enclosure.model}</b> — {units.energyText(r.installedDcMWh)} nominal installed,
+        {' '}{units.energyText(sizing.day1UsableMWh)} deliverable on day one, against {units.energyText(sizing.requiredUsableMWh)} contracted.
+      </div>
+      {r.reasons.length > 0 && (
+        <ul className="rationale-why">
+          {r.reasons.map(x => <li key={x.code}>{x.text}</li>)}
+        </ul>
+      )}
+      {r.reasons.some(x => x.code === 'charge-window') && (
+        <div className="row" style={{ marginTop: 10 }}>
+          <button className="btn sm accent" onClick={onRelaxCharge}>Charge at rated power instead</button>
+          <span className="muted">Recharge in {sizing.recoveryDurationH.toFixed(2)} h and the charge window stops setting the size.</span>
+        </div>
+      )}
+    </Card>
+  );
+}
 
 /**
  * What the design ambient actually reaches, and whether it reaches the sizing at all.
@@ -141,21 +199,25 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
       <div className="grid cols-4">
         {/* The unit follows the figure: a five-kilowatt plant is not 0.01 MW, and five
             kilowatt-hours of contracted energy is certainly not "0.0 MWh". */}
-        <Stat label="Rated power" {...units.power(sizing.ratedPowerMW)}
-          foot={`${sizing.pcsCount} × ${sizing.pcs.model}${sizing.chargePowerMW > sizing.ratedPowerMW * 1.001 ? ` · sized on ${units.powerText(sizing.chargePowerMW)} charging` : ''}`} />
+        {/* Contracted and installed are different numbers whenever the converters round up, and
+            printing only the first invites a reader to check the equipment against it and find a
+            discrepancy nobody explained. */}
+        <Stat label="Contracted power" {...units.power(sizing.ratedPowerMW)}
+          foot={`${sizing.pcsCount} × ${sizing.pcs.model} = ${units.powerText(sizing.pcsCount * sizing.pcs.ratedKW / 1000)} installed${
+            sizing.chargePowerMW > sizing.ratedPowerMW * 1.001 ? ` · sized on ${units.powerText(sizing.chargePowerMW)} charging` : ''}`} />
         <Stat label="Contracted usable" {...units.energy(sizing.requiredUsableMWh)}
           foot={`${sizing.effectiveDurationH.toFixed(2)} h out · ${sizing.recoveryDurationH.toFixed(2)} h to put back at rated power`} />
         {/* Nameplate and deliverable are different quantities and belong on the page as two. The
             gap between them is the depth of discharge, the usable window and the conversion path,
             and a reader who cannot see both has no way to tell an oversized plant from a lossy one. */}
         <Stat label="Installed DC, nominal" {...units.energy(sizing.installedDcMWh)}
-          foot={`${sizing.units} × ${sizing.enclosure.model}${sizing.augmentations.length ? ` + ${sizing.totalUnits - sizing.units} augmentation` : ''} · ${units.energyText(sizing.day1UsableMWh)} usable on day one`} />
+          foot={`${sizing.units} × ${enclosureHierarchy(sizing.enclosure)}${sizing.augmentations.length ? ` + ${sizing.totalUnits - sizing.units} augmentation` : ''} · ${units.energyText(sizing.day1UsableMWh)} deliverable day one (${(100 * sizing.day1UsableMWh / sizing.installedDcMWh).toFixed(0)}%)`} />
         {/* A supply-only price is the invoice at the gate. Printed alone it invites a comparison
             with somebody else's installed cost, so the installed figure travels beside it. */}
         <Stat label={priceBook.supplyScope === 'turnkey' ? 'Turnkey price' : 'Delivered equipment price'}
           value={money(finance.capexUsd)}
           foot={`${money(finance.capexPerKWhUsd, false)} per kWh DC${finance.indicativeInstalledUsd
-            ? ` · ${money(finance.indicativeInstalledUsd)} installed, indicative` : ''}`} />
+            ? ` · ${money(finance.indicativeInstalledUsd)} installed (+${Math.round(100 * (finance.indicativeInstalledUsd / finance.capexUsd - 1))}%), indicative` : ''}`} />
       </div>
 
       {errors.length > 0 && (
@@ -360,6 +422,13 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
       {tab === 'design' && (
         <div className="grid cols-3">
           <div style={{ gridColumn: 'span 2' }} className="grid">
+            {/* Before the equipment, the reason for it. The studio was arithmetically right and
+                completely mute: asked for 5 MW over an hour with an hour to recharge it answered
+                three containers and two converters — correctly — while printing "1.15 h to put
+                back at rated power" on the same screen, and never saying that the shorter window
+                was what bought the third container. A reader could not tell an oversized plant
+                from a duty that costs what it costs, and was right not to approve it. */}
+            <Rationale sizing={sizing} onRelaxCharge={() => set({ chargeDurationH: Math.ceil(sizing.recoveryDurationH * 100) / 100 })} />
             <Card title="Configuration" subtitle={`${sizing.enclosure.model} · ${sizing.enclosure.cooling} cooled · ${sizing.enclosure.ipRating}`}>
               <div className="grid cols-2" style={{ gap: 0, columnGap: 26 }}>
                 <div>

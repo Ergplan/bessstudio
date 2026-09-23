@@ -16,3 +16,5 @@ next-env.d.ts
 firestore-debug.log
 ui-debug.log
 firebase-debug.log
+__pycache__/
+*.pyc

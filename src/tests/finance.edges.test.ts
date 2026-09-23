@@ -353,9 +353,11 @@ describe('the plant configuration table', () => {
 describe('what each warning is called', () => {
   it('names every warning the engine can raise', () => {
     // Gather the codes from the source rather than from a run, so a new warning added without a
-    // name shows up here rather than on a customer's screen as "Dc Window High".
+    // name shows up here rather than on a customer's screen as "Dc Window High". A warning is a
+    // code with a level beside it; the sizing rationale's reasons also carry codes and carry their
+    // own sentence with them, so they are not headings and do not belong in this table.
     const source = readFileSync(new URL('../sizing/engine.ts', import.meta.url), 'utf8');
-    const codes = [...source.matchAll(/code: '([a-z-]+)'/g)].map(m => m[1]);
+    const codes = [...source.matchAll(/code: '([a-z-]+)',\s*level:/g)].map(m => m[1]);
     expect(codes.length).toBeGreaterThan(15);
     for (const code of new Set(codes)) {
       expect(warningTitles[code], `${code} has no name`).toBeTruthy();

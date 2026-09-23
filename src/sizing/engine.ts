@@ -1,9 +1,10 @@
 import { application, type ApplicationId } from './applications';
+import { energyText, powerText } from '../domain/units';
 import { defaultPriceBook, type PriceBook } from '../catalog/pricing';
 import { evaluateFinance } from './finance';
 import {
   byId, cellOf, packOf, enclosures, pcsUnits, transformers, enclosureEnergyKWh,
-  enclosureCellCount, enclosureFootprintM2, enclosureStrings, enclosureCRate, packEnergyKWh,
+  enclosureCellCount, enclosureFootprintM2, enclosureStrings, enclosureCRate, packEnergyKWh, packAh,
   type EnclosureSpec, type PcsSpec, type TransformerSpec,
 } from '../catalog/products';
 
@@ -98,6 +99,41 @@ export type SizingInput = {
 export type SizingWarning = { code: string; level: 'error' | 'warning' | 'info'; text: string };
 
 /**
+ * One line of the derivation from a stated requirement to a quantity of equipment.
+ *
+ * The studio was arithmetically right and completely mute about it. Asked for 5 MW over one hour
+ * with a one-hour recharge, it answered three containers and two converters — correctly, because a
+ * one-hour recharge of 5 MWh needs 5.74 MW and a container is rated 2 507.5 kW — while printing
+ * "1.15 h to put back at rated power" on the same screen. Two operating assumptions, one page, and
+ * nothing saying that the shorter window was what bought the third container. A reader could not
+ * tell an oversized plant from a duty that costs what it costs, and was right not to approve it.
+ */
+export type SizingStep = {
+  id: string;
+  label: string;
+  value: number;
+  unit: string;
+  /** Why this number is this number. Written for somebody checking the design, not selling it. */
+  detail: string;
+};
+
+export type SizingRationale = {
+  /** Contracted energy at the load, through every loss and margin, to a quantity of enclosures. */
+  energy: SizingStep[];
+  /** Contracted power, and whatever the charge window asks for, to a quantity of enclosures. */
+  power: SizingStep[];
+  /** Which chain set the fleet, and what the other one would have needed. */
+  binding: 'power' | 'energy';
+  unitsForEnergy: number;
+  unitsForPower: number;
+  /** The whole number of enclosures actually bought, and the energy that lands. */
+  units: number;
+  installedDcMWh: number;
+  /** Named causes of every difference between what was asked for and what is installed. */
+  reasons: { code: string; text: string }[];
+};
+
+/**
  * What each warning is called where it is shown.
  *
  * Prettifying the code gave headings like "Dc Window High" and "Pcs Granularity" — the two terms
@@ -157,6 +193,8 @@ export type SizingResult = {
   dcVoltageWindow: [number, number]; systemCRate: number; packCRate: number;
   auxMWhPerDay: number; dischargePathEfficiency: number; chargePathEfficiency: number;
   rteAc: number; cellTempC: number; tempFactor: number; efcPerYear: number;
+  /** How the requirement became this much equipment, step by step. */
+  rationale: SizingRationale;
   years: YearRow[]; cohorts: Cohort[]; augmentations: { year: number; units: number; dcMWh: number }[];
   endOfLifeRetention: number; warrantyThroughputMWh: number; lifetimeThroughputMWh: number;
   warnings: SizingWarning[];
@@ -325,7 +363,8 @@ export function fitEquipment(raw: SizingInput) {
         // that point is bought and never delivered.
         covers: pcs.dcMinV <= enclosure.dcMinV && pcs.dcMaxV >= enclosure.dcMaxV ? 0 : 1,
       }))
-      .filter(({ pcs, n }) => pcs.dcMinV <= dcNominalV && pcs.dcMaxV >= dcNominalV && n <= MAX_CONVERTERS);
+      .filter(({ pcs, n }) => pcs.dcMinV <= dcNominalV && pcs.dcMaxV >= dcNominalV
+        && n <= Math.min(MAX_CONVERTERS, MAX_PER_PLANT[pcs.topology] ?? MAX_CONVERTERS));
     if (!fits.length) return [];
     const tightest = Math.min(...fits.map(({ pcs, n }) => n * pcs.ratedKW));
     const pcs = fits.filter(({ pcs: p, n }) => n * p.ratedKW <= tightest * 1.5)
@@ -338,7 +377,7 @@ export function fitEquipment(raw: SizingInput) {
       ...raw, equipment: 'pinned',
       enclosureId: enclosure.id, pcsId: pcs.pcs.id, transformerId: null,
     });
-    if (sized.units > MAX_ENCLOSURES) return [];
+    if (sized.units > Math.min(MAX_ENCLOSURES, MAX_ENCLOSURES_BY_FAMILY[enclosure.family] ?? MAX_ENCLOSURES)) return [];
     return [{ enclosure, pcs: pcs.pcs, pcsCount: pcs.n, units: sized.units, installedMWh: sized.installedDcMWh, sized }];
   });
   if (!candidates.length) return null;
@@ -428,6 +467,20 @@ export function fitEquipment(raw: SizingInput) {
 const MAX_ENCLOSURES = 2000;
 const MAX_CONVERTERS = 400;
 
+/**
+ * How many of a product class anybody actually parallels.
+ *
+ * Cost alone does not decide this. Once the auxiliary figures on the small racks were corrected
+ * the fit answered a 100 kW four-hour duty with thirty-one wall batteries and twenty five-kilowatt
+ * hybrid inverters, which is cheaper on every line in the price book and is not a plant: a
+ * single-phase residential hybrid does not parallel twenty ways into a three-phase commercial
+ * supply, and thirty-one wall boxes is a wiring closet, not an installation. These are the point
+ * where a product class stops being the right answer and the next one up begins — a statement
+ * about what the equipment is for, which is not a thing a price can express.
+ */
+const MAX_PER_PLANT: Record<string, number> = { hybrid: 6, string: 60, central: 200 };
+const MAX_ENCLOSURES_BY_FAMILY: Record<string, number> = { rack: 24, cabinet: 60, skid: 200, container: MAX_ENCLOSURES };
+
 export function sizeSystem(raw: SizingInput): SizingResult {
   // The equipment follows the duty unless somebody pinned it. `fitEquipment` sizes each candidate
   // with this same function, which is why it pins them: without that this recurses forever.
@@ -504,6 +557,105 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   // over-specified and one whose duty explains itself.
   const binding: 'power' | 'energy' = unitsForPower >= unitsForEnergy ? 'power' : 'energy';
 
+  /**
+   * The derivation, from the two numbers a person typed to the equipment on the invoice.
+   *
+   * Built from the same variables the sizing used, a line at a time, so it cannot drift away from
+   * the answer it explains. Each step divides by exactly one thing, and says what.
+   */
+  const step = (id: string, label: string, value: number, unit: string, detail: string): SizingStep =>
+    ({ id, label, value, unit, detail });
+  const pcsCountFor = (mw: number) => Math.max(1, ceil(mw * 1000 / pcs.ratedKW));
+  const pc = (x: number) => `${(x * 100).toFixed(1)}%`;
+  const auxPerUnit = auxDischargePerCycle;
+  // The energy chain, unwound in the order the losses are met going from the load back to the cell.
+  const atDcTerminals = requiredUsableMWh / Math.max(dischargePathEfficiency, 1e-9);
+  const storedNeeded = atDcTerminals;
+  const nominalAtBol = storedNeeded / Math.max(L.usableDcWindow * input.dod, 1e-9);
+  const nominalToInstall = nominalAtBol / Math.max(designRetention, 1e-9);
+  const energySteps: SizingStep[] = [
+    step('contracted', 'Contracted energy, at the load', requiredUsableMWh, 'MWh',
+      input.mode === 'power-duration'
+        ? `${powerText(ratedPowerMW)} for ${input.durationH} h, as asked for.`
+        : 'Stated directly as a usable energy target.'),
+    step('dc-terminals', 'At the battery terminals', atDcTerminals, 'MWh',
+      `Divided by the ${pc(dischargePathEfficiency)} discharge path — DC cable, converter, AC cable${transformer && L.idtOnDischarge ? ' and transformer' : ''}.`),
+    step('nominal-bol', 'Nominal capacity, new', nominalAtBol, 'MWh',
+      `Divided by ${pc(input.dod)} depth of discharge inside a ${pc(L.usableDcWindow)} usable window: ${pc(input.dod * L.usableDcWindow)} of nameplate is available in a cycle.`),
+    step('nominal-install', 'Nominal capacity to install', nominalToInstall, 'MWh',
+      input.augmentation === 'oversize-day1'
+        ? `Divided by ${pc(designRetention)} retention at year ${designYear}, so the plant meets the contract in its last year with nothing added.`
+        : `Divided by ${pc(designRetention)} retention at year ${designYear}. Later years are met by augmentation rather than by buying them now.`),
+  ];
+  // The auxiliaries come off each enclosure's own output, so they do not divide out of the total —
+  // they reduce what an enclosure yields, and the fleet is sized on the reduced figure. Left as a
+  // remark under the last line it turned 1.87 enclosures into 3 with nothing on the page to say so.
+  const yieldPerUnit = Math.max(perUnitAtDesign, 1e-9);
+  const grossPerUnit = unitDcMWh * designRetention * L.usableDcWindow * input.dod * dischargePathEfficiency;
+  if (auxPerUnit > 0) energySteps.push(
+    step('aux', 'Delivered by one enclosure', yieldPerUnit, 'MWh',
+      `${energyText(grossPerUnit)} out of the enclosure, less ${energyText(auxPerUnit)} a cycle for cooling, controls and communications${input.cyclesPerDay < 1 ? ` — a day's worth, because the plant cycles ${input.cyclesPerDay} times a day and the auxiliaries run anyway` : ''}.`));
+  energySteps.push(
+    step('units-energy', 'Enclosures for the energy', unitsForEnergy, 'units',
+      `${energyText(requiredUsableMWh)} contracted at ${energyText(yieldPerUnit)} delivered per enclosure, rounded up.`));
+  const powerSteps: SizingStep[] = [
+    step('contracted-power', 'Contracted power, at the connection', ratedPowerMW, 'MW',
+      'What the plant discharges at.'),
+    step('charge-power', 'Charge power the window asks for', chargePowerMW, 'MW',
+      `${energyText(requiredUsableMWh)} back in over ${input.chargeDurationH} h, grossed up for the ${pc(rteAc)} round trip. At rated power it would take ${recoveryDurationH.toFixed(2)} h.`),
+    step('design-power', 'Power the plant is sized on', designPowerMW, 'MW',
+      designPowerMW > ratedPowerMW * 1.001
+        ? 'The charge window is the harder of the two, so it sets the size.'
+        : 'Discharging is the harder of the two.'),
+    step('units-power', 'Enclosures for the power', unitsForPower, 'units',
+      `${powerText(designPowerMW)} at ${enclosure.ratedKW} kW per enclosure, rounded up.`),
+  ];
+
+  // Every difference between what was asked for and what is installed, with its cause named.
+  const reasons: { code: string; text: string }[] = [];
+  const installedNominal = units * unitDcMWh;
+  // On a tie neither chain "wins", and a fleet carrying twice its contracted energy explained
+  // nothing at all: a 5 MW one-hour plant needs two containers for its power and two for its
+  // energy, and arrives with 10 MWh against 5 MWh contracted with no line saying why.
+  if (unitsForPower >= unitsForEnergy && installedNominal > nominalToInstall * 1.05) reasons.push({
+    code: 'power-binds',
+    text: unitsForPower > unitsForEnergy
+      ? `Power sets the fleet, not energy: ${unitsForPower} enclosures carry ${powerText(designPowerMW)}, where ${unitsForEnergy} would carry the energy. The extra ${unitsForPower - unitsForEnergy} ${unitsForPower - unitsForEnergy === 1 ? 'enclosure is bought for power and carries' : 'enclosures are bought for power and carry'} energy nobody contracted for.`
+      : `${units} ${units === 1 ? 'enclosure is the fewest that carries' : 'enclosures are the fewest that carry'} ${powerText(designPowerMW)}, and each brings ${energyText(unitDcMWh)} with it. The fleet therefore holds ${energyText(installedNominal)} of nameplate against ${energyText(nominalToInstall)} the energy alone would need — capacity the duty does not use, arriving with the power rating.`,
+  });
+  if (chargePowerMW > ratedPowerMW * 1.001 && unitsForPower > unitsForEnergy) reasons.push({
+    code: 'charge-window',
+    text: `And the power is set by charging, not discharging. Allowing ${recoveryDurationH.toFixed(2)} h instead of ${input.chargeDurationH} h to recharge would size the plant on ${powerText(ratedPowerMW)}.`,
+  });
+  if (unitsForEnergy > unitsForPower) reasons.push({
+    code: 'energy-binds',
+    text: `Energy sets the fleet: ${unitsForEnergy} enclosures against ${unitsForPower} for the power alone.`,
+  });
+  // Both chains, not only the one that won: a duty needing 0.49 enclosures of energy and 0.40 of
+  // power is short of a whole enclosure by the larger of the two, and reporting the binding chain's
+  // figure alone understated how much of the fleet is rounding rather than requirement.
+  const exact = Math.max(designPowerMW * 1000 / enclosure.ratedKW, requiredUsableMWh / yieldPerUnit);
+  if (units > exact + 1e-6) reasons.push({
+    code: 'granularity',
+    text: `The duty needs ${exact.toFixed(2)} ${exact < 1 ? 'of an enclosure' : 'enclosures'} and they are sold whole, so ${units} ${units === 1 ? 'is' : 'are'} installed — ${((units / exact - 1) * 100).toFixed(0)}% more than the duty strictly asks for.`,
+  });
+  // The converters round up too, and a plant paying for two and a half times the conversion it
+  // contracted for should not have to infer that from two numbers in different places.
+  const pcsInstalledMW = pcsCountFor(designPowerMW) * pcs.ratedKW / 1000;
+  if (pcsInstalledMW > designPowerMW * 1.02) reasons.push({
+    code: 'pcs-granularity',
+    text: `Conversion rounds up as well: ${pcsCountFor(designPowerMW)} × ${pcs.ratedKW} kW is ${powerText(pcsInstalledMW)} installed against ${powerText(designPowerMW)} asked for. It is the smallest converter in the catalogue that suits this string voltage.`,
+  });
+  if (input.augmentation === 'oversize-day1' && designRetention < 0.999) reasons.push({
+    code: 'oversize-day1',
+    text: `Capacity maintenance is set to oversize on day one, so the fleet is sized for year ${designYear} at ${pc(designRetention)} retention rather than for year one. Augmenting instead would size it on year one.`,
+  });
+  const rationale: SizingRationale = {
+    energy: energySteps, power: powerSteps, binding,
+    unitsForEnergy: Number.isFinite(unitsForEnergy) ? unitsForEnergy : 0,
+    unitsForPower, units, installedDcMWh: units * unitDcMWh, reasons,
+  };
+
   // Year-by-year roll-forward with per-vintage cohorts, so augmented capacity ages from its own year.
   const cohorts: Cohort[] = [{ year: 0, dcMWh: units * unitDcMWh, units }];
   const augmentations: { year: number; units: number; dcMWh: number }[] = [];
@@ -555,7 +707,7 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   const totalUnits = cohorts.reduce((s, c) => s + c.units, 0);
   const installedDcMWh = units * unitDcMWh;
   const day1UsableMWh = usableAc(units, 1);
-  const pcsCount = Math.max(1, ceil(designPowerMW * 1000 / pcs.ratedKW));
+  const pcsCount = pcsCountFor(designPowerMW);
   const transformerCount = transformer ? Math.max(1, ceil(designPowerMW * 1000 / input.powerFactor / transformer.ratedKVA)) : 0;
   const auxMWhPerDay = (auxChargePerUnit + auxDischargePerUnit) * units;
   const systemCRate = ratedPowerMW / Math.max(installedDcMWh, 1e-6);
@@ -634,7 +786,7 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   warnings.push({ code: 'validation', level: 'info', text: 'Sizing uses the supplied degradation schedule and loss chain. Supplier warranty curves and a site thermal study are required before contract.' });
 
   return {
-    input, enclosure, pcs, transformer, requiredUsableMWh, ratedPowerMW, recoveryDurationH,
+    input, enclosure, pcs, transformer, requiredUsableMWh, ratedPowerMW, recoveryDurationH, rationale,
     effectiveDurationH: requiredUsableMWh / Math.max(ratedPowerMW, 1e-6), chargePowerMW, chargeCRate,
     units, totalUnits, installedDcMWh, day1UsableMWh,
     binding, unitsForPower, unitsForEnergy: Number.isFinite(unitsForEnergy) ? unitsForEnergy : 0,
@@ -651,6 +803,24 @@ export function sizeSystem(raw: SizingInput): SizingResult {
 }
 
 /** Nameplate figures for the system, shown next to the sizing result. */
+/**
+ * What a catalogue label actually denotes, spelled out.
+ *
+ * `SWESLC1331.2V314Ah` names a string — 1 331.2 V at 314 Ah, which is 418 kWh — and the product is
+ * a container of twelve of them. Read on its own the label says 418 kWh, and a reader checking
+ * three of them against a 15 MWh figure finds 1.25 MWh and concludes the quantity is wrong. It is
+ * not wrong; the label was never told to say what it was a label for.
+ */
+export function enclosureHierarchy(enc: EnclosureSpec): string {
+  const pack = packOf(enc), strings = enclosureStrings(enc);
+  const kWh = enclosureEnergyKWh(enc);
+  const stringV = pack.nominalV * enc.packsInSeries;
+  const stringKWh = kWh / strings;
+  const size = kWh >= 1000 ? `${(kWh / 1000).toFixed(2)} MWh` : `${kWh.toFixed(1)} kWh`;
+  if (strings <= 1) return `${enc.model} · ${size} ${enc.family} (${pack.series * enc.packsInSeries}S${pack.parallel}P, ${packAh(pack)} Ah at ${stringV.toFixed(1)} V)`;
+  return `${enc.model} · ${size} ${enc.family} = ${strings} strings × ${stringKWh.toFixed(0)} kWh (${stringV.toFixed(1)} V, ${packAh(pack)} Ah each)`;
+}
+
 export const enclosureSummary = (enc: EnclosureSpec) => ({
   energyKWh: enclosureEnergyKWh(enc), packEnergyKWh: packEnergyKWh(packOf(enc)),
   cells: enclosureCellCount(enc), footprintM2: enclosureFootprintM2(enc),

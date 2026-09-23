@@ -1,0 +1,444 @@
+{
+  "years": [
+    1,
+    5,
+    10,
+    15,
+    20
+  ],
+  "generatedFrom": "src/sizing/engine.ts",
+  "cases": [
+    {
+      "id": "5-kw-backup",
+      "label": "5 kW backup, 1 h",
+      "duty": {
+        "powerMW": 0.005,
+        "durationH": 1,
+        "applicationId": "backup-power",
+        "contractedUsableKWh": 5,
+        "cyclesPerDay": 0.05,
+        "daysPerYear": 365,
+        "projectYears": 20
+      },
+      "plant": {
+        "enclosureId": "enc-5-small",
+        "enclosureModel": "SB51100 rack",
+        "units": 2,
+        "pcsModel": "PCS 5 kW hybrid",
+        "pcsCount": 1,
+        "unitNominalKWh": 5.12,
+        "unitNominalVoltageV": 51.2,
+        "unitRatedKW": 2.5,
+        "cellsInSeries": 16,
+        "stringsInParallel": 1,
+        "cell": {
+          "id": "cell-lfp-100",
+          "chemistry": "LFP",
+          "nominalV": 3.2,
+          "ah": 100,
+          "maxV": 3.65,
+          "minV": 2.5,
+          "cycleLife": 6000,
+          "cycleLifeRetention": 0.8,
+          "cycleLifeDod": 0.9,
+          "calendarYears": 15,
+          "calendarRetention": 0.88
+        }
+      },
+      "conditions": {
+        "ambientC": 35,
+        "cellTempC": 31,
+        "tempFactor": 1.4142135623730951,
+        "dod": 0.95,
+        "usableDcWindow": 0.95,
+        "maxSoc": 97.5,
+        "minSoc": 7.250000000000001,
+        "systemCRate": 0.48828124999999994,
+        "packCRate": 0.5,
+        "efcPerYear": 17.3375,
+        "ageingDoublingK": 12
+      },
+      "studio": {
+        "storedDcKWh": 4.6208,
+        "dcRoundTrip": 0.9259454627568515,
+        "acRoundTrip": 0.8894253152027344,
+        "dischargeableKW": 2.56,
+        "retentionModel": {
+          "1": 0.9552740869685629,
+          "5": 0.8974798681335537,
+          "10": 0.8523548510842515,
+          "15": 0.8166727460498711,
+          "20": 0.785878651956869
+        },
+        "retentionSupplied": {
+          "1": 0.95,
+          "5": 0.87,
+          "10": 0.8,
+          "15": 0.74,
+          "20": 0.69
+        },
+        "basis": "table"
+      }
+    },
+    {
+      "id": "50-kw-peak-shaving",
+      "label": "50 kW peak shaving, 2 h",
+      "duty": {
+        "powerMW": 0.05,
+        "durationH": 2,
+        "applicationId": "peak-shaving",
+        "contractedUsableKWh": 100,
+        "cyclesPerDay": 1,
+        "daysPerYear": 250,
+        "projectYears": 20
+      },
+      "plant": {
+        "enclosureId": "enc-261-ci",
+        "enclosureModel": "SWESLC832V314Ah",
+        "units": 1,
+        "pcsModel": "PCS 125 kW",
+        "pcsCount": 1,
+        "unitNominalKWh": 261.24800000000005,
+        "unitNominalVoltageV": 832,
+        "unitRatedKW": 125,
+        "cellsInSeries": 260,
+        "stringsInParallel": 1,
+        "cell": {
+          "id": "cell-lfp-314",
+          "chemistry": "LFP",
+          "nominalV": 3.2,
+          "ah": 314,
+          "maxV": 3.65,
+          "minV": 2.5,
+          "cycleLife": 8000,
+          "cycleLifeRetention": 0.8,
+          "cycleLifeDod": 0.9,
+          "calendarYears": 20,
+          "calendarRetention": 0.9
+        }
+      },
+      "conditions": {
+        "ambientC": 35,
+        "cellTempC": 27.5,
+        "tempFactor": 1.155352696872273,
+        "dod": 0.9,
+        "usableDcWindow": 0.95,
+        "maxSoc": 97.5,
+        "minSoc": 12,
+        "systemCRate": 0.1913890249877511,
+        "packCRate": 0.5,
+        "efcPerYear": 225,
+        "ageingDoublingK": 12
+      },
+      "studio": {
+        "storedDcKWh": 223.36704000000003,
+        "dcRoundTrip": 0.9259454627568515,
+        "acRoundTrip": 0.8894253152027344,
+        "dischargeableKW": 130.62400000000002,
+        "retentionModel": {
+          "1": 0.9669445739626072,
+          "5": 0.9061275933791278,
+          "10": 0.846094683783428,
+          "15": 0.7916292060859994,
+          "20": 0.7400456432037387
+        },
+        "retentionSupplied": {
+          "1": 0.95,
+          "5": 0.87,
+          "10": 0.8,
+          "15": 0.74,
+          "20": 0.69
+        },
+        "basis": "table"
+      }
+    },
+    {
+      "id": "250-kw-peak-shaving",
+      "label": "250 kW peak shaving, 2 h",
+      "duty": {
+        "powerMW": 0.25,
+        "durationH": 2,
+        "applicationId": "peak-shaving",
+        "contractedUsableKWh": 500,
+        "cyclesPerDay": 1,
+        "daysPerYear": 250,
+        "projectYears": 20
+      },
+      "plant": {
+        "enclosureId": "enc-261-ci",
+        "enclosureModel": "SWESLC832V314Ah",
+        "units": 4,
+        "pcsModel": "PCS 125 kW",
+        "pcsCount": 2,
+        "unitNominalKWh": 261.24800000000005,
+        "unitNominalVoltageV": 832,
+        "unitRatedKW": 125,
+        "cellsInSeries": 260,
+        "stringsInParallel": 1,
+        "cell": {
+          "id": "cell-lfp-314",
+          "chemistry": "LFP",
+          "nominalV": 3.2,
+          "ah": 314,
+          "maxV": 3.65,
+          "minV": 2.5,
+          "cycleLife": 8000,
+          "cycleLifeRetention": 0.8,
+          "cycleLifeDod": 0.9,
+          "calendarYears": 20,
+          "calendarRetention": 0.9
+        }
+      },
+      "conditions": {
+        "ambientC": 35,
+        "cellTempC": 27.5,
+        "tempFactor": 1.155352696872273,
+        "dod": 0.9,
+        "usableDcWindow": 0.95,
+        "maxSoc": 97.5,
+        "minSoc": 12,
+        "systemCRate": 0.23923628123468885,
+        "packCRate": 0.5,
+        "efcPerYear": 225,
+        "ageingDoublingK": 12
+      },
+      "studio": {
+        "storedDcKWh": 223.36704000000003,
+        "dcRoundTrip": 0.9259454627568515,
+        "acRoundTrip": 0.8717257514301999,
+        "dischargeableKW": 130.62400000000002,
+        "retentionModel": {
+          "1": 0.9669445739626072,
+          "5": 0.9061275933791278,
+          "10": 0.846094683783428,
+          "15": 0.7916292060859994,
+          "20": 0.7400456432037387
+        },
+        "retentionSupplied": {
+          "1": 0.95,
+          "5": 0.87,
+          "10": 0.8,
+          "15": 0.74,
+          "20": 0.69
+        },
+        "basis": "table"
+      }
+    },
+    {
+      "id": "2-5-mw-solar-shifting",
+      "label": "2.5 MW solar shifting, 4 h",
+      "duty": {
+        "powerMW": 2.5,
+        "durationH": 4,
+        "applicationId": "solar-shifting",
+        "contractedUsableKWh": 10000,
+        "cyclesPerDay": 1,
+        "daysPerYear": 330,
+        "projectYears": 20
+      },
+      "plant": {
+        "enclosureId": "enc-5mwh-20ft",
+        "enclosureModel": "SWESLC1331.2V314Ah",
+        "units": 3,
+        "pcsModel": "PCS 2507.5 kW",
+        "pcsCount": 1,
+        "unitNominalKWh": 5015.9616000000005,
+        "unitNominalVoltageV": 1331.2,
+        "unitRatedKW": 2507.5,
+        "cellsInSeries": 416,
+        "stringsInParallel": 12,
+        "cell": {
+          "id": "cell-lfp-314",
+          "chemistry": "LFP",
+          "nominalV": 3.2,
+          "ah": 314,
+          "maxV": 3.65,
+          "minV": 2.5,
+          "cycleLife": 8000,
+          "cycleLifeRetention": 0.8,
+          "cycleLifeDod": 0.9,
+          "calendarYears": 20,
+          "calendarRetention": 0.9
+        }
+      },
+      "conditions": {
+        "ambientC": 35,
+        "cellTempC": 27.5,
+        "tempFactor": 1.155352696872273,
+        "dod": 0.92,
+        "usableDcWindow": 0.95,
+        "maxSoc": 97.5,
+        "minSoc": 10.099999999999998,
+        "systemCRate": 0.16613630641297836,
+        "packCRate": 0.5,
+        "efcPerYear": 303.6,
+        "ageingDoublingK": 12
+      },
+      "studio": {
+        "storedDcKWh": 4383.9504384,
+        "dcRoundTrip": 0.9259454627568515,
+        "acRoundTrip": 0.8717257514301999,
+        "dischargeableKW": 2507.9808000000003,
+        "retentionModel": {
+          "1": 0.9644220539077694,
+          "5": 0.8935149931049389,
+          "10": 0.82086948323505,
+          "15": 0.7537914052634325,
+          "20": 0.6895952421069828
+        },
+        "retentionSupplied": {
+          "1": 0.95,
+          "5": 0.87,
+          "10": 0.8,
+          "15": 0.74,
+          "20": 0.69
+        },
+        "basis": "table"
+      }
+    },
+    {
+      "id": "10-mw-arbitrage",
+      "label": "10 MW arbitrage, 4 h",
+      "duty": {
+        "powerMW": 10,
+        "durationH": 4,
+        "applicationId": "energy-arbitrage",
+        "contractedUsableKWh": 40000,
+        "cyclesPerDay": 1.2,
+        "daysPerYear": 340,
+        "projectYears": 20
+      },
+      "plant": {
+        "enclosureId": "enc-5mwh-20ft",
+        "enclosureModel": "SWESLC1331.2V314Ah",
+        "units": 11,
+        "pcsModel": "PCS 5000 kW",
+        "pcsCount": 2,
+        "unitNominalKWh": 5015.9616000000005,
+        "unitNominalVoltageV": 1331.2,
+        "unitRatedKW": 2507.5,
+        "cellsInSeries": 416,
+        "stringsInParallel": 12,
+        "cell": {
+          "id": "cell-lfp-314",
+          "chemistry": "LFP",
+          "nominalV": 3.2,
+          "ah": 314,
+          "maxV": 3.65,
+          "minV": 2.5,
+          "cycleLife": 8000,
+          "cycleLifeRetention": 0.8,
+          "cycleLifeDod": 0.9,
+          "calendarYears": 20,
+          "calendarRetention": 0.9
+        }
+      },
+      "conditions": {
+        "ambientC": 35,
+        "cellTempC": 27.5,
+        "tempFactor": 1.155352696872273,
+        "dod": 0.95,
+        "usableDcWindow": 0.95,
+        "maxSoc": 97.5,
+        "minSoc": 7.250000000000001,
+        "systemCRate": 0.18123960699597638,
+        "packCRate": 0.5,
+        "efcPerYear": 387.59999999999997,
+        "ageingDoublingK": 12
+      },
+      "studio": {
+        "storedDcKWh": 4526.905344,
+        "dcRoundTrip": 0.9259454627568515,
+        "acRoundTrip": 0.8717257514301999,
+        "dischargeableKW": 2507.9808000000003,
+        "retentionModel": {
+          "1": 0.9617262309484007,
+          "5": 0.8800358783080957,
+          "10": 0.7939112536413637,
+          "15": 0.713354060872903,
+          "20": 0.63567878291961
+        },
+        "retentionSupplied": {
+          "1": 0.95,
+          "5": 0.87,
+          "10": 0.8,
+          "15": 0.74,
+          "20": 0.69
+        },
+        "basis": "table"
+      }
+    },
+    {
+      "id": "20-mw-frequency-regulation",
+      "label": "20 MW frequency regulation, 1 h",
+      "duty": {
+        "powerMW": 20,
+        "durationH": 1,
+        "applicationId": "frequency-regulation",
+        "contractedUsableKWh": 20000,
+        "cyclesPerDay": 6,
+        "daysPerYear": 360,
+        "projectYears": 20
+      },
+      "plant": {
+        "enclosureId": "enc-5mwh-20ft",
+        "enclosureModel": "SWESLC1331.2V314Ah",
+        "units": 13,
+        "pcsModel": "PCS 5000 kW",
+        "pcsCount": 4,
+        "unitNominalKWh": 5015.9616000000005,
+        "unitNominalVoltageV": 1331.2,
+        "unitRatedKW": 2507.5,
+        "cellsInSeries": 416,
+        "stringsInParallel": 12,
+        "cell": {
+          "id": "cell-lfp-314",
+          "chemistry": "LFP",
+          "nominalV": 3.2,
+          "ah": 314,
+          "maxV": 3.65,
+          "minV": 2.5,
+          "cycleLife": 8000,
+          "cycleLifeRetention": 0.8,
+          "cycleLifeDod": 0.9,
+          "calendarYears": 20,
+          "calendarRetention": 0.9
+        }
+      },
+      "conditions": {
+        "ambientC": 35,
+        "cellTempC": 27.5,
+        "tempFactor": 1.155352696872273,
+        "dod": 0.4,
+        "usableDcWindow": 0.95,
+        "maxSoc": 97.5,
+        "minSoc": 59.5,
+        "systemCRate": 0.3067131810701139,
+        "packCRate": 0.5,
+        "efcPerYear": 864,
+        "ageingDoublingK": 12
+      },
+      "studio": {
+        "storedDcKWh": 1906.0654080000002,
+        "dcRoundTrip": 0.9259454627568515,
+        "acRoundTrip": 0.8717257514301999,
+        "dischargeableKW": 2507.9808000000003,
+        "retentionModel": {
+          "1": 0.9464370635931243,
+          "5": 0.8035900415317137,
+          "10": 0.6410195800885996,
+          "15": 0.4840165505437569,
+          "20": 0.32989543581408187
+        },
+        "retentionSupplied": {
+          "1": 0.95,
+          "5": 0.87,
+          "10": 0.8,
+          "15": 0.74,
+          "20": 0.69
+        },
+        "basis": "table"
+      }
+    }
+  ]
+}

@@ -317,6 +317,21 @@ h2.project-title{border-color:transparent}
 .lesson-card .btn{align-self:flex-start}
 .lesson-goal{margin:0;font-size:13.5px;color:var(--slate);line-height:1.6;max-width:70ch}
 
+/* The derivation from a requirement to a quantity of equipment: two chains, a verdict, the causes. */
+.rationale-head{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--slate-light);margin:0 0 6px}
+table.rationale{width:100%;border-collapse:collapse}
+table.rationale td{padding:7px 0;border-bottom:1px solid var(--line-soft);vertical-align:top;font-size:12.5px}
+table.rationale td .muted{font-size:11px;line-height:1.5;margin-top:2px;max-width:46ch}
+table.rationale td.num{text-align:right;white-space:nowrap;padding-left:12px;font-variant-numeric:tabular-nums}
+table.rationale td.num b{font-size:14px}
+table.rationale tr.last td{border-bottom:none}
+table.rationale tr.last td.num b{color:var(--green)}
+table.rationale tr.verdict td{border-bottom:none;padding-top:6px;font-size:11px;color:var(--slate-light);font-style:italic}
+.rationale-result{margin-top:14px;padding:11px 13px;border-left:2px solid var(--green);
+  background:rgba(147,190,73,.06);font-size:13px;line-height:1.6}
+.rationale-why{margin:12px 0 0;padding-left:18px;font-size:12.5px;line-height:1.65;color:var(--slate)}
+.rationale-why li{margin-bottom:5px}
+
 /* The argument the catalogue makes: a thesis, three acts, and what each card leaves you holding. */
 .lesson-thesis{margin:0 0 6px;font-size:13.5px;line-height:1.7;color:var(--ink);max-width:78ch}
 .lesson-act{margin-top:22px}
