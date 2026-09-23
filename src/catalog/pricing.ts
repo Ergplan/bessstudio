@@ -22,6 +22,27 @@ export type LandedCost = {
   customsDutyPct: number; inlandClearancePct: number;
   /** The issued proposal bundles a converter allowance with each enclosure; per-kW is the alternative. */
   pcsBasis: PcsBasis; pcsCostInrPerUnit: number; pcsCostInrPerKW: number;
+  /**
+   * The converter rating the bundled allowance was quoted against.
+   *
+   * A bundle is a price for a thing, not a price for anything. The proposal quoted ₹32.5 lakh of
+   * conversion with a 2,507.5 kW enclosure; applied to every product it also quoted ₹32.5 lakh of
+   * conversion for a five-kilowatt hybrid inverter, which was eighty per cent of that system's
+   * price and roughly seventy times what the inverter costs. Where the enclosure's rating is not
+   * the one this was quoted at, the rate card's own per-product figure is used instead.
+   */
+  pcsCostQuotedAtKW: number;
+  /**
+   * The system the FOB rate was quoted for.
+   *
+   * $68/kWh was quoted for five-megawatt-hour containers. Applied to every enclosure it said a
+   * 261 kWh cabinet and a 16 kWh wall rack cost the same money per kilowatt-hour as a container,
+   * which is not true of any battery product anywhere — and since a cabinet fleet fits a small
+   * duty more tightly than a container does, it made forty-six cabinets look cheaper than three
+   * containers for the same plant. Other enclosures are scaled by the rate card's own relative
+   * prices, which is the only per-product battery data the book holds.
+   */
+  basicPriceQuotedForEnclosureId: string;
 };
 
 export type CostingMode = 'landed-import' | 'direct';
@@ -51,6 +72,7 @@ export const defaultLandedCost = (): LandedCost => ({
   basicPriceUsdPerKWh: 68, oceanFreightPct: 1.5, exchangeRateInrPerUsd: 97,
   customsDutyPct: 11, inlandClearancePct: 1.5,
   pcsBasis: 'per-enclosure', pcsCostInrPerUnit: 3_250_000, pcsCostInrPerKW: offerPcsInrPerKW,
+  pcsCostQuotedAtKW: 2507.5, basicPriceQuotedForEnclosureId: 'enc-5mwh-20ft',
 });
 
 export type LandedBreakdown = {
@@ -62,7 +84,25 @@ export type LandedBreakdown = {
 };
 
 /** Landed cost of one system, in both currencies, at the project's own exchange rate. */
-export function landedCost(l: LandedCost, kWh: number, ratedKW: number): LandedBreakdown {
+/**
+ * The import rates as they apply to one enclosure, with the FOB rate scaled off the product the
+ * offer was struck for. Where the book carries no rate for either system the quoted rate stands.
+ */
+export const landedRatesFor = (pb: PriceBook, enclosureId: string): LandedCost => {
+  const quoted = pb.batteryPerKWh[pb.landed.basicPriceQuotedForEnclosureId], mine = pb.batteryPerKWh[enclosureId];
+  return quoted && mine && mine !== quoted
+    ? { ...pb.landed, basicPriceUsdPerKWh: pb.landed.basicPriceUsdPerKWh * mine / quoted }
+    : pb.landed;
+};
+
+/** True where the bundled converter allowance was quoted for equipment of this rating. */
+export const bundleAppliesTo = (l: LandedCost, ratedKW: number) =>
+  l.pcsBasis === 'per-enclosure' && Math.abs(ratedKW - l.pcsCostQuotedAtKW) < 1;
+
+/**
+ * @param pcsInrOverride the converter's own price, where the bundled allowance does not apply to it.
+ */
+export function landedCost(l: LandedCost, kWh: number, ratedKW: number, pcsInrOverride?: number): LandedBreakdown {
   const fobUsd = kWh * l.basicPriceUsdPerKWh;
   const oceanFreightUsd = fobUsd * l.oceanFreightPct / 100;
   const cifUsd = fobUsd + oceanFreightUsd;
@@ -70,7 +110,9 @@ export function landedCost(l: LandedCost, kWh: number, ratedKW: number): LandedB
   const customsDutyInr = cifInr * l.customsDutyPct / 100;
   const inlandClearanceInr = cifInr * l.inlandClearancePct / 100;
   const deliveredInr = cifInr + customsDutyInr + inlandClearanceInr;
-  const pcsInr = l.pcsBasis === 'per-enclosure' ? l.pcsCostInrPerUnit : ratedKW * l.pcsCostInrPerKW;
+  const pcsInr = pcsInrOverride !== undefined ? pcsInrOverride
+    : bundleAppliesTo(l, ratedKW) ? l.pcsCostInrPerUnit
+      : ratedKW * l.pcsCostInrPerKW;
   const totalInr = deliveredInr + pcsInr;
   const fx = Math.max(l.exchangeRateInrPerUsd, 1e-6);
   return {
@@ -87,8 +129,8 @@ export const defaultPriceBook: PriceBook = {
   id: 'pb-default', name: 'Supply offer basis', currency: 'INR', updatedAt: '2026-09-01',
   costingMode: 'landed-import', supplyScope: 'supply-only', landed: defaultLandedCost(),
   batteryPerKWh: { 'enc-5mwh-20ft': 84, 'enc-5mwh-alt': 86, 'enc-261-ci': 132, 'enc-52-rack': 168, 'enc-16-small': 196 },
-  pcsPerKW: { 'pcs-2507': 14, 'pcs-1725': 17, 'pcs-630': 26, 'pcs-125': 44, 'pcs-5': 92 },
-  transformerPerKVA: { 'tx-3150': 19, 'tx-5000': 17, 'tx-1600': 24 },
+  pcsPerKW: { 'pcs-5000': 13, 'pcs-2507': 14, 'pcs-1725': 17, 'pcs-630': 26, 'pcs-125': 44, 'pcs-5': 92 },
+  transformerPerKVA: { 'tx-6300': 16, 'tx-5000': 17, 'tx-3150': 19, 'tx-1600': 24, 'tx-1000': 27, 'tx-500': 34 },
   bopPerKW: 26, epcPerKWh: 22, civilPerM2: 210,
   freightPerUnit: 7500, commissioningPerUnit: 4800, engineeringFixed: 28000,
   contingencyPct: 4, marginPct: 14, taxPct: 0,

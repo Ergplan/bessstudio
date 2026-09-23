@@ -565,7 +565,7 @@ describe('the converter against the string it is wired to', () => {
 
   it('never asks a converter in a sized plant for more than its DC limit', () => {
     for (const enclosure of enclosures) for (const pcs of pcsUnits) {
-      const s = sizeSystem({ ...defaultSizingInput(), powerMW: 5, durationH: 2, enclosureId: enclosure.id, pcsId: pcs.id });
+      const s = sizeSystem({ ...defaultSizingInput(), powerMW: 5, durationH: 2, equipment: 'pinned', enclosureId: enclosure.id, pcsId: pcs.id });
       // The converter will not operate below its own minimum, so that is the worst case it sees.
       const workingMinV = Math.max(s.enclosure.dcMinV, s.pcs.dcMinV);
       const perConverterA = s.ratedPowerMW * 1e6 / (workingMinV * s.pcs.efficiency) / s.pcsCount;
@@ -574,10 +574,10 @@ describe('the converter against the string it is wired to', () => {
   });
 
   it('says so when the string drops below the voltage the converter can work at', () => {
-    const low = sizeSystem({ ...defaultSizingInput(), enclosureId: 'enc-5mwh-alt', pcsId: 'pcs-2507' });
+    const low = sizeSystem({ ...defaultSizingInput(), equipment: 'pinned', enclosureId: 'enc-5mwh-alt', pcsId: 'pcs-2507' });
     expect(low.enclosure.dcMinV).toBeLessThan(low.pcs.dcMinV);
     expect(low.warnings.some(w => w.code === 'dc-window-low')).toBe(true);
-    const matched = sizeSystem({ ...defaultSizingInput(), enclosureId: 'enc-5mwh-20ft', pcsId: 'pcs-2507' });
+    const matched = sizeSystem({ ...defaultSizingInput(), equipment: 'pinned', enclosureId: 'enc-5mwh-20ft', pcsId: 'pcs-2507' });
     expect(matched.warnings.some(w => w.code === 'dc-window-low')).toBe(false);
   });
 });
@@ -648,7 +648,7 @@ describe('the fleet counted component by component', () => {
    */
   it('multiplies the unit count by the unit, for every enclosure in the catalogue', () => {
     for (const enclosure of enclosures) {
-      const s = sizeSystem({ ...defaultSizingInput(), powerMW: 6, durationH: 3, enclosureId: enclosure.id });
+      const s = sizeSystem({ ...defaultSizingInput(), powerMW: 6, durationH: 3, equipment: 'pinned', enclosureId: enclosure.id });
       const pack = packOf(enclosure), where = enclosure.model;
       expect(s.racks, where).toBe(s.units * enclosure.racks);
       expect(s.packs, where).toBe(s.units * enclosure.racks * enclosure.packsPerRack);

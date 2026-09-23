@@ -1,4 +1,6 @@
 import { application, type ApplicationId } from './applications';
+import { defaultPriceBook, type PriceBook } from '../catalog/pricing';
+import { evaluateFinance } from './finance';
 import {
   byId, cellOf, packOf, enclosures, pcsUnits, transformers, enclosureEnergyKWh,
   enclosureCellCount, enclosureFootprintM2, enclosureStrings, enclosureCRate, packEnergyKWh,
@@ -45,6 +47,19 @@ export type SizingInput = {
   dod: number; availability: number;
   ambientC: number; altitudeM: number;
   enclosureId: string; pcsId: string; transformerId: string | null;
+  /**
+   * Whether the equipment above was chosen by a person or should follow the duty.
+   *
+   * `auto` is the default and means what it says: the smallest combination in the catalogue that
+   * carries the power and the energy asked for. Before it existed every design started from the
+   * five-megawatt-hour container whatever the duty was, so a five-kilowatt backup supply came back
+   * as one container, one 2.5 MW converter and a bill for five and a half crore — with warnings
+   * attached, which is not the same as an answer.
+   *
+   * `pinned` is what the System selector sets: an engineer who has chosen a product keeps it, and
+   * the warnings are then doing their real job of saying what it costs them.
+   */
+  equipment?: 'auto' | 'pinned';
   augmentation: AugmentationStrategy;
   gridKV: number; frequencyHz: 50 | 60; powerFactor: number;
   losses: LossChain; degradation: DegradationInput;
@@ -233,8 +248,139 @@ export function normaliseSizingInput(input: SizingInput): SizingInput {
   };
 }
 
+/**
+ * The smallest combination in the catalogue that carries this duty.
+ *
+ * Two constraints and one tie-break, and every part of it is checked in the tests. A combination
+ * has to deliver the **power** and hold the **energy**: sizing on energy alone picks a rack that
+ * cannot deliver a tenth of the load, and sizing on power alone picks a container to hold five
+ * kilowatt-hours. The converter has to see the string's voltage, because kilowatts that add up on
+ * paper are not a connection. Among what survives, the fewest boxes wins within twice the least
+ * installed energy — fewest boxes alone buys a container for a wall socket, and least energy alone
+ * buys eleven racks where one would do.
+ */
+export function fitEquipment(raw: SizingInput) {
+  const neededKW = Math.max(0.001, (raw.mode === 'power-duration'
+    ? raw.powerMW : raw.usableEnergyMWh / Math.max(raw.durationH, 0.01)) * 1000);
+
+  const candidates = enclosures.flatMap(enclosure => {
+    const dcNominalV = (enclosure.dcMinV + enclosure.dcMaxV) / 2;
+    const fits = pcsUnits
+      .map(pcs => ({
+        pcs, n: Math.max(1, Math.ceil(neededKW / pcs.ratedKW)),
+        // A converter whose input window covers the whole string works at every state of charge.
+        // One that only covers the nominal point stops short at low charge, and the energy below
+        // that point is bought and never delivered.
+        covers: pcs.dcMinV <= enclosure.dcMinV && pcs.dcMaxV >= enclosure.dcMaxV ? 0 : 1,
+      }))
+      .filter(({ pcs, n }) => pcs.dcMinV <= dcNominalV && pcs.dcMaxV >= dcNominalV && n <= MAX_CONVERTERS);
+    if (!fits.length) return [];
+    const tightest = Math.min(...fits.map(({ pcs, n }) => n * pcs.ratedKW));
+    const pcs = fits.filter(({ pcs: p, n }) => n * p.ratedKW <= tightest * 1.5)
+      .sort((a, b) => a.covers - b.covers || a.n - b.n || a.n * a.pcs.ratedKW - b.n * b.pcs.ratedKW)[0];
+
+    // Sized by the engine itself rather than by an estimate of what it would say. An allowance for
+    // the window, the depth of discharge, the path losses and the ageing margin was out by a factor
+    // of two and a half, which chose four cabinets for a duty that turned out to need ten.
+    const sized = sizeSystem({
+      ...raw, equipment: 'pinned',
+      enclosureId: enclosure.id, pcsId: pcs.pcs.id, transformerId: null,
+    });
+    if (sized.units > MAX_ENCLOSURES) return [];
+    return [{ enclosure, pcs: pcs.pcs, pcsCount: pcs.n, units: sized.units, installedMWh: sized.installedDcMWh, sized }];
+  });
+  if (!candidates.length) return null;
+
+  /**
+   * The cheapest combination that carries the duty.
+   *
+   * Every heuristic tried before this one was arbitrary and, worse, not monotone: "fewest boxes"
+   * bought a five-megawatt-hour container for a wall socket, "least installed energy" bought twenty
+   * cabinets where two containers would do, and the compromise between them flipped at a threshold
+   * so that *doubling* the power halved the box count. Cost is not a tie-break dressed up as a
+   * rule — it is the question the customer is actually asking, and it is monotone because the
+   * equipment prices are.
+   *
+   * Not a proxy for the cost — **the cost**. Two proxies were tried and both were wrong in the
+   * same way: they left out whatever happened to differ between the options. Ranking on the
+   * hardware alone ignored that freight and commissioning are charged per enclosure, so nine
+   * cabinets carried nine lots of each. Adding those in still ignored civil works and installation,
+   * which is precisely where nine cabinets and one container part company — and a five-hundred
+   * kilowatt plant came out dearer than a seven-hundred-and-fifty kilowatt one.
+   *
+   * So the candidates are priced the way the project will be priced, by the same function that
+   * prices it. It costs a handful of extra sizings, and it is the only version of this that cannot
+   * quietly disagree with the number on the screen.
+   */
+  /**
+   * Priced as if somebody had to install it, whatever the quotation's own scope is.
+   *
+   * A supply-only quotation charges for boxes and nothing else, so under it eighty-eight cabinets
+   * genuinely undercut five containers — the eighty-three extra foundations, terminations and
+   * commissioning visits are real but appear on nobody's invoice. Ranking on that basis proposed
+   * 88 cabinets for 2.5 MW and 240 for 20 MW: cheaper on paper, not a plant. The choice of
+   * equipment is a question about the installed system, so the candidates are compared at turnkey
+   * scope even where the offer stops at the gate. The quotation still prices the scope that was
+   * actually sold.
+   */
+  const yardstick: PriceBook = { ...defaultPriceBook, supplyScope: 'turnkey' };
+  const capexUsd = (c: typeof candidates[number]) => {
+    try { return evaluateFinance(c.sized, yardstick).capexUsd; } catch { return Number.POSITIVE_INFINITY; }
+  };
+  /**
+   * A combination that cannot carry the duty is not the cheap answer; it is not an answer.
+   *
+   * Price only decides between designs that work. Errors — a discharge rate above what the pack
+   * sustains, a string outside the converter — come first, because the cheapest thing in the
+   * catalogue is always the one that is too small.
+   */
+  const errors = (c: typeof candidates[number]) => c.sized.warnings.filter(w => w.level === 'error').length;
+  const priced = candidates.map(c => ({ c, errs: errors(c), usd: capexUsd(c) }));
+  const best = priced.slice().sort((a, b) => a.errs - b.errs || a.usd - b.usd
+    || a.c.installedMWh - b.c.installedMWh || (a.c.units + a.c.pcsCount) - (b.c.units + b.c.pcsCount))[0].c;
+
+  /**
+   * A transformer only where there is something for it to do.
+   *
+   * Below a couple of hundred kVA a plant connects at low voltage and a distribution transformer is
+   * neither needed nor available in any size that fits — and putting a 3,150 kVA unit next to a
+   * five-kilowatt battery was the clearest single sign that nothing was choosing anything.
+   */
+  //
+  // A design with no transformer keeps none: that is a decision about scope — supply-only, or a
+  // connection somebody else is making — and fitting one in would be answering a question nobody
+  // asked. Where there is one, it is sized to the plant rather than left at whatever the default
+  // was, which is how a five-kilowatt battery came to be quoted with a 3,150 kVA transformer.
+  const kVA = neededKW / 0.95;
+  const transformerId = raw.transformerId === null
+    ? null
+    : kVA < 250
+      ? null
+      : (transformers.filter(t => t.ratedKVA >= kVA).sort((a, b) => a.ratedKVA - b.ratedKVA)[0]
+        ?? transformers.slice().sort((a, b) => b.ratedKVA - a.ratedKVA)[0]).id;
+
+  return { enclosureId: best.enclosure.id, pcsId: best.pcs.id, transformerId };
+}
+
+/**
+ * How far a fitted design may go before it stops being a design.
+ *
+ * These are absurdity bounds, not preferences: a hundred-megawatt plant really is a hundred and ten
+ * containers and forty converters, and a cap of twenty-four rejected every candidate for it — after
+ * which the fit silently fell back to whatever the input already named, which for a 50 MW plant
+ * meant seventeen transformers chosen by nobody. Falling back is worse than fitting something
+ * large, so these are set where nothing a person would ask for reaches them: which candidate wins
+ * is decided by cost below, and cost already refuses to build a hundred megawatts out of
+ * sixteen-kilowatt-hour wall racks. They only throw out the ones that are not proposals at all.
+ */
+const MAX_ENCLOSURES = 2000;
+const MAX_CONVERTERS = 400;
+
 export function sizeSystem(raw: SizingInput): SizingResult {
-  const input = normaliseSizingInput(raw);
+  // The equipment follows the duty unless somebody pinned it. `fitEquipment` sizes each candidate
+  // with this same function, which is why it pins them: without that this recurses forever.
+  const fitted = (raw.equipment ?? 'auto') === 'auto' ? fitEquipment({ ...raw, equipment: 'pinned' }) : null;
+  const input = normaliseSizingInput(fitted ? { ...raw, ...fitted } : raw);
   const enclosure = byId(enclosures, input.enclosureId), pcs = byId(pcsUnits, input.pcsId);
   const transformer = input.transformerId ? byId(transformers, input.transformerId) : null;
   const pack = packOf(enclosure), cell = cellOf(pack), app = application(input.applicationId);

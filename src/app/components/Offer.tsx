@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { brand } from '../../brand/brand';
-import { atRate, formatMoney, fromLanded, landedCost, localRate, type Currency } from '../../catalog/pricing';
+import { atRate, formatMoney, fromLanded, localRate, type Currency } from '../../catalog/pricing';
 import { uplift } from '../../quoting/quote';
 import { packOf, cellOf } from '../../catalog/products';
 import type { SizingResult } from '../../sizing/engine';
-import type { FinanceResult } from '../../sizing/finance';
+import { landedForSizing, type FinanceResult } from '../../sizing/finance';
 import { energySchedule, offerTotals, plantConfiguration, type OfferContent } from '../../quoting/offer';
 import type { PriceBook } from '../../catalog/pricing';
 import type { Organization, Quote } from '../../platform/types';
@@ -117,14 +117,9 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
   // inside the basic rate, exactly as they do in a supplier's own offer, so the per-enclosure
   // figures multiply out to the order value on the same page.
   const factor = uplift(finance);
-  const landed = finance.landed
-    ? landedCost({
-        ...priceBook.landed,
-        basicPriceUsdPerKWh: priceBook.landed.basicPriceUsdPerKWh * factor,
-        pcsCostInrPerUnit: priceBook.landed.pcsCostInrPerUnit * factor,
-        pcsCostInrPerKW: priceBook.landed.pcsCostInrPerKW * factor,
-      }, finance.landed.kWh, finance.landed.ratedKW)
-    : null;
+  // Struck by the same function that prices the project, with the uplift applied to every rate.
+  // Rebuilding it here drifted the moment the rates stopped being one number for every product.
+  const landed = finance.landed ? landedForSizing(sizing, priceBook, factor) : null;
   // The landed build-up is struck in rupees at the offer's own rate. Quoted in any other currency
   // every rupee figure travels back through that rate and out at the reference rate for the
   // currency asked for — otherwise a rupee amount is printed under a dollar heading, and the

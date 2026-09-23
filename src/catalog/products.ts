@@ -73,7 +73,14 @@ export const packSpecs: PackSpec[] = [
   { id: 'pack-4s-100', model: 'SB12100', cellId: 'cell-lfp-100', series: 4, parallel: 1, rows: 1, columns: 4, nominalV: 12.8, maxV: 14.6, minV: 10.0, labelKWh: 1.28, continuousA: 50, maxA: 80, massKg: 11.5, certifications: ['IS 16270', 'IEC 62619 or UL 1973', 'UN 38.3'], provenance: 'supplied' },
   { id: 'pack-8s-100', model: 'SB24100', cellId: 'cell-lfp-100', series: 8, parallel: 1, rows: 2, columns: 4, nominalV: 25.6, maxV: 29.2, minV: 20.0, labelKWh: 2.56, continuousA: 50, maxA: 80, massKg: 22, certifications: ['IS 16270', 'IEC 62619 or UL 1973', 'UN 38.3'], provenance: 'supplied' },
   { id: 'pack-16s-100', model: 'SB51100', cellId: 'cell-lfp-100', series: 16, parallel: 1, rows: 2, columns: 8, nominalV: 51.2, maxV: 58.4, minV: 40.0, labelKWh: 5.12, continuousA: 50, maxA: 80, massKg: 42, certifications: ['IS 16270', 'IEC 62619 or UL 1973', 'UN 38.3'], provenance: 'supplied' },
-  { id: 'pack-16s-314', model: 'SB51314', cellId: 'cell-lfp-314', series: 16, parallel: 1, rows: 2, columns: 8, nominalV: 51.2, maxV: 58.4, minV: 40.0, labelKWh: 16.076, continuousA: 50, maxA: 150, massKg: 112, certifications: ['IS 16270', 'IEC 62619 or UL 1973', 'UN 38.3'], provenance: 'supplied' },
+  // 100 A continuous, not the 50 A the 100 Ah packs above carry. The schedule rates this pack's own
+  // cabinet at 5 kW, which at 51.2 V is 98 A; 50 A on a 314 Ah pack would be 2.6 kW and 0.16 C,
+  // against 0.5 C for every other pack in the schedule. The two supplied figures cannot both be
+  // right, and the 50 A reads as carried over from the 100 Ah pack it sits beside. Taken at 50 A
+  // the sizing refused every small design outright — a 5 kW backup supply came back as an error
+  // and then as a 261 kWh cabinet — so it is reconciled to the cabinet rating, below the 150 A
+  // maximum. Confirm against the pack data sheet before issue.
+  { id: 'pack-16s-314', model: 'SB51314', cellId: 'cell-lfp-314', series: 16, parallel: 1, rows: 2, columns: 8, nominalV: 51.2, maxV: 58.4, minV: 40.0, labelKWh: 16.076, continuousA: 100, maxA: 150, massKg: 112, certifications: ['IS 16270', 'IEC 62619 or UL 1973', 'UN 38.3'], provenance: 'assumed' },
   { id: 'pack-52s', model: 'SB166314', cellId: 'cell-lfp-314', series: 52, parallel: 1, rows: 4, columns: 13, nominalV: 166.4, maxV: 189.8, minV: 130, labelKWh: 52.25, continuousA: 157, maxA: 157, massKg: 340, certifications: moduleCerts, provenance: 'supplied' },
   { id: 'pack-104s', model: 'SB332314', cellId: 'cell-lfp-314', series: 104, parallel: 1, rows: 8, columns: 13, nominalV: 332.8, maxV: 379.6, minV: 260, labelKWh: 104.45, continuousA: 157, maxA: 157, massKg: 660, certifications: moduleCerts, provenance: 'supplied' },
 ];
@@ -148,6 +155,11 @@ export const transformers: TransformerSpec[] = [
   { id: 'tx-3150', model: 'IDT 3150 kVA', ratedKVA: 3150, lvKV: 0.69, hvKV: 33, efficiency: 0.99, provenance: 'indicative' },
   { id: 'tx-5000', model: 'IDT 5000 kVA', ratedKVA: 5000, lvKV: 0.69, hvKV: 33, efficiency: 0.99, provenance: 'indicative' },
   { id: 'tx-1600', model: 'IDT 1600 kVA', ratedKVA: 1600, lvKV: 0.4, hvKV: 11, efficiency: 0.99, provenance: 'indicative' },
+  // Distribution-class inverter-duty units. Without them the smallest transformer in the catalogue
+  // was 1 600 kVA, so a 250 kW plant needing 263 kVA was quoted six times the transformer it wants
+  // — ₹37 lakh of iron on a ₹1 crore system, which is not a price anybody would recognise.
+  { id: 'tx-1000', model: 'IDT 1000 kVA', ratedKVA: 1000, lvKV: 0.4, hvKV: 11, efficiency: 0.988, provenance: 'indicative' },
+  { id: 'tx-500', model: 'IDT 500 kVA', ratedKVA: 500, lvKV: 0.4, hvKV: 11, efficiency: 0.986, provenance: 'indicative' },
 ];
 
 export const byId = <T extends { id: string }>(list: T[], id: string): T => {

@@ -1,6 +1,6 @@
 import { application } from './applications';
 import type { SizingResult } from './engine';
-import { landedCost, type LandedBreakdown, type PriceBook, type Currency, convert } from '../catalog/pricing';
+import { bundleAppliesTo, landedCost, landedRatesFor, type LandedBreakdown, type LandedCost, type PriceBook, type Currency, convert } from '../catalog/pricing';
 
 export type CostLine = { id: string; category: 'equipment' | 'balance-of-plant' | 'services' | 'commercial'; label: string; quantity: number; unit: string; unitCostUsd: number; totalUsd: number; note?: string };
 export type CashRow = { year: number; capexUsd: number; opexUsd: number; chargingUsd: number; benefitUsd: number; netUsd: number; discountedUsd: number; cumulativeUsd: number; dischargedMWh: number };
@@ -16,9 +16,32 @@ export type FinanceResult = {
   annualBenefitUsd: number; augmentationUsd: number;
 };
 
-/** Landed cost of one system under the price book's import assumptions. */
-export const landedForSizing = (sizing: SizingResult, pb: PriceBook): LandedBreakdown =>
-  landedCost(pb.landed, sizing.installedDcMWh * 1000 / sizing.units, sizing.enclosure.ratedKW);
+/**
+ * Landed cost of one system under the price book's import assumptions.
+ *
+ * `factor` raises every rate by the same uplift, which is how the customer's own build-up is
+ * struck: contingency and margin ride inside the basic rate so the per-enclosure figures multiply
+ * out to the order value printed beside them. The offer page asks for it through this same
+ * function rather than rebuilding the rates itself — a second copy of this arithmetic drifted the
+ * moment the rates stopped being one number for every product.
+ */
+export const landedForSizing = (sizing: SizingResult, pb: PriceBook, factor = 1): LandedBreakdown => {
+  const rates = landedRatesFor(pb, sizing.enclosure.id);
+  const l: LandedCost = factor === 1 ? rates : {
+    ...rates, basicPriceUsdPerKWh: rates.basicPriceUsdPerKWh * factor,
+    pcsCostInrPerUnit: rates.pcsCostInrPerUnit * factor, pcsCostInrPerKW: rates.pcsCostInrPerKW * factor,
+  };
+  // Where the bundled allowance was not quoted for this equipment, the converter is priced from the
+  // rate card's own per-product figure — the only per-product conversion data there is, and the
+  // only thing that knows a five-kilowatt hybrid is not a 2,507 kW central unit.
+  const cardInrPerKW = pb.pcsPerKW[sizing.pcs.id] === undefined
+    ? l.pcsCostInrPerKW                                           // no rate for this product: the offer's own rate
+    : pb.pcsPerKW[sizing.pcs.id] * l.exchangeRateInrPerUsd * factor;
+  const perUnitPcsInr = bundleAppliesTo(l, sizing.enclosure.ratedKW)
+    ? undefined
+    : cardInrPerKW * sizing.pcs.ratedKW * sizing.pcsCount / Math.max(sizing.units, 1);
+  return landedCost(l, sizing.installedDcMWh * 1000 / sizing.units, sizing.enclosure.ratedKW, perUnitPcsInr);
+};
 
 /**
  * Itemised day-one cost stack, before contingency, margin and tax.
@@ -41,7 +64,9 @@ export function costLines(sizing: SizingResult, pb: PriceBook): CostLine[] {
     // fewer converters than enclosures, the per-kW basis prices the converters actually installed.
     lines.push(
       line('battery', 'equipment', `${enc.model} ${enc.family} · ${(sizing.installedDcMWh / sizing.units).toFixed(3)} MWh each, delivered`, sizing.units, 'unit', landed.deliveredInr / fx,
-        `FOB $${pb.landed.basicPriceUsdPerKWh}/kWh + ${pb.landed.oceanFreightPct}% freight + ${pb.landed.customsDutyPct}% duty + ${pb.landed.inlandClearancePct}% clearance`),
+        // The rate as charged for this product, not the headline rate: they differ wherever the
+        // offer was struck against a different enclosure.
+        `FOB $${(landed.fobUsd / Math.max(landed.kWh, 1e-9)).toFixed(0)}/kWh + ${pb.landed.oceanFreightPct}% freight + ${pb.landed.customsDutyPct}% duty + ${pb.landed.inlandClearancePct}% clearance`),
       pb.landed.pcsBasis === 'per-enclosure'
         ? line('pcs', 'equipment', `${sizing.pcs.model} power conversion system`, sizing.units, 'enclosure', landed.pcsInr / fx,
             `One converter allowance per enclosure; ${sizing.pcsCount} × ${sizing.pcs.ratedKW} kW installed · ${sizing.pcs.approvedVendors.slice(0, 3).join(', ')}`)

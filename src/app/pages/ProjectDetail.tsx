@@ -18,6 +18,7 @@ import {
 import { evaluateFinance } from '../../sizing/finance';
 import { createQuote, nextQuoteNumber } from '../../quoting/quote';
 import { enclosures, pcsUnits, transformers, cellOf, packOf } from '../../catalog/products';
+import * as units from '../../domain/units';
 import { formatMoney, localRate } from '../../catalog/pricing';
 import type { ApplicationId } from '../../sizing/applications';
 
@@ -138,10 +139,12 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
       )}
 
       <div className="grid cols-4">
-        <Stat label="Rated power" value={sizing.ratedPowerMW.toFixed(2)} unit="MW"
-          foot={`${sizing.pcsCount} × ${sizing.pcs.model}${sizing.chargePowerMW > sizing.ratedPowerMW * 1.001 ? ` · sized on ${sizing.chargePowerMW.toFixed(1)} MW charging` : ''}`} />
-        <Stat label="Contracted usable" value={sizing.requiredUsableMWh.toFixed(1)} unit="MWh" foot={`${sizing.effectiveDurationH.toFixed(2)} h duration`} />
-        <Stat label="Installed DC" value={sizing.installedDcMWh.toFixed(2)} unit="MWh" foot={`${sizing.units} × ${sizing.enclosure.model}${sizing.augmentations.length ? ` + ${sizing.totalUnits - sizing.units} augmentation` : ''}`} />
+        {/* The unit follows the figure: a five-kilowatt plant is not 0.01 MW, and five
+            kilowatt-hours of contracted energy is certainly not "0.0 MWh". */}
+        <Stat label="Rated power" {...units.power(sizing.ratedPowerMW)}
+          foot={`${sizing.pcsCount} × ${sizing.pcs.model}${sizing.chargePowerMW > sizing.ratedPowerMW * 1.001 ? ` · sized on ${units.powerText(sizing.chargePowerMW)} charging` : ''}`} />
+        <Stat label="Contracted usable" {...units.energy(sizing.requiredUsableMWh)} foot={`${sizing.effectiveDurationH.toFixed(2)} h duration`} />
+        <Stat label="Installed DC" {...units.energy(sizing.installedDcMWh)} foot={`${sizing.units} × ${sizing.enclosure.model}${sizing.augmentations.length ? ` + ${sizing.totalUnits - sizing.units} augmentation` : ''}`} />
         <Stat label={priceBook.supplyScope === 'turnkey' ? 'Turnkey price' : 'Delivered equipment price'}
           value={money(finance.capexUsd)} foot={`${money(finance.capexPerKWhUsd, false)} per kWh DC`} />
       </div>
@@ -173,14 +176,21 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
           <Card title="Duty and sizing basis">
             <SelectInput label="Sizing mode" value={project.sizing.mode} options={[{ value: 'power-duration', label: 'Power × duration' }, { value: 'usable-energy', label: 'Usable energy target' }]}
               onChange={mode => set({ mode: mode as SizingMode })} />
+            {/* Below a megawatt the dial is in kilowatts, because a slider that starts at 0.05 MW
+                cannot express a five-kilowatt plant at all — and that is a real duty somebody is
+                here to size. The ranges overlap at the changeover so neither end is a trap. */}
             {project.sizing.mode === 'power-duration'
-              ? <><Slider label="Rated power" value={project.sizing.powerMW} min={0.05} max={200} step={0.05} decimals={2} unit="MW" onChange={powerMW => set({ powerMW })} />
+              ? <>{project.sizing.powerMW < 1
+                ? <Slider label="Rated power" value={project.sizing.powerMW} scale={1000} min={1} max={2000} step={1} unit="kW" onChange={powerMW => set({ powerMW })} />
+                : <Slider label="Rated power" value={project.sizing.powerMW} min={1} max={200} step={0.05} decimals={2} unit="MW" onChange={powerMW => set({ powerMW })} />}
                   <Slider label="Duration at rated power" value={project.sizing.durationH} min={0.25} max={12} step={0.25} decimals={2} unit="h" onChange={durationH => set({ durationH })} /></>
-              : <><Slider label="Usable energy" value={project.sizing.usableEnergyMWh} min={0.1} max={1000} step={0.1} decimals={1} unit="MWh" onChange={usableEnergyMWh => set({ usableEnergyMWh })} />
+              : <>{project.sizing.usableEnergyMWh < 1
+                ? <Slider label="Usable energy" value={project.sizing.usableEnergyMWh} scale={1000} min={1} max={2000} step={1} unit="kWh" onChange={usableEnergyMWh => set({ usableEnergyMWh })} />
+                : <Slider label="Usable energy" value={project.sizing.usableEnergyMWh} min={1} max={1000} step={0.1} decimals={1} unit="MWh" onChange={usableEnergyMWh => set({ usableEnergyMWh })} />}
                   <Slider label="Discharge duration" value={project.sizing.durationH} min={0.25} max={12} step={0.25} decimals={2} unit="h" onChange={durationH => set({ durationH })} /></>}
             <Slider label="Hours allowed to charge" value={normaliseSizingInput(project.sizing).chargeDurationH} min={0.25} max={24} step={0.25} decimals={2} unit="h"
               onChange={chargeDurationH => set({ chargeDurationH })}
-              hint={`Returning the contracted energy in this window asks ${sizing.chargePowerMW.toFixed(2)} MW at ${sizing.chargeCRate.toFixed(2)} C.`} />
+              hint={`Returning the contracted energy in this window asks ${units.powerText(sizing.chargePowerMW)} at ${sizing.chargeCRate.toFixed(2)} C.`} />
             <Slider label="Cycles per day" value={project.sizing.cyclesPerDay} min={0.05} max={12} step={0.05} decimals={2} unit="/day" onChange={cyclesPerDay => set({ cyclesPerDay })} />
             <Slider label="Operating days per year" value={project.sizing.daysPerYear} min={30} max={366} step={1} unit="days" onChange={daysPerYear => set({ daysPerYear })} />
             <Slider label="Depth of discharge" value={project.sizing.dod} scale={100} min={20} max={100} step={1} unit="%" onChange={dod => set({ dod })} />
@@ -193,9 +203,17 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
             <Slider label="Design ambient temperature" value={project.sizing.ambientC} min={-20} max={58} step={1} unit="°C" onChange={ambientC => set({ ambientC })}
               hint={ambientHint(sizing, project.sizing.degradation.mode)} />
             <Slider label="Altitude" value={project.sizing.altitudeM} min={0} max={5000} step={10} unit="m" onChange={altitudeM => set({ altitudeM })} />
-            <SelectInput label="System" value={project.sizing.enclosureId} options={enclosures.map(e => ({ value: e.id, label: `${e.model} · ${(enclosureSummary(e).energyKWh / 1000).toFixed(3)} MWh / ${e.ratedKW} kW ${e.family}` }))} onChange={enclosureId => set({ enclosureId })} />
-            <SelectInput label="Power conversion" value={project.sizing.pcsId} options={pcsUnits.map(p => ({ value: p.id, label: `${p.model} · ${p.ratedKW} kW ${p.topology}` }))} onChange={pcsId => set({ pcsId })} />
-            <SelectInput label="Step-up transformer" value={project.sizing.transformerId ?? ''} options={[{ value: '', label: 'None — connect at LV' }, ...transformers.map(t => ({ value: t.id, label: `${t.model} · ${t.ratedKVA} kVA ${t.lvKV}/${t.hvKV} kV` }))]} onChange={id => set({ transformerId: id || null })} />
+            {/* Choosing a product pins it. Until somebody does, the equipment follows the duty —
+                which is what stops a five-kilowatt supply being quoted as a shipping container. */}
+            <SelectInput label="System" value={project.sizing.enclosureId} options={enclosures.map(e => ({ value: e.id, label: `${e.model} · ${units.energyText(enclosureSummary(e).energyKWh / 1000)} / ${e.ratedKW} kW ${e.family}` }))} onChange={enclosureId => set({ enclosureId, equipment: 'pinned' })} />
+            <SelectInput label="Power conversion" value={project.sizing.pcsId} options={pcsUnits.map(p => ({ value: p.id, label: `${p.model} · ${p.ratedKW} kW ${p.topology}` }))} onChange={pcsId => set({ pcsId, equipment: 'pinned' })} />
+            <SelectInput label="Step-up transformer" value={project.sizing.transformerId ?? ''} options={[{ value: '', label: 'None — connect at LV' }, ...transformers.map(t => ({ value: t.id, label: `${t.model} · ${t.ratedKVA} kVA ${t.lvKV}/${t.hvKV} kV` }))]} onChange={id => set({ transformerId: id || null, equipment: 'pinned' })} />
+            {(project.sizing.equipment ?? 'auto') === 'pinned' && (
+              <div className="row" style={{ marginTop: 8 }}>
+                <button className="btn sm" onClick={() => set({ equipment: 'auto' })}>Fit the equipment to the duty</button>
+                <span className="muted">Equipment is pinned to what was chosen above.</span>
+              </div>
+            )}
             <div className="grid cols-2" style={{ gap: 0, columnGap: 12 }}>
               <NumberInput label="Grid voltage" value={project.sizing.gridKV} unit="kV" min={0.4} max={400} step={0.1} onChange={gridKV => set({ gridKV })} />
               <NumberInput label="Power factor" value={project.sizing.powerFactor} unit="pf" min={0.8} max={1} step={0.01} onChange={powerFactor => set({ powerFactor })} />
@@ -372,7 +390,7 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
             <Stat label="Retention at year 1" value={pct(sizing.years[1]?.retention ?? 1)} foot={`${sizing.efcPerYear.toFixed(0)} equivalent full cycles per year`} />
             <Stat label={`Retention at year ${project.sizing.projectYears}`} value={pct(sizing.endOfLifeRetention)} foot={`Cell temperature ${sizing.cellTempC.toFixed(1)} °C, ageing factor ${sizing.tempFactor.toFixed(2)}×`} />
             <Stat label="Augmentation events" value={String(sizing.augmentations.length)} foot={sizing.augmentations.length ? `Years ${sizing.augmentations.map(a => a.year).join(', ')}` : 'None required'} />
-            <Stat label="Lifetime throughput" value={Math.round(sizing.lifetimeThroughputMWh).toLocaleString()} unit="MWh" foot={`Warranty basis ${Math.round(sizing.warrantyThroughputMWh).toLocaleString()} MWh`} />
+            <Stat label="Lifetime throughput" {...units.energy(sizing.lifetimeThroughputMWh)} foot={`Warranty basis ${units.energyText(sizing.warrantyThroughputMWh)}`} />
           </div>
 
           <Card title="Usable energy over the project life" subtitle="Cohort ageing: augmented capacity ages from its own installation year">

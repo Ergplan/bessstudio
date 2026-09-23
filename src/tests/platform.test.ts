@@ -143,7 +143,7 @@ describe('sizing engine', () => {
     const mismatched = sizeSystem(input({ pcsId: 'pcs-125' }));
     expect(mismatched.warnings.some(w => w.code === 'dc-window-high')).toBe(true);
     expect(mismatched.warnings.find(w => w.code === 'dc-window-high')!.text).toContain('per cell');
-    const airCooled = sizeSystem(input({ enclosureId: 'enc-52-rack', pcsId: 'pcs-125', ambientC: 45, powerMW: 0.02, durationH: 2 }));
+    const airCooled = sizeSystem(input({ equipment: 'pinned', enclosureId: 'enc-52-rack', pcsId: 'pcs-125', ambientC: 45, powerMW: 0.02, durationH: 2 }));
     expect(airCooled.warnings.some(w => w.code === 'cooling')).toBe(true);
     expect(sizeSystem(input()).warnings.some(w => w.code === 'validation')).toBe(true);
   });

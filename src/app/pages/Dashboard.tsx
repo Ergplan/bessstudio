@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { ArrowUpRight, Plus } from 'lucide-react';
+import * as units from '../../domain/units';
 import { Card, Stat, Badge, Empty, stageTone, quoteTone, date } from '../components/ui';
 import { CompositionBar, Funnel, BarChart, series } from '../components/viz';
 import { useWorkspace } from '../../platform/workspace';
@@ -55,7 +56,7 @@ export function Dashboard() {
       <div className="grid cols-4">
         <Stat label="Open pipeline" value={money(pipelineValue)} foot={`${open.length} live quotation${open.length === 1 ? '' : 's'}`} />
         <Stat label="Won this workspace" value={money(wonValue)} foot={`${(winRate * 100).toFixed(0)}% win rate on decided quotes`} />
-        <Stat label="Fleet under quote" value={fleet.mwh.toFixed(1)} unit="MWh" foot={`${fleet.mw.toFixed(1)} MW across ${fleet.units} enclosures`} />
+        <Stat label="Fleet under quote" {...units.energy(fleet.mwh)} foot={`${units.powerText(fleet.mw)} across ${fleet.units} enclosures`} />
         <Stat label="Active customers" value={String(customers.filter(c => c.stage !== 'lost').length)} foot={`${projects.length} project${projects.length === 1 ? '' : 's'} in progress`} />
       </div>
 

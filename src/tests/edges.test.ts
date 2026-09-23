@@ -123,7 +123,7 @@ describe('the ends of every slider', () => {
 describe('every combination the catalogue allows', () => {
   it('sizes, prices and quotes without producing a single bad number', () => {
     for (const enclosure of enclosures) for (const pcs of pcsUnits) {
-      const s = sizeSystem({ ...defaultSizingInput(), powerMW: 2, durationH: 2, enclosureId: enclosure.id, pcsId: pcs.id });
+      const s = sizeSystem({ ...defaultSizingInput(), powerMW: 2, durationH: 2, equipment: 'pinned', enclosureId: enclosure.id, pcsId: pcs.id });
       const where = `${enclosure.model} + ${pcs.model}`;
       soundResult(s, where);
       const fin = evaluateFinance(s, defaultPriceBook);
@@ -141,7 +141,7 @@ describe('every combination the catalogue allows', () => {
 
   it('works with every transformer, and with none at all', () => {
     for (const transformerId of [...transformers.map(t => t.id), null]) {
-      const s = sizeSystem({ ...defaultSizingInput(), transformerId });
+      const s = sizeSystem({ ...defaultSizingInput(), equipment: 'pinned', transformerId });
       soundResult(s, `transformer ${transformerId ?? 'none'}`);
       expect(s.transformerCount, `${transformerId ?? 'none'}`).toBe(transformerId ? s.transformerCount : 0);
     }
