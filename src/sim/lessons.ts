@@ -71,8 +71,57 @@ export type LessonRun = {
   manualRequestW: number;
 };
 
+/**
+ * A chapter of the catalogue.
+ *
+ * Seven cards in a row is a list, not a course: nothing said why lesson 1 came before lesson 2, or
+ * what a reader would be able to do at the end that they could not do at the start. The acts carry
+ * the argument — what the machine is, then what it is for, then what stops it — and each card says
+ * where it sits in that and what it leaves the reader holding.
+ */
+export type Act = { id: string; title: string; premise: string };
+
+export const acts: Act[] = [
+  {
+    id: 'machine', title: 'What the machine does',
+    premise: 'Before a battery is an asset it is a box that moves energy one way or the other and keeps a little of it each time. Everything after this is that, with a reason attached.',
+  },
+  {
+    id: 'job', title: 'What it is for',
+    premise: 'Four reasons somebody buys one: a bill charged on peaks, an array making power nobody is using, a grid that goes away, and a price that moves through the day. The same plant, four jobs, four different definitions of a good day.',
+  },
+  {
+    id: 'limits', title: 'What stops it',
+    premise: 'Every job above assumed the plant does what it is asked. It does not always. Here is who refuses, what they refuse with — and what the refusal costs when the thing being protected is a working site.',
+  },
+];
+
+/**
+ * Where a card sits in the argument, and what the reader is left holding.
+ *
+ * Kept off {@link LearningTemplate} deliberately: that record is sealed and hashed, and a run is
+ * reproducible because its hash covers the model and nothing else. How the card is narrated is not
+ * part of the model and must not be able to invalidate a stored run by being reworded.
+ */
+export type LessonStory = {
+  actId: Act['id'];
+  /** The scene, in plain words, before anything is played. */
+  situation: string;
+  /** What the reader can do afterwards that they could not before. Shown on the card. */
+  takeaway: string;
+  /**
+   * The closing beat, drawn from the run that actually happened.
+   *
+   * Not a caption. A learner who moves a control gets a different sentence because they produced a
+   * different result, which is the whole difference between a lesson and a slide.
+   */
+  soWhat: (r: Readout) => string;
+};
+
 export type LessonCard = {
   template: LearningTemplate;
+  /** Where the card sits in the argument the catalogue is making. */
+  story: LessonStory;
   /** The stage that brings it. Null once it is here. */
   arrivesIn: string | null;
   /** The controls the learner may move, at most three, with their bounds and units. */
@@ -187,6 +236,17 @@ export const chargeDischargeScenario: Scenario = sealWith(scenarioSchema, {
 });
 
 export const chargeDischarge: LessonCard = {
+  story: {
+    actId: 'machine',
+    situation: 'A battery, a converter and a wire to the grid. No site, no tariff, no weather — just the machine. You choose which way the energy goes and how hard, and watch what comes out at the other end.',
+    takeaway: 'Say where the energy went, and why less came out than went in.',
+    soWhat: r => {
+      const moved = (r.values.direction ?? 1) >= 0 ? r.totals.deliveredAcWh : r.totals.drawnAcWh;
+      const lost = r.totals.converterLossWh + r.totals.batteryLossWh + r.totals.auxiliaryWh;
+      if (moved < 1) return 'Nothing was asked of the plant, so nothing moved — and the auxiliaries still ran. Ask for some power and watch where it goes.';
+      return `${kWh(moved)} kWh crossed the converter and ${kWh(lost)} kWh never arrived — ${((lost / (moved + lost)) * 100).toFixed(1)}% of it, on one pass in one direction. Nothing was faulty: ${kWh(r.totals.converterLossWh)} kWh went as heat in the converter, ${kWh(r.totals.batteryLossWh)} kWh in the battery's own resistance, ${kWh(r.totals.auxiliaryWh)} kWh in keeping the enclosure cool. A round trip pays it twice. Every figure in every lesson after this one sits on the far side of that.`;
+    },
+  },
   arrivesIn: null,
   template: sealWith(learningTemplateSchema, {
     id: 'lesson-1',
@@ -264,6 +324,21 @@ const peakPolicy = (values: Record<string, number>): EmsPolicy =>
   sealWith(emsPolicySchema, { ...peakShavingPolicy, peakTargetW: values.target ?? peakShavingPolicy.peakTargetW });
 
 export const reducePeak: LessonCard = {
+  story: {
+    actId: 'job',
+    situation: 'A factory on a demand tariff. Part of the bill is set by the single highest half-hour of the month, and the evening shift puts it there. The plant is not selling anything today — its whole job is to stop the meter ever seeing that peak.',
+    takeaway: 'Set an import limit, and say what happens when the battery runs out of the energy to hold it.',
+    soWhat: r => {
+      const step = r.series.timeSeconds[1] - r.series.timeSeconds[0];
+      const target = r.values.target ?? 1_500_000;
+      const over = r.series.gridImportW.filter(w => w > target * 1.02).length;
+      const held = 100 * (1 - over / Math.max(r.series.gridImportW.length - 1, 1));
+      const peak = Math.max(...r.series.gridImportW);
+      return over === 0
+        ? `The connection never went above ${kW(target)} kW, and it cost ${kWh(r.totals.deliveredAcWh)} kWh through the battery to do it. The bill is set by the worst half-hour, so a limit held all day and a limit held all day but one are not nearly the same thing.`
+        : `The limit held for ${held.toFixed(0)}% of the day and then broke: the connection reached ${kW(peak)} kW against a target of ${kW(target)} kW, for ${hours(over * step)} h. The converter was never the problem — it had the power throughout. It ran out of energy. That is the difference between the kilowatts you buy and the kilowatt-hours you buy, and a demand tariff charges you for the moment you got it wrong.`;
+    },
+  },
   arrivesIn: null,
   template: sealWith(learningTemplateSchema, {
     id: 'lesson-2', label: 'Reduce the evening peak', kind: 'LearningTemplate',
@@ -330,6 +405,26 @@ const solarScenario = (values: Record<string, number>): Scenario =>
   });
 
 export const useSolar: LessonCard = {
+  story: {
+    actId: 'job',
+    situation: 'An array on the roof making more at noon than the site can use, and a site still working at seven in the evening. Without somewhere to put it, the surplus leaves through the gate for whatever the meter pays — and the evening is bought back at retail.',
+    takeaway: 'Account for every kilowatt-hour an array makes: used as it was made, stored, exported, or thrown away.',
+    soWhat: r => {
+      const step = r.series.timeSeconds[1] - r.series.timeSeconds[0], h = step / 3600;
+      const generated = energyWh(r.series.generationW, step);
+      const exported = energyWh(r.series.gridExportW, step);
+      const curtailed = energyWh(r.series.curtailedW, step);
+      let direct = 0, stored = 0;
+      for (let i = 0; i < r.series.generationW.length; i++) {
+        const gen = r.series.generationW[i];
+        direct += Math.min(gen, r.series.siteLoadW[i]) * h;
+        stored += Math.min(Math.max(0, -r.series.achievedPowerW[i]), Math.max(0, gen - r.series.siteLoadW[i])) * h;
+      }
+      if (generated < 1) return 'The array made nothing, so there was nothing to shift. Give it some size and watch where the midday surplus goes.';
+      const kept = ((direct + stored) / generated) * 100;
+      return `The array made ${kWh(generated)} kWh and the site kept ${kept.toFixed(0)}% of it — ${kWh(direct)} kWh used as it was made, ${kWh(stored)} kWh put away for the evening. ${kWh(exported)} kWh went out of the gate${curtailed > 1 ? ` and ${kWh(curtailed)} kWh was thrown away because there was nowhere for it to go` : ''}. The battery did not make any energy. It moved the time of day at which the site had it, and that is the whole product.`;
+    },
+  },
   arrivesIn: null,
   template: sealWith(learningTemplateSchema, {
     id: 'lesson-3', label: 'Use more solar', kind: 'LearningTemplate',
@@ -407,6 +502,22 @@ const backupPolicy = (values: Record<string, number>): EmsPolicy =>
   sealWith(emsPolicySchema, { ...backupReservePolicy, reserveSoc: values.reserve ?? backupReservePolicy.reserveSoc });
 
 export const keepBackupReady: LessonCard = {
+  story: {
+    actId: 'job',
+    situation: 'The same plant, on a site that cannot go dark. The grid will fail at six this evening; nothing in the model knows that yet. Every kilowatt-hour sold before then is a kilowatt-hour that will not be there.',
+    takeaway: 'Decide what share of the battery is not for sale, and see exactly what that reserve buys.',
+    soWhat: r => {
+      const step = r.series.timeSeconds[1] - r.series.timeSeconds[0];
+      const lengthH = r.values.outageHours ?? 1;
+      const during = r.series.timeSeconds.map((t, i) => ({ t, i })).filter(({ t }) => t >= 18 * 3600 && t < (18 + lengthH) * 3600);
+      const carried = during.filter(({ i }) => r.series.unservedLoadW[i] < 1).length * step / 3600;
+      const unserved = energyWh(r.series.unservedLoadW, step);
+      const reserve = ((r.values.reserve ?? 0.5) * 100).toFixed(0);
+      return unserved < 1
+        ? `Holding ${reserve}% back carried the site through all ${lengthH.toFixed(0)} h. That reserve earned nothing all day — it was not idle capital, it was the product. A reserve policy is a decision about which hours you are being paid for, and it has to be made before the outage, because afterwards it is not a decision.`
+        : `Holding ${reserve}% back carried ${hours(carried * 3600)} h of a ${lengthH.toFixed(0)} h outage, and ${kWh(unserved)} kWh of load went unserved: the site went dark with a battery still on site. Raise the reserve and the plant earns less on every ordinary day. That trade is the whole of backup sizing, and nobody can make it for you from a datasheet.`;
+    },
+  },
   arrivesIn: null,
   template: sealWith(learningTemplateSchema, {
     id: 'lesson-4', label: 'Keep backup ready', kind: 'LearningTemplate',
@@ -494,6 +605,27 @@ const schedulePolicy = (values: Record<string, number>): EmsPolicy => {
 };
 
 export const followPrice: LessonCard = {
+  story: {
+    actId: 'job',
+    situation: 'A price that moves through the day, and a plant allowed to buy and sell. It looks like the easiest money in the building. It is arithmetic: the trade only works if the gap between the two prices is wider than what the round trip costs you.',
+    takeaway: 'Work out whether a price spread actually covers the round trip, before anything is called a saving.',
+    soWhat: r => {
+      // The battery's own trade, not the site's meter: grid import carries the site load too, and
+      // subtracting one from the other would attribute the factory's consumption to the arbitrage.
+      const inAc = r.totals.drawnAcWh, outAc = r.totals.deliveredAcWh;
+      if (inAc < 1 && outAc < 1) return 'The plant neither bought nor sold, so there was nothing to arbitrage. Move the cheap window and watch it decide when to fill up.';
+      const lost = r.totals.converterLossWh + r.totals.batteryLossWh + r.totals.auxiliaryWh;
+      // Stated from the losses rather than from in minus out, because a single day that starts and
+      // ends at different charge levels does not close: a plant that began half full can deliver
+      // more than it drew and appear to have made energy. The losses are the physical figure; the
+      // open position is disclosed rather than netted away, per §11.4.
+      const drift = r.series.soc[r.series.soc.length - 1] - r.series.soc[0];
+      const overhead = (lost / Math.max(outAc, 1e-6)) * 100;
+      return `The plant took in ${kWh(inAc)} kWh, gave back ${kWh(outAc)} kWh and lost ${kWh(lost)} kWh doing it — ${overhead.toFixed(0)}% on top of everything it delivered. The dear price has to beat the cheap one by more than that before a single rupee is made, and that is before anything is paid for the plant itself.${Math.abs(drift) > 0.02
+        ? ` Note that the day did not close: it ended ${(Math.abs(drift) * 100).toFixed(0)} points ${drift > 0 ? 'fuller' : 'emptier'} than it started, so the two figures above are not a round trip on their own — the loss is.`
+        : ''} The cost beside this run is a scenario outcome on an illustrative tariff, not an offer.`;
+    },
+  },
   arrivesIn: null,
   template: sealWith(learningTemplateSchema, {
     id: 'lesson-5', label: 'Follow a price schedule', kind: 'LearningTemplate',
@@ -567,6 +699,18 @@ const limitScenario = (values: Record<string, number>): Scenario => {
 };
 
 export const batteryLimits: LessonCard = {
+  story: {
+    actId: 'limits',
+    situation: 'The same request, put to the plant three times: at rest, hot, and with one weak cell. The request does not change. What comes back does — and something has to decide, by name, how much of it you get.',
+    takeaway: 'Name the subsystem that refused a request, and read the number it refused with.',
+    soWhat: r => {
+      const held = r.series.bindingConstraint.filter(c => c && c !== 'Request met in full');
+      const asked = kWh((r.values.power ?? 0) * 2);
+      if (!held.length) return `The plant met the request throughout and delivered ${kWh(r.totals.deliveredAcWh)} kWh. Ask for more, or make it hot, and something will start saying no — the point is that it says so by name rather than simply underperforming.`;
+      const commonest = [...held.reduce((m, c) => m.set(c, (m.get(c) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1])[0][0];
+      return `${kWh(r.totals.deliveredAcWh)} kWh came out against ${asked} kWh had nothing held it back, and what held it back, for ${((held.length / Math.max(r.series.bindingConstraint.length - 1, 1)) * 100).toFixed(0)}% of the run, was “${commonest}”. A plant that quietly underperforms is a warranty argument two years from now. A plant that names the subsystem that refused, and the number it refused at, is an engineering record.`;
+    },
+  },
   arrivesIn: null,
   template: sealWith(learningTemplateSchema, {
     id: 'lesson-6', label: 'When the battery says slow down', kind: 'LearningTemplate',
@@ -750,6 +894,22 @@ const upsPolicy = (values: Record<string, number>): EmsPolicy => sealWith(emsPol
 });
 
 export const upsSizing: LessonCard = {
+  story: {
+    actId: 'limits',
+    situation: 'Your own electricity bill, and one figure on it: the contract demand. Every UPS conversation in India starts there, and it is not the answer — it estimates what the whole site draws, not what has to stay up.',
+    takeaway: 'Turn a contract demand into a protected load and a duration, and say what the estimate still does not tell you.',
+    soWhat: r => {
+      const step = r.series.timeSeconds[1] - r.series.timeSeconds[0];
+      const carried = r.series.unservedLoadW.filter(w => w < 1).length * step / 60;
+      const unserved = energyWh(r.series.unservedLoadW, step);
+      const minutes = backupDurations[Math.round(r.values.duration ?? 1)] ?? 15;
+      const tail = ' Every figure here is indicative sizing from contract demand. It becomes a specification when a measured load profile or an approved schedule of critical loads replaces the estimate — not before.';
+      return (unserved < 1
+        ? `The configuration carried the protected load for the whole ${minutes} min.`
+        : `The configuration ran out: ${carried.toFixed(0)} min of the ${minutes} min asked for, with ${kWh(unserved)} kWh unserved.`)
+        + ' Notice which control changed which answer: the share of load to protect set the inverter, and the duration set the battery. Doubling the minutes did not need a bigger converter.' + tail;
+    },
+  },
   arrivesIn: null,
   template: sealWith(learningTemplateSchema, {
     id: 'lesson-7', label: 'UPS support by contract demand', kind: 'LearningTemplate',
@@ -884,6 +1044,7 @@ export const upsSizing: LessonCard = {
 /** A card for a lesson that has not been built, so the catalogue is honest about what exists. */
 const planned = (n: number, title: string, question: string, arrivesIn: string): LessonCard => ({
   arrivesIn,
+  story: { actId: 'limits', situation: 'Not built yet.', takeaway: 'Not built yet.', soWhat: () => 'Not built yet.' },
   template: sealWith(learningTemplateSchema, {
     id: `lesson-${n}`, label: title, kind: 'LearningTemplate', question,
     objective: 'Not built yet.', expectedOutcomes: ['Not built yet.'],
@@ -923,6 +1084,21 @@ export const holdSystem = (values: Record<string, number>): Record<string, numbe
 export const resizeSystem = (values: Record<string, number>): Record<string, number> => ({ ...values, held: 0 });
 
 export const lessonById = (id: string): LessonCard | undefined => lessons.find(l => l.template.id === id);
+
+/** The act a card belongs to. */
+export const actOf = (card: LessonCard): Act => acts.find(a => a.id === card.story.actId) ?? acts[0];
+
+/**
+ * The card after this one, and the one before.
+ *
+ * §15.1 ends the loop with "Reset, Next lesson, or take it back to the design", and there was no
+ * next lesson: every card ended by sending the reader back to a grid of seven to guess which one
+ * followed. A sequence nobody can follow is not a sequence.
+ */
+export const nextLesson = (id: string): LessonCard | null => {
+  const i = lessons.findIndex(l => l.template.id === id);
+  return i >= 0 && i + 1 < lessons.length ? lessons[i + 1] : null;
+};
 
 /** Where each control starts, in the engine's own units. */
 export const defaultControls = (card: LessonCard): Record<string, number> =>

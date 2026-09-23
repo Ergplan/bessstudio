@@ -2,12 +2,12 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Pause, Play, RotateCcw, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Pause, Play, RotateCcw, Zap } from 'lucide-react';
 import { Card, Stat, Badge, Empty, Slider, KV, type Tone } from '../components/ui';
 import { LineChart, series as chartSeries } from '../components/viz';
 import { useWorkspace } from '../../platform/workspace';
 import {
-  lessons, lessonById, defaultControls, holdSystem, resizeSystem,
+  lessons, lessonById, defaultControls, holdSystem, resizeSystem, acts, actOf, nextLesson,
   type LessonCard, type Metric, type Readout,
 } from '../../sim/lessons';
 import { lfpParameterSet } from '../../sim/presets';
@@ -53,21 +53,41 @@ function Catalogue({ projectId }: { projectId: string | null }) {
       <div className="row">
         {project && <Link className="btn ghost sm" href={`/app/projects?id=${project.id}`}><ArrowLeft size={15} /> {project.name}</Link>}
         <div className="spacer" />
-        <span className="muted">Seven cards. Two to five minutes each.</span>
+        <span className="muted">Seven cards, in order. Two to five minutes each.</span>
       </div>
-      <Card title="Understand the plant" subtitle="Each card asks one question and answers it with a simulation you can steer">
-        <div className="lesson-cards">
-          {lessons.map((l, i) => (
-            <div key={l.template.id} className={`lesson-card${l.arrivesIn ? ' later' : ''}`}>
-              <div className="lesson-number">{i + 1}</div>
-              <h4>{l.template.label}</h4>
-              <p>{l.template.question}</p>
-              {l.arrivesIn
-                ? <Badge tone="neutral">Not built yet</Badge>
-                : <Link className="btn accent sm" href={href(l.template.id)}><Play size={13} /> Start · {l.template.estimatedMinutes} min</Link>}
-            </div>
-          ))}
-        </div>
+      {/* The cards are a sequence, so they are shown as one: three acts, each with the argument it
+          makes, and each card saying what the reader is left holding. Seven tiles in a grid gave a
+          reader no reason to start at one or to carry on to the next. */}
+      <Card title="Understand the plant" subtitle="One argument in seven runs, each steered by you rather than played at you">
+        <p className="lesson-thesis">
+          A battery plant is three claims stacked on each other: that it moves energy and keeps a
+          little of it, that moving energy in time is worth money to somebody, and that it will not
+          always do what it is asked. Take them in that order and the rest of the studio reads
+          itself. Nothing here is a video — every figure comes from a simulation you can argue with.
+        </p>
+        {acts.map(act => {
+          const inAct = lessons.filter(l => l.story.actId === act.id);
+          if (!inAct.length) return null;
+          return (
+            <section key={act.id} className="lesson-act">
+              <h3>{act.title}</h3>
+              <p className="lesson-premise">{act.premise}</p>
+              <div className="lesson-cards">
+                {inAct.map(l => (
+                  <div key={l.template.id} className={`lesson-card${l.arrivesIn ? ' later' : ''}`}>
+                    <div className="lesson-number">{lessons.indexOf(l) + 1}</div>
+                    <h4>{l.template.label}</h4>
+                    <p>{l.template.question}</p>
+                    {!l.arrivesIn && <p className="lesson-takeaway"><b>After this</b> {l.story.takeaway}</p>}
+                    {l.arrivesIn
+                      ? <Badge tone="neutral">Not built yet</Badge>
+                      : <Link className="btn accent sm" href={href(l.template.id)}><Play size={13} /> Start · {l.template.estimatedMinutes} min</Link>}
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })}
         <p className="muted" style={{ marginTop: 14 }}>
           The lessons run on one illustrative 5 MWh plant, shaped like the reference enclosure in the
           catalogue so what you learn here is recognisable there. It is a teaching model, not a
@@ -127,6 +147,7 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
   // Everything on the screen below the controls comes from here: the card says which four figures
   // and which two charts, and the player draws whatever it is handed.
   const readout: Readout = { series: s, totals, values, act };
+  const next = nextLesson(card.template.id);
   const metrics = card.readout(readout);
   const plots = card.plots(readout);
 
@@ -153,6 +174,9 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
       </div>
 
       <Card title={card.template.label} subtitle={card.template.question}>
+        {/* Three beats, in order: the scene, the run, and what it meant. A card that opened on four
+            numbers and two charts left the reader to work out what they were looking at and why. */}
+        <p className="lesson-scene"><b>{actOf(card).title}</b> · {card.story.situation}</p>
         <p className="lesson-goal">{card.template.objective}</p>
         <div className="row" style={{ marginTop: 12 }}>
           {/* The accessible name has to be the words on the button. A control labelled "Simulate
@@ -281,6 +305,23 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
       {converting && projectId && (
         <Conversion card={card} values={values} projectId={projectId} onClose={() => setConverting(false)} />
       )}
+
+      {/* The third beat, and the one that was missing: what the run the reader just produced
+          actually showed. Written from that run, so moving a control rewrites it — a fixed line of
+          text under a variable result is a caption, not a conclusion. §15.1 ends the loop here,
+          with the next card named rather than left for the reader to find on a grid of seven. */}
+      <Card title="So what" subtitle="Drawn from the run above, not from a script">
+        <p className="lesson-sowhat">{card.story.soWhat(readout)}</p>
+        <div className="row" style={{ marginTop: 12 }}>
+          <button className="btn sm" onClick={reset}><RotateCcw size={14} /> Run it again</button>
+          {next
+            ? <Link className="btn sm accent" href={`/app/lessons?lesson=${next.template.id}${projectId ? `&project=${projectId}` : ''}`}>
+                Next · {next.template.label} <ArrowRight size={14} />
+              </Link>
+            : <Link className="btn sm" href={`/app/lessons${projectId ? `?project=${projectId}` : ''}`}>Back to the seven cards</Link>}
+          {next && <span className="muted">{next.story.takeaway}</span>}
+        </div>
+      </Card>
 
       <Card title="What this model is, and is not" tight>
         <p className="muted" style={{ margin: 0 }}>
