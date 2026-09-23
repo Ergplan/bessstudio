@@ -1190,6 +1190,46 @@ if clearly identified, but a changed input must run, or retrieve the exactly mat
 While computation is pending the last valid result is retained with an explicit updating state.
 **An animation is never substituted for a simulation result.**
 
+### 15.1a The factory — one site, one bill, six rounds
+
+`BUILT` — `/app/factory`.
+
+The lesson cards teach a plant. They do not teach what an Indian industrial buyer is deciding, which
+is not "how does a battery work" but "my works burns diesel through the daily outage, replaces a
+lead-acid bank every four years, exports a third of its solar at a third of what it buys it back
+for, and pays a demand charge set by four hours in the evening — where does a battery help, and by
+how much?"
+
+One teaching site carries all six rounds. Each round puts one line of the bill in front of the
+player and hands over exactly one new control; earlier controls stay. Rounds are won by reaching a
+**checkable state on a played year**, never by a score:
+
+| # | Round | The line it opens | The control it hands over |
+| --- | --- | --- | --- |
+| 1 | The bill | All four, with nothing installed | none |
+| 2 | The generator | Diesel, at fuel **and** upkeep | battery power, energy, reserve |
+| 3 | The bank in the corner | Lead-acid replacement, amortised | retire the bank |
+| 4 | The roof | Solar export against retail | store the midday surplus |
+| 5 | The evening | Demand charge, ₹/kVA/month | hold the meter at a target |
+| 6 | All four at once | Every line, together | none |
+
+**The sixth round is the point.** One battery, three duties, one pool of usable energy: reserve held
+for the outage is energy the evening does not get, and surplus stored at noon is charge the night
+tariff did not have to buy. A player who asks for everything on the battery round two bought is told
+**which duty went short and by how much**, never shown a saving that spends the same kilowatt-hour
+twice. Winning requires taking energy away from a duty that was winning a moment ago — the same
+argument the **reserve** and **depth of discharge** settings have on a real design.
+
+Retiring the lead-acid bank is refused unless the battery carries at least what the bank actually
+delivers, which is about half its nameplate. Cutting the demand charge requires power **and** the
+energy to hold it for the whole window every working day, because a demand charge is set by one
+interval and one failed evening restores it for the month.
+
+Every figure is a **teaching value** in the sense §15.4 already fixes for tariffs — plausible for an
+Indian industrial site and a claim about none. Diesel is costed at fuel **plus** upkeep, which the
+fuel price alone understates. A real engagement replaces the fixture with the site's own bill, its
+own outage log and its own generation, and the arithmetic does not change when it does.
+
 ### 15.2 Deeper lessons
 
 A secondary catalogue, not additional onboarding choices: same energy with different PCS power;

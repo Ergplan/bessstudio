@@ -127,6 +127,18 @@ function Catalogue({ projectId }: { projectId: string | null }) {
         </p>
       </Card>
 
+      <Card title="Then put it on a bill" subtitle="The same battery, on a works that burns diesel, replaces a lead-acid bank and exports its own solar">
+        <p className="lesson-thesis">
+          The cards above teach the plant. <b>The factory</b> is the argument a buyer in India is
+          actually having: forty-five minutes of outage a day carried by a diesel set, a lead-acid
+          bank bought again every four years, a third of the roof&rsquo;s generation leaving at a
+          third of what it is bought back for, and a demand charge set by four hours in the evening.
+          Six rounds, one battery — and not enough of it to serve all four at once, which is where
+          the sizing argument starts.
+        </p>
+        <Link className="btn accent sm" href="/app/factory"><Play size={13} /> Run the factory</Link>
+      </Card>
+
       <Handover projectId={projectId} done={done} total={order.length} />
     </div>
   );

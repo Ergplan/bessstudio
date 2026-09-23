@@ -1647,6 +1647,51 @@ each box is, and read the cascade. What is still missing is practice — nothing
 anything and tell them whether they were right, and §15.1's ban on quizzes means that needs a
 different shape than a test. That is the next honest increment.
 
+### R8 — the factory, which is the practice R7 said was missing
+
+R7 ended by naming what a glossary and a primer cannot fix: *nothing asks the reader to do anything
+and tells them whether they were right.* The shape it needed was not a quiz — §15.1 forbids one, and
+rightly: a quiz tests whether somebody remembered a sentence. What was missing was a **decision with
+a consequence**, and on an Indian industrial site those decisions are already sitting on the
+electricity bill.
+
+**`/app/factory`** — one 2.5 MVA engineering works, four cost lines, six rounds. Recorded in
+`docs/SITE.md` §15.1a.
+
+| Line | Today, a year | What a battery has to beat |
+| --- | ---: | --- |
+| Grid energy | ₹5.16 cr | ₹10.60 in the evening window against ₹6.40 off-peak |
+| Demand charge | ₹1.24 cr | ₹450 a kVA a month on a recorded 2,300 kVA |
+| Diesel | ₹39.2 lakh | ₹29 a kWh — fuel **and** upkeep — for 45 minutes of outage a day |
+| Lead-acid | ₹9.0 lakh | 400 kWh of nameplate that delivers 200, bought again every four years |
+| Solar export | −₹20.8 lakh | 2,310 kWh a day leaving at ₹3 and returning at ₹10.60 |
+
+**The sixth round is the whole design.** A 700 kWh battery wins round two outright — the diesel line
+goes to zero, ₹27 lakh a year, 5.7-year payback. Ask that same battery for all four duties and the
+model refuses to spend the kilowatt-hour twice: *"2,310 kWh of surplus is made each day and 0 kWh of
+it fits in what is left after the reserve"*, *"holding the meter at 1,800 kVA needs 475 kW for 4 h —
+1,900 kWh"*. Winning the last round takes 3.6 MWh and a reserve cut to 16%, and it pays back in 7.5
+years rather than 5.7.
+
+**That is the lesson nobody was being taught.** The highest-value duty per kilowatt-hour is diesel
+displacement, and every megawatt-hour added after that earns less than the one before it. A player
+watches their own payback get *worse* as the plant gets better — which is the actual argument behind
+a sizing, and not a thing any brochure says.
+
+**What keeps it honest:** `playFactory` is pure and tested — 17 unit checks covering the baseline
+against the site's own tariff, each line moved on its own, the refusal to retire a lead-acid bank the
+battery cannot replace, the demand charge falling only by what can be held for the whole window, and
+that `reserve + cycling + solar = usable`, to the kilowatt-hour, so no duty is double-counted. The
+rounds are checked as a game: every round winnable with only the controls handed over by then, no
+round winnable by installing nothing, the finale **not** winnable on round two's battery, and the
+winning play a plant somebody could buy — under 1 C, paying back inside its life. `browser/factory.test.ts`
+then plays it: five checks that the bill moves, that the trap round names what went short on screen,
+and that the allocation bar shows one pool divided four ways.
+
+**Rating: 8 out of 10.** A reader now has the words, the arithmetic, and a decision whose consequence
+they can see. What is still absent is their own bill — the fixture is a teaching site, and the step
+after this is letting somebody put their own tariff, outage log and generation into it.
+
 ### Still open for a decision
 
 1. **The pack data sheet.** `pack-16s-314` stays `assumed` at 150 A / 200 A until the supplier's

@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Users, FolderKanban, FileText, Box, Settings, LogOut, Boxes, Cloud, HardDrive, Sparkles, Inbox, GraduationCap } from 'lucide-react';
+import { LayoutDashboard, Users, FolderKanban, FileText, Box, Settings, LogOut, Boxes, Cloud, HardDrive, Sparkles, Inbox, GraduationCap, Factory as FactoryIcon } from 'lucide-react';
 import { brand } from '../brand/brand';
 import { useSession } from '../platform/auth';
 import { useWorkspace } from '../platform/workspace';
@@ -24,6 +24,7 @@ const staffLinks: Link_[] = [
 ];
 const staffTools: Link_[] = [
   { to: '/app/lessons', label: 'Lessons', icon: GraduationCap },
+  { to: '/app/factory', label: 'The factory', icon: FactoryIcon },
   { to: '/app/studio', label: '3D Studio', icon: Box },
   { to: '/app/catalog', label: 'Catalogue', icon: Boxes },
   { to: '/app/settings', label: 'Settings', icon: Settings },
@@ -35,6 +36,7 @@ const customerLinks: Link_[] = [
 ];
 const customerTools: Link_[] = [
   { to: '/app/lessons', label: 'Lessons', icon: GraduationCap },
+  { to: '/app/factory', label: 'The factory', icon: FactoryIcon },
   { to: '/app/studio', label: '3D Studio', icon: Box },
   { to: '/app/settings', label: 'Account', icon: Settings },
 ];
