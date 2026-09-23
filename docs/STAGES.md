@@ -1470,11 +1470,59 @@ installed. It carries `c-rate-margin` and `charge-rate-margin`: two racks give 5
 5 kW duty, so the plant runs at 98% of the pack's continuous rating. That is a real margin and worth
 a decision — a third rack removes it.
 
+### R5 — two manufacturer data sheets, and what could be read of them
+
+Two documents were put to the studio to check against: CATL's energy-storage brochure and REPT's
+*Energy Storage Battery Solution* brochure. **Neither could be opened.** This environment's network
+policy refused both hosts at the egress proxy — `www.catl.com:443` and `www.reptbattero.com:443`
+each answered 403 to CONNECT — so nothing was read from either document. Published specification
+summaries of the same REPT products were used instead, which is weaker evidence, and the difference
+is now recorded rather than smoothed over.
+
+**`src/catalog/sources.ts`** is the register that records it: each external document, how much of it
+was actually in front of us (`read`, `secondary`, `unreachable`), and figure by figure what it
+corroborates or contradicts. `src/tests/sources.test.ts` holds it to that — a figure must point at
+something that exists, a corroboration must still be true of the catalogue as it stands, and a
+contradiction must be visible in the file it contradicts, citing the register, rather than noted in
+the bibliography and forgotten.
+
+| Published figure | Bears on | Verdict |
+| --- | --- | --- |
+| 314 A continuous, 628 A peak (314 Ah CB71/CB75) | `pack-16s-314`, at 150 A `assumed` | **corroborates** — 50 A is ruled out, and 150 A is under half what the cell sustains, so the pack and its BMS are the limit, not the chemistry |
+| 71 × 173 × 207 mm, 5.60 ± 0.15 kg | `cell-lfp-314` | **corroborates** — within a millimetre and 20 g; the same industry-standard format |
+| Internal resistance ≤ 0.3 mΩ | `validation/sam_reference.py RESISTANCE_MOHM` | **contradicts** — see below |
+| 10 000 cycles (12 000 ultra-long-life) | `cell-lfp-314`, at 8 000 | **open** — a different manufacturer's cell; ours stays at the supplied, lower figure |
+| 20 ft container at 6.26 MWh on 392 Ah cells | `enc-5mwh-20ft`, at 5.015 MWh | **open** — see below |
+
+**The contradiction was ours.** The PySAM harness ran its round-trip band from 0.18 mΩ per cell,
+described in the code as *"the published AC impedance for the 314 Ah prismatic in this catalogue"*.
+The catalogue carries no impedance field; there was no such published figure. The band now runs from
+the one externally published resistance for this format we have — 0.3 mΩ read as if it were already
+DC, doubled to 0.6 mΩ for the realistic end, because a data sheet's internal resistance for an LFP
+prismatic is normally the 1 kHz AC impedance. The studio's flat 92.6% DC round trip is still on the
+conservative side of the ohmic floor in all six validation cases, but the headroom fell by about a
+third; `docs/VALIDATION.md` now derives the tightest case and its margin from the run instead of
+asserting a crossover in prose.
+
+**What was not done, and why.** The 6.26 MWh container is the real fix for the granularity that
+makes a 5 MWh duty buy two 5.015 MWh containers — but it was not added to the catalogue. There is no
+price for it here, and a unit entered at an invented price would move every quotation in the studio
+on a number nobody supplied. The same rule that keeps the 8 000-cycle figure in place keeps this out
+until a price and a data sheet arrive.
+
 ### Still open for a decision
 
 1. **The pack data sheet.** `pack-16s-314` stays `assumed` at 150 A / 200 A until the supplier's
-   sheet replaces it. Nothing else in the schedule is `assumed`.
+   sheet replaces it — now corroborated in direction by a published 314 A continuous rating for the
+   cell format (`src/catalog/sources.ts`), which is not the same as having the sheet. Nothing else
+   in the schedule is `assumed`.
 2. **jouleWise on a white-labelled proposal**, still open from R2.
+3. **The current-generation container.** A 6.25–6.9 MWh 20 ft unit would let a 5 MWh duty buy one
+   container instead of two. Needs a data sheet and a landed price before it can enter the
+   catalogue; both blocked on documents this environment cannot reach.
+4. **Network access for manufacturer documents.** Adding `catl.com` and `reptbattero.com` to the
+   environment's allowed domains — or widening its network access level — would let the brochures be
+   read directly and the `secondary` entries in the register be upgraded or corrected.
 
 ---
 

@@ -71,11 +71,15 @@ def main() -> int:
       'buried in the harness, because a cross-check whose own inputs are invented is not a check.')
     w('')
     a = sam['assumptions']
-    w(f'- **Cell DC resistance.** The published AC impedance for the 314 Ah prismatic in this '
-      f'catalogue is ≤ 0.18 mΩ, and DC resistance for LFP prismatics runs roughly one and a half to '
-      f'two times that. Every efficiency check is therefore run at both '
-      f'{a["resistanceMilliOhmPerCell"]["optimistic"]} mΩ and '
-      f'{a["resistanceMilliOhmPerCell"]["realistic"]} mΩ per cell and reported as a band.')
+    w(f'- **Cell DC resistance.** The catalogue has no impedance field, so this comes from outside '
+      f'it. The only externally published figure we have for this cell format is REPT\'s ≤ 0.3 mΩ '
+      f'for the 314 Ah CB71/CB75, recorded in `src/catalog/sources.ts`; a data sheet\'s internal '
+      f'resistance for an LFP prismatic is normally the 1 kHz AC impedance, and DC resistance runs '
+      f'one and a half to two times it. Every efficiency check is therefore run at both '
+      f'{a["resistanceMilliOhmPerCell"]["optimistic"]} mΩ — the published ceiling read as if it '
+      f'were already DC — and {a["resistanceMilliOhmPerCell"]["realistic"]} mΩ per cell, and '
+      f'reported as a band. An earlier revision ran this band from 0.18 mΩ, attributed to a '
+      f'published impedance the catalogue does not in fact carry.')
     c = a['lfpCurve']
     w(f'- **The discharge curve.** The catalogue gives a cell\'s nominal, maximum and minimum '
       f'voltage and no shape between them, and SAM\'s own `LFPGraphite` preset carries NREL\'s '
@@ -120,7 +124,9 @@ def main() -> int:
       'system measured at its DC terminals lands several points below it. What this establishes is '
       'that the studio\'s flat figure is on the conservative side of the floor, and by how much.')
     w('')
-    w('| Case | Design C-rate | Studio | SAM ohmic floor, 0.18 mΩ | at 0.36 mΩ | Conservative |')
+    r_mohm = sam['assumptions']['resistanceMilliOhmPerCell']
+    w(f'| Case | Design C-rate | Studio | SAM ohmic floor, {r_mohm["optimistic"]} mΩ | '
+      f'at {r_mohm["realistic"]} mΩ | Conservative |')
     w('| --- | ---: | ---: | ---: | ---: | :---: |')
     for case in cases['cases']:
         rt = by_id[case['id']]['roundTrip']
@@ -134,12 +140,32 @@ def main() -> int:
         w(f'| {case["label"]} | {case["conditions"]["systemCRate"]:.2f} C | {pct(studio)} | '
           f'{pct(hi)} | {pct(lo)} | {"yes" if conservative else "**no**"} |')
     w('')
-    w('The studio\'s figure is a **constant**, and the ohmic floor is not: loss rises with the '
-      'square of the current, so the margin between them closes as the C-rate rises. Across the '
-      'rates the studio actually designs at — 0.14 C to 0.49 C — the constant is comfortably '
-      'conservative. It would stop being so somewhere above 1 C, which is outside anything in this '
-      'catalogue but inside what a frequency-regulation product could ask for. Worth revisiting if '
-      'a high-rate cell enters the catalogue.')
+    # How much headroom each case has before the floor rises to meet the flat figure. Ohmic loss
+    # goes as the square of the current, so the multiple of a case's own design C-rate at which the
+    # two meet is sqrt(studio loss / modelled loss). Reported per case and taken at the tightest,
+    # rather than extrapolated across cases: two designs at the same system C-rate can put quite
+    # different currents through a cell, so one case's crossover says nothing about another's.
+    headroom = []
+    for case in cases['cases']:
+        rt = by_id[case['id']]['roundTrip']['realistic']['dcRoundTrip']
+        studio_loss, model_loss = 1 - case['studio']['dcRoundTrip'], 1 - rt
+        if model_loss > 0:
+            headroom.append((case['label'], case['conditions']['systemCRate'],
+                             (studio_loss / model_loss) ** 0.5))
+    tight = min(headroom, key=lambda h: h[2])
+    w(f'The studio\'s figure is a **constant**, and the ohmic floor is not: loss rises with the '
+      f'square of the current, so the margin between them closes as the C-rate rises. Across the '
+      f'rates the studio actually designs at — {min(c["conditions"]["systemCRate"] for c in cases["cases"]):.2f} C '
+      f'to {max(c["conditions"]["systemCRate"] for c in cases["cases"]):.2f} C — the constant is '
+      f'conservative in every case, and how much room is left differs case by case — a system '
+      f'C-rate is not comparable across form factors, because a cabinet and a container put quite '
+      f'different currents through a cell at the same nameplate rate. The tightest margin is '
+      f'**{tight[0]}**: on the square law it would have to be driven at about {tight[2]:.1f} times '
+      f'its own design current before the floor at the pessimistic end of the resistance band rose '
+      f'to meet the constant. The headroom is real but it is not large, it is smallest where the '
+      f'duty is hardest, and it fell by roughly a third when the resistance band was moved off an '
+      f'unsourced 0.18 mΩ and onto a published figure. A high-rate cell or a frequency-regulation '
+      f'duty above about 1 C would need the flat figure replaced with a rate-dependent one.')
     w('')
 
     # --------------------------------------------------------------- retention --

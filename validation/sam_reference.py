@@ -26,11 +26,16 @@ HERE = Path(__file__).parent
 # Everything SAM needs that the studio's catalogue does not carry. They are here, named, rather
 # than buried in the harness, because a cross-check whose own inputs are invented is not a check.
 
-# SAM's Thevenin model needs a DC internal resistance per cell. The published AC impedance for the
-# 314 Ah prismatic in this catalogue is <= 0.18 mOhm; DC resistance for LFP prismatics runs roughly
-# one and a half to two times that. Neither model can settle it, so the round-trip check runs at
-# both ends and reports a band. If the studio's figure sits inside it, the supplied sheet holds.
-RESISTANCE_MOHM = {'optimistic': 0.18, 'realistic': 0.36}
+# SAM's Thevenin model needs a DC internal resistance per cell, and the catalogue has no impedance
+# field to give it one. This band used to run from 0.18 mOhm, described as the published AC
+# impedance for the 314 Ah prismatic in this catalogue, which was not a figure the catalogue
+# carried. The only externally published resistance for this cell format that we have is REPT's
+# <= 0.3 mOhm for the 314 Ah CB71/CB75 (see `src/catalog/sources.ts`), so the band runs from that
+# instead: the optimistic end reads the published ceiling as if it were already DC, and the
+# realistic end doubles it, because a data sheet's internal resistance for an LFP prismatic is
+# normally the 1 kHz AC impedance and DC resistance runs one and a half to two times it. Neither
+# model can settle which it is, so the round-trip check runs at both ends and reports a band.
+RESISTANCE_MOHM = {'optimistic': 0.30, 'realistic': 0.60}
 
 # The discharge curve. The catalogue gives a cell's nominal, maximum and minimum voltage and no
 # shape between them, and SAM's own `LFPGraphite` preset carries NREL's lifetime configuration

@@ -19,7 +19,7 @@ The point is not that SAM is right and the studio is wrong. It is that two imple
 
 SAM needs two things the studio's catalogue does not carry. They are named here rather than buried in the harness, because a cross-check whose own inputs are invented is not a check.
 
-- **Cell DC resistance.** The published AC impedance for the 314 Ah prismatic in this catalogue is ≤ 0.18 mΩ, and DC resistance for LFP prismatics runs roughly one and a half to two times that. Every efficiency check is therefore run at both 0.18 mΩ and 0.36 mΩ per cell and reported as a band.
+- **Cell DC resistance.** The catalogue has no impedance field, so this comes from outside it. The only externally published figure we have for this cell format is REPT's ≤ 0.3 mΩ for the 314 Ah CB71/CB75, recorded in `src/catalog/sources.ts`; a data sheet's internal resistance for an LFP prismatic is normally the 1 kHz AC impedance, and DC resistance runs one and a half to two times it. Every efficiency check is therefore run at both 0.3 mΩ — the published ceiling read as if it were already DC — and 0.6 mΩ per cell, and reported as a band. An earlier revision ran this band from 0.18 mΩ, attributed to a published impedance the catalogue does not in fact carry.
 - **The discharge curve.** The catalogue gives a cell's nominal, maximum and minimum voltage and no shape between them, and SAM's own `LFPGraphite` preset carries NREL's lifetime configuration beside a voltage curve that is NMC-shaped — 4.1 V full, 3.4 V nominal. Left at that it put the whole discharge at 3.57 V per cell and claimed a container delivers its entire nameplate across a 90% window. The Shepherd knees are placed where a published LFP cell has them: 3.32 V at 8% discharged, 3.2 V at 88%.
 
 ## 1 · Deliverable DC energy across the usable window
@@ -28,12 +28,12 @@ One enclosure, discharged at the design rate from the top of its state-of-charge
 
 | Case | Enclosure | Studio | SAM | Divergence | Mean V/cell |
 | --- | --- | ---: | ---: | ---: | ---: |
-| 5 kW backup, 1 h | SB51100 rack | 4.6 kWh | 4.7 kWh | +2.7% | 3.286 |
-| 50 kW peak shaving, 2 h | SWESLC832V314Ah | 223.4 kWh | 230.6 kWh | +3.2% | 3.304 |
-| 250 kW peak shaving, 2 h | SWESLC832V314Ah | 223.4 kWh | 230.3 kWh | +3.1% | 3.299 |
-| 2.5 MW solar shifting, 4 h | SWESLC1331.2V314Ah | 4,384.0 kWh | 4,526.8 kWh | +3.3% | 3.305 |
-| 10 MW arbitrage, 4 h | SWESLC1331.2V314Ah | 4,526.9 kWh | 4,666.6 kWh | +3.1% | 3.299 |
-| 20 MW frequency regulation, 1 h | SWESLC1331.2V314Ah | 1,906.1 kWh | 1,978.2 kWh | +3.8% | 3.321 |
+| 5 kW backup, 1 h | SB51100 rack | 4.6 kWh | 4.7 kWh | +2.5% | 3.279 |
+| 50 kW peak shaving, 2 h | SWESLC832V314Ah | 223.4 kWh | 230.7 kWh | +3.3% | 3.305 |
+| 250 kW peak shaving, 2 h | SWESLC832V314Ah | 223.4 kWh | 230.2 kWh | +3.0% | 3.297 |
+| 2.5 MW solar shifting, 4 h | SWESLC1331.2V314Ah | 4,384.0 kWh | 4,530.9 kWh | +3.4% | 3.308 |
+| 10 MW arbitrage, 4 h | SWESLC1331.2V314Ah | 4,526.9 kWh | 4,669.2 kWh | +3.1% | 3.301 |
+| 20 MW frequency regulation, 1 h | SWESLC1331.2V314Ah | 1,906.1 kWh | 1,977.1 kWh | +3.7% | 3.319 |
 
 The studio strikes nameplate energy at the cell's nominal voltage and SAM integrates the real curve, whose mean sits a little above nominal across an LFP plateau. The studio is therefore expected to read slightly low, and a **conservative** usable-energy figure is the right direction for a number a contract is written against.
 
@@ -41,16 +41,16 @@ The studio strikes nameplate energy at the cell's nominal voltage and SAM integr
 
 **SAM is not the authority here, and the check is not symmetric.** `BatteryStateful` models the ohmic and polarisation loss of the Thevenin circuit and nothing else: no coulombic inefficiency, no hysteresis between the charge and discharge curves, no self-discharge. Its answer is therefore a *floor on the loss* — the least the physics can cost — and a real LFP system measured at its DC terminals lands several points below it. What this establishes is that the studio's flat figure is on the conservative side of the floor, and by how much.
 
-| Case | Design C-rate | Studio | SAM ohmic floor, 0.18 mΩ | at 0.36 mΩ | Conservative |
+| Case | Design C-rate | Studio | SAM ohmic floor, 0.3 mΩ | at 0.6 mΩ | Conservative |
 | --- | ---: | ---: | ---: | ---: | :---: |
-| 5 kW backup, 1 h | 0.49 C | 92.6% | 99.4% | 98.9% | yes |
-| 50 kW peak shaving, 2 h | 0.19 C | 92.6% | 99.4% | 98.7% | yes |
-| 250 kW peak shaving, 2 h | 0.24 C | 92.6% | 99.2% | 98.5% | yes |
-| 2.5 MW solar shifting, 4 h | 0.17 C | 92.6% | 99.4% | 98.9% | yes |
-| 10 MW arbitrage, 4 h | 0.18 C | 92.6% | 99.4% | 98.8% | yes |
-| 20 MW frequency regulation, 1 h | 0.31 C | 92.6% | 99.2% | 98.5% | yes |
+| 5 kW backup, 1 h | 0.49 C | 92.6% | 99.1% | 98.3% | yes |
+| 50 kW peak shaving, 2 h | 0.19 C | 92.6% | 98.9% | 97.9% | yes |
+| 250 kW peak shaving, 2 h | 0.24 C | 92.6% | 98.7% | 97.5% | yes |
+| 2.5 MW solar shifting, 4 h | 0.17 C | 92.6% | 99.1% | 98.2% | yes |
+| 10 MW arbitrage, 4 h | 0.18 C | 92.6% | 99.0% | 98.0% | yes |
+| 20 MW frequency regulation, 1 h | 0.31 C | 92.6% | 98.7% | 97.5% | yes |
 
-The studio's figure is a **constant**, and the ohmic floor is not: loss rises with the square of the current, so the margin between them closes as the C-rate rises. Across the rates the studio actually designs at — 0.14 C to 0.49 C — the constant is comfortably conservative. It would stop being so somewhere above 1 C, which is outside anything in this catalogue but inside what a frequency-regulation product could ask for. Worth revisiting if a high-rate cell enters the catalogue.
+The studio's figure is a **constant**, and the ohmic floor is not: loss rises with the square of the current, so the margin between them closes as the C-rate rises. Across the rates the studio actually designs at — 0.17 C to 0.49 C — the constant is conservative in every case, and how much room is left differs case by case — a system C-rate is not comparable across form factors, because a cabinet and a container put quite different currents through a cell at the same nameplate rate. The tightest margin is **250 kW peak shaving, 2 h**: on the square law it would have to be driven at about 1.7 times its own design current before the floor at the pessimistic end of the resistance band rose to meet the constant. The headroom is real but it is not large, it is smallest where the duty is hardest, and it fell by roughly a third when the resistance band was moved off an unsourced 0.18 mΩ and onto a published figure. A high-rate cell or a frequency-regulation duty above about 1 C would need the flat figure replaced with a rate-dependent one.
 
 ## 3 · Capacity retention over the project life
 
@@ -75,10 +75,10 @@ This is where the models disagree, and where they disagree with each other more 
 | Year | Studio, supplied schedule | Studio, ageing model | NREL cycle + calendar | NMC/graphite physics | LFP/graphite physics |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | 1 | 95.0% | 96.7% | 94.0% | 101.2% | 99.2% |
-| 5 | 87.0% | 90.6% | 84.1% | 97.9% | 97.9% |
-| 10 | 80.0% | 84.6% | 78.0% | 93.7% | 96.7% |
-| 15 | 74.0% | 79.2% | 73.3% | 89.6% | 95.8% |
-| 20 | 69.0% | 74.0% | 69.0% | 85.4% | 94.9% |
+| 5 | 87.0% | 90.6% | 84.0% | 98.1% | 97.9% |
+| 10 | 80.0% | 84.6% | 77.9% | 94.0% | 96.8% |
+| 15 | 74.0% | 79.2% | 73.3% | 90.1% | 95.8% |
+| 20 | 69.0% | 74.0% | 69.0% | 86.1% | 95.0% |
 
 ### 250 kW peak shaving, 2 h
 
@@ -87,10 +87,10 @@ This is where the models disagree, and where they disagree with each other more 
 | Year | Studio, supplied schedule | Studio, ageing model | NREL cycle + calendar | NMC/graphite physics | LFP/graphite physics |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | 1 | 95.0% | 96.7% | 94.0% | 101.2% | 99.2% |
-| 5 | 87.0% | 90.6% | 84.1% | 97.9% | 97.9% |
-| 10 | 80.0% | 84.6% | 78.0% | 93.7% | 96.7% |
-| 15 | 74.0% | 79.2% | 73.3% | 89.6% | 95.8% |
-| 20 | 69.0% | 74.0% | 69.0% | 85.4% | 94.9% |
+| 5 | 87.0% | 90.6% | 84.0% | 98.1% | 97.9% |
+| 10 | 80.0% | 84.6% | 77.9% | 94.0% | 96.8% |
+| 15 | 74.0% | 79.2% | 73.3% | 90.1% | 95.8% |
+| 20 | 69.0% | 74.0% | 69.0% | 86.1% | 95.0% |
 
 ### 2.5 MW solar shifting, 4 h
 
@@ -98,11 +98,11 @@ This is where the models disagree, and where they disagree with each other more 
 
 | Year | Studio, supplied schedule | Studio, ageing model | NREL cycle + calendar | NMC/graphite physics | LFP/graphite physics |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 1 | 95.0% | 96.4% | 92.0% | 84.6% | 97.6% |
-| 5 | 87.0% | 89.4% | 81.4% | 62.4% | 93.5% |
-| 10 | 80.0% | 82.1% | 74.1% | 48.1% | 90.0% |
-| 15 | 74.0% | 75.4% | 68.4% | 37.7% | 87.1% |
-| 20 | 69.0% | 69.0% | 63.4% | 29.9% | 84.6% |
+| 1 | 95.0% | 96.4% | 90.1% | 69.8% | 96.5% |
+| 5 | 87.0% | 89.4% | 77.8% | 46.2% | 90.3% |
+| 10 | 80.0% | 82.1% | 69.9% | 32.7% | 85.0% |
+| 15 | 74.0% | 75.4% | 63.8% | 24.6% | 81.2% |
+| 20 | 69.0% | 69.0% | 58.5% | 18.2% | 78.1% |
 
 ### 10 MW arbitrage, 4 h
 
@@ -110,11 +110,11 @@ This is where the models disagree, and where they disagree with each other more 
 
 | Year | Studio, supplied schedule | Studio, ageing model | NREL cycle + calendar | NMC/graphite physics | LFP/graphite physics |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 1 | 95.0% | 96.2% | 91.5% | 76.3% | 96.9% |
-| 5 | 87.0% | 88.0% | 80.8% | 52.1% | 92.1% |
-| 10 | 80.0% | 79.4% | 73.2% | 37.8% | 88.4% |
-| 15 | 74.0% | 71.3% | 67.1% | 28.7% | 85.5% |
-| 20 | 69.0% | 63.6% | 61.8% | 21.3% | 83.1% |
+| 1 | 95.0% | 96.2% | 88.8% | 60.3% | 95.1% |
+| 5 | 87.0% | 88.0% | 76.3% | 36.9% | 87.9% |
+| 10 | 80.0% | 79.4% | 67.7% | 26.0% | 82.7% |
+| 15 | 74.0% | 71.3% | 61.0% | 18.4% | 78.8% |
+| 20 | 69.0% | 63.6% | 55.1% | 11.9% | 75.5% |
 
 ### 20 MW frequency regulation, 1 h
 
@@ -122,11 +122,11 @@ This is where the models disagree, and where they disagree with each other more 
 
 | Year | Studio, supplied schedule | Studio, ageing model | NREL cycle + calendar | NMC/graphite physics | LFP/graphite physics |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 1 | 95.0% | 94.6% | 81.9% | 96.2% | 97.0% |
-| 5 | 87.0% | 80.4% | 62.0% | 84.0% | 91.9% |
-| 10 | 80.0% | 64.1% | 53.2% | 74.6% | 87.6% |
-| 15 | 74.0% | 48.4% | 45.2% | 67.1% | 84.1% |
-| 20 | 69.0% | 33.0% | 39.1% | 60.5% | 81.1% |
+| 1 | 95.0% | 94.6% | 80.6% | 92.5% | 95.4% |
+| 5 | 87.0% | 80.4% | 59.2% | 76.5% | 87.6% |
+| 10 | 80.0% | 64.1% | 48.9% | 64.2% | 81.1% |
+| 15 | 74.0% | 48.4% | 40.5% | 54.3% | 75.8% |
+| 20 | 69.0% | 33.0% | 34.4% | 46.1% | 71.2% |
 
 **Read this as a spread, not a verdict.** Where SAM's own three models differ by twenty points at year twenty, no single one of them settles what a plant will do; what the check establishes is whether the studio's schedule sits inside the range of published models rather than outside it, and how much of the augmentation programme — and therefore the price — rests on a number nobody can pin down. It is the strongest argument in the product for a supplier warranty curve replacing the default.
 
@@ -136,12 +136,12 @@ The studio takes the string window from the cell limits times the string depth, 
 
 | Case | Studio window, V/cell | SAM under load, V/cell | Converter |
 | --- | ---: | ---: | --- |
-| 5 kW backup, 1 h | 2.50 – 3.65 | 3.150 – 3.469 | PCS 5 kW hybrid |
-| 50 kW peak shaving, 2 h | 2.50 – 3.65 | 3.219 – 3.488 | PCS 125 kW |
-| 250 kW peak shaving, 2 h | 2.50 – 3.65 | 3.215 – 3.492 | PCS 125 kW |
-| 2.5 MW solar shifting, 4 h | 2.50 – 3.65 | 3.204 – 3.488 | PCS 2507.5 kW |
-| 10 MW arbitrage, 4 h | 2.50 – 3.65 | 3.158 – 3.487 | PCS 5000 kW |
-| 20 MW frequency regulation, 1 h | 2.50 – 3.65 | 3.306 – 3.494 | PCS 5000 kW |
+| 5 kW backup, 1 h | 2.50 – 3.65 | 3.140 – 3.483 | PCS 5 kW hybrid |
+| 50 kW peak shaving, 2 h | 2.50 – 3.65 | 3.220 – 3.517 | PCS 125 kW |
+| 250 kW peak shaving, 2 h | 2.50 – 3.65 | 3.213 – 3.521 | PCS 125 kW |
+| 2.5 MW solar shifting, 4 h | 2.50 – 3.65 | 3.206 – 3.513 | PCS 2507.5 kW |
+| 10 MW arbitrage, 4 h | 2.50 – 3.65 | 3.160 – 3.513 | PCS 5000 kW |
+| 20 MW frequency regulation, 1 h | 2.50 – 3.65 | 3.304 – 3.526 | PCS 5000 kW |
 
 The studio's window is the protection envelope — the voltages the cell may legally reach — and SAM's is the working range at this duty. The first is correctly the wider of the two: a converter has to be specified for the envelope, not for the average day.
 

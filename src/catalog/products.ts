@@ -88,6 +88,13 @@ export const packSpecs: PackSpec[] = [
    * the conservative reading — 0.48 C, in line with the rest of the schedule and at the low end of
    * what the market publishes — and the maximum follows the 200 A BMS that is the commonest
    * fitment. Marked `assumed`: replace both with the supplier's data sheet before issue.
+   *
+   * Since corroborated against a manufacturer's published rating for this cell format: REPT's
+   * 314 Ah CB71/CB75 is published at 314 A continuous and 628 A peak — 1 C and 2 C. That settles
+   * the direction rather than the number. 50 A is ruled out; 150 A is under half what the cell
+   * itself will sustain, so the pack and its BMS are the limit here, not the chemistry. Recorded
+   * with its retrieval in `src/catalog/sources.ts`, where it is marked secondary: the brochure
+   * itself is unreachable from this environment and the figures come from published summaries.
    */
   { id: 'pack-16s-314', model: 'SB51314', cellId: 'cell-lfp-314', series: 16, parallel: 1, rows: 2, columns: 8, nominalV: 51.2, maxV: 58.4, minV: 40.0, labelKWh: 16.076, continuousA: 150, maxA: 200, massKg: 112, certifications: ['IS 16270', 'IEC 62619 or UL 1973', 'UN 38.3'], provenance: 'assumed' },
   { id: 'pack-52s', model: 'SB166314', cellId: 'cell-lfp-314', series: 52, parallel: 1, rows: 4, columns: 13, nominalV: 166.4, maxV: 189.8, minV: 130, labelKWh: 52.25, continuousA: 157, maxA: 157, massKg: 340, certifications: moduleCerts, provenance: 'supplied' },
