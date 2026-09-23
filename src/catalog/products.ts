@@ -137,6 +137,36 @@ export const enclosures: EnclosureSpec[] = [
     operatingRangeC: [-10, 45], fireSafety: 'Pack-level detection',
     studioPreset: null, provenance: 'supplied',
   },
+  /**
+   * The small packs the supplied schedule lists, as deployable systems.
+   *
+   * The schedule carries SB51100, SB24100 and SB12100 and the catalogue never built an enclosure
+   * around any of them, so the smallest thing this studio could propose was a 16 kWh rack. A duty
+   * needing six kilowatt-hours of nameplate was therefore answered with sixteen — not a sizing
+   * decision, an absence of product. Packaging follows the SB51314 rack it sits beside: one pack,
+   * one string, air-cooled, wall or floor mounted. The packs are supplied; how they are cased,
+   * cooled and rated as a system is a platform assumption until a system data sheet replaces it.
+   */
+  {
+    id: 'enc-5-small', model: 'SB51100 rack', family: 'rack', packSpecId: 'pack-16s-100',
+    racks: 1, packsPerRack: 1, packsInSeries: 1, labelKWh: 5.12, ratedKW: 2.5,
+    lengthMm: 480, widthMm: 200, heightMm: 620, massKg: 42, cooling: 'air', ipRating: 'IP21',
+    auxMWhPerDayCharge: 0.0015, auxMWhPerDayDischarge: 0.0015, dcMaxV: 58.4, dcMinV: 40,
+    bms: 'BMSer or Simila', certifications: ['IS 16270', 'IEC 62619 or UL 1973'],
+    batteryIpRating: 'IP21', doorBaysPerSide: 1, communications: 'CAN, RS485',
+    operatingRangeC: [-10, 45], fireSafety: 'Pack-level detection',
+    studioPreset: null, provenance: 'indicative',
+  },
+  {
+    id: 'enc-2-small', model: 'SB24100 rack', family: 'rack', packSpecId: 'pack-8s-100',
+    racks: 1, packsPerRack: 1, packsInSeries: 1, labelKWh: 2.56, ratedKW: 1.25,
+    lengthMm: 480, widthMm: 180, heightMm: 400, massKg: 22, cooling: 'air', ipRating: 'IP21',
+    auxMWhPerDayCharge: 0.0008, auxMWhPerDayDischarge: 0.0008, dcMaxV: 29.2, dcMinV: 20,
+    bms: 'BMSer or Simila', certifications: ['IS 16270', 'IEC 62619 or UL 1973'],
+    batteryIpRating: 'IP21', doorBaysPerSide: 1, communications: 'CAN, RS485',
+    operatingRangeC: [-10, 45], fireSafety: 'Pack-level detection',
+    studioPreset: null, provenance: 'indicative',
+  },
   {
     id: 'enc-52-rack', model: 'SB166314 rack', family: 'rack', packSpecId: 'pack-52s',
     racks: 1, packsPerRack: 1, packsInSeries: 1, labelKWh: 52.25, ratedKW: 26,

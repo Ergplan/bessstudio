@@ -128,7 +128,13 @@ export function landedCost(l: LandedCost, kWh: number, ratedKW: number, pcsInrOv
 export const defaultPriceBook: PriceBook = {
   id: 'pb-default', name: 'Supply offer basis', currency: 'INR', updatedAt: '2026-09-01',
   costingMode: 'landed-import', supplyScope: 'supply-only', landed: defaultLandedCost(),
-  batteryPerKWh: { 'enc-5mwh-20ft': 84, 'enc-5mwh-alt': 86, 'enc-261-ci': 132, 'enc-52-rack': 168, 'enc-16-small': 196 },
+  // Dearer per kilowatt-hour the smaller the system, which is true of every battery product: the
+  // case, the management board, the contactors and the certification are much the same whatever is
+  // inside them, and a 5 MWh container spreads them over three hundred times the energy.
+  batteryPerKWh: {
+    'enc-5mwh-20ft': 84, 'enc-5mwh-alt': 86, 'enc-261-ci': 132, 'enc-52-rack': 168,
+    'enc-16-small': 196, 'enc-5-small': 238, 'enc-2-small': 286,
+  },
   pcsPerKW: { 'pcs-5000': 13, 'pcs-2507': 14, 'pcs-1725': 17, 'pcs-630': 26, 'pcs-125': 44, 'pcs-5': 92 },
   transformerPerKVA: { 'tx-6300': 16, 'tx-5000': 17, 'tx-3150': 19, 'tx-1600': 24, 'tx-1000': 27, 'tx-500': 34 },
   bopPerKW: 26, epcPerKWh: 22, civilPerM2: 210,

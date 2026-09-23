@@ -32,6 +32,36 @@ export const defaultLossChain = (): LossChain => ({
   idtOnDischarge: true, openAccessLoss: 0.1078, availabilityFactor: 0.95, auxScale: 1,
 });
 
+/**
+ * Round-trip efficiency at the AC boundary, from a loss chain alone.
+ *
+ * The same arithmetic `sizeSystem` does, available before a plant exists, so the hours allowed to
+ * charge can be *derived* from the losses rather than copied from the discharge duration. Those two
+ * are not the same number and never were: the energy that came out crossed the converter, the
+ * cables and the transformer on the way, and crosses all of them again going back in.
+ */
+export function roundTripAc(L: LossChain, withTransformer = true): number {
+  const wiring = (1 - L.dcCableLoss) * (1 - L.pcsLoss) * (1 - L.acCableLoss);
+  const idt = withTransformer ? 1 - L.idtLoss : 1;
+  return L.chargeEfficiencyDc * wiring * idt * L.dischargeEfficiencyDc * wiring * (L.idtOnDischarge ? idt : 1);
+}
+
+/**
+ * Hours to put back what was taken out, at the plant's own rated power.
+ *
+ * A requirement only when somebody has one — a site that must be full again before the next shift.
+ * Absent that, the honest default is the time the plant takes at the power it is already rated for,
+ * which is longer than the discharge by exactly the round trip. Defaulting it to the discharge
+ * duration asserted a recharge requirement nobody stated and then sized converters and enclosures
+ * to meet it: a five-kilowatt plant asked to refill in the hour it emptied needs 5.6 kW, which
+ * bought a second converter and a third of a fleet to satisfy an assumption.
+ */
+export const recoveryHours = (durationH: number, L: LossChain, withTransformer = true) =>
+  // Up to the next hundredth of an hour, never down. Rounding a derived window *down* asks the
+  // plant to recharge fractionally faster than its own rated power allows, and the fleet is sized
+  // on a ceiling: two hundredths of an hour bought a third enclosure.
+  Math.ceil(durationH / roundTripAc(L, withTransformer) * 100) / 100;
+
 /** Capacity retention by year from the supplied 20-year schedule. Index 0 is commissioning. */
 export const suppliedRetention = [1, 0.95, 0.92, 0.90, 0.88, 0.87, 0.85, 0.84, 0.82, 0.81, 0.80, 0.78, 0.77, 0.76, 0.75, 0.74, 0.73, 0.72, 0.71, 0.70, 0.69];
 
@@ -116,6 +146,8 @@ export type SizingResult = {
   input: SizingInput;
   enclosure: EnclosureSpec; pcs: PcsSpec; transformer: TransformerSpec | null;
   requiredUsableMWh: number; ratedPowerMW: number; effectiveDurationH: number; chargePowerMW: number; chargeCRate: number;
+  /** Hours to put the contracted energy back at rated power, after the round trip. Computed, not asked for. */
+  recoveryDurationH: number;
   units: number; totalUnits: number; installedDcMWh: number; day1UsableMWh: number;
   /** Which of the two independent constraints set the day-one fleet, and how many units each asked for. */
   binding: 'power' | 'energy'; unitsForPower: number; unitsForEnergy: number;
@@ -134,7 +166,8 @@ export const defaultSizingInput = (applicationId: ApplicationId = 'peak-shaving'
   const a = application(applicationId);
   return {
     applicationId, mode: 'power-duration', powerMW: 2.5, durationH: a.durationH, usableEnergyMWh: 2.5 * a.durationH,
-    chargeDurationH: a.durationH,
+    // Derived from the loss chain, not copied from the discharge duration: see `recoveryHours`.
+    chargeDurationH: recoveryHours(a.durationH, defaultLossChain()),
     cyclesPerDay: a.cyclesPerDay, daysPerYear: a.daysPerYear, projectYears: 20, dod: a.dod, availability: a.availability,
     ambientC: 35, altitudeM: 100, enclosureId: 'enc-5mwh-20ft', pcsId: 'pcs-2507', transformerId: 'tx-3150',
     // Periodic, whatever the duty cycle. Oversizing on day one was the default below one cycle a
@@ -224,7 +257,11 @@ export function normaliseSizingInput(input: SizingInput): SizingInput {
     powerMW: held(input.powerMW, 0.001, 5000),
     durationH,
     usableEnergyMWh: held(input.usableEnergyMWh, 0.001, 50_000),
-    chargeDurationH: input.chargeDurationH > 0 ? held(input.chargeDurationH, 0.05, 48) : durationH,
+    // A record written before the field existed gets the derived window, not the discharge
+    // duration: they are not the same number, and a legacy design should open at the honest one.
+    chargeDurationH: input.chargeDurationH > 0
+      ? held(input.chargeDurationH, 0.05, 48)
+      : recoveryHours(durationH, L, input.transformerId !== null),
     cyclesPerDay: held(input.cyclesPerDay, 0, 24, 1),
     daysPerYear: held(input.daysPerYear, 0, 366, 365),
     projectYears: Math.round(held(input.projectYears, 1, 60, 20)),
@@ -410,6 +447,7 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   const idt = transformer ? 1 - L.idtLoss : 1;
   const dischargePathEfficiency = L.dischargeEfficiencyDc * wiring * (L.idtOnDischarge ? idt : 1);
   const chargePathEfficiency = L.chargeEfficiencyDc * wiring * idt;
+  const rteAc = chargePathEfficiency * dischargePathEfficiency;
 
   const cellTempC = cellTemperature(input.ambientC, enclosure.cooling), tempFactor = temperatureFactor(cellTempC);
   const efcPerYear = input.cyclesPerDay * input.daysPerYear * input.dod;
@@ -441,7 +479,23 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   const unitsForEnergy = perUnitAtDesign > 0 ? ceil(requiredUsableMWh / perUnitAtDesign) : Number.POSITIVE_INFINITY;
   // Putting the energy back in over a shorter window than it comes out is the more demanding
   // constraint, so the fleet and the converters are sized on whichever direction asks for more.
-  const chargePowerMW = requiredUsableMWh / Math.max(input.chargeDurationH, 0.01);
+  /**
+   * The power the plant must draw to put back what it delivered.
+   *
+   * Not the energy that came out divided by the window: the energy that came out crossed the
+   * converter, the cables and the transformer on the way, and crosses all of them again on the way
+   * back in. Restoring 5 kWh at the meter takes 5 kWh ÷ round trip — about 5.6 kWh — so a plant
+   * asked to recharge in the same hours it discharged needs about an eighth more power than it
+   * discharges at, not the same. Sizing the converters on the delivered figure understated every
+   * charge-limited plant by the round-trip loss.
+   */
+  const chargePowerMW = requiredUsableMWh / Math.max(rteAc, 1e-6) / Math.max(input.chargeDurationH, 0.01);
+  /**
+   * How long the plant takes to recharge at its own rated power, which is a result rather than a
+   * requirement: the contracted energy, grossed up for the round trip, at the power the plant is
+   * rated for. A five-kilowatt plant that discharges 5 kWh in an hour needs 1.13 h to put it back.
+   */
+  const recoveryDurationH = requiredUsableMWh / Math.max(rteAc, 1e-6) / Math.max(ratedPowerMW, 1e-9);
   const designPowerMW = Math.max(ratedPowerMW, chargePowerMW);
   const unitsForPower = ceil(designPowerMW * 1000 / enclosure.ratedKW);
   const units = Math.max(1, Math.min(unitsForEnergy, 5000), unitsForPower);
@@ -504,7 +558,6 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   const pcsCount = Math.max(1, ceil(designPowerMW * 1000 / pcs.ratedKW));
   const transformerCount = transformer ? Math.max(1, ceil(designPowerMW * 1000 / input.powerFactor / transformer.ratedKVA)) : 0;
   const auxMWhPerDay = (auxChargePerUnit + auxDischargePerUnit) * units;
-  const rteAc = L.chargeEfficiencyDc * L.dischargeEfficiencyDc * wiring ** 2 * (L.idtOnDischarge ? idt : 1) * idt;
   const systemCRate = ratedPowerMW / Math.max(installedDcMWh, 1e-6);
   const chargeCRate = chargePowerMW / Math.max(installedDcMWh, 1e-6);
   const packCRate = enclosureCRate(enclosure);
@@ -581,7 +634,7 @@ export function sizeSystem(raw: SizingInput): SizingResult {
   warnings.push({ code: 'validation', level: 'info', text: 'Sizing uses the supplied degradation schedule and loss chain. Supplier warranty curves and a site thermal study are required before contract.' });
 
   return {
-    input, enclosure, pcs, transformer, requiredUsableMWh, ratedPowerMW,
+    input, enclosure, pcs, transformer, requiredUsableMWh, ratedPowerMW, recoveryDurationH,
     effectiveDurationH: requiredUsableMWh / Math.max(ratedPowerMW, 1e-6), chargePowerMW, chargeCRate,
     units, totalUnits, installedDcMWh, day1UsableMWh,
     binding, unitsForPower, unitsForEnergy: Number.isFinite(unitsForEnergy) ? unitsForEnergy : 0,

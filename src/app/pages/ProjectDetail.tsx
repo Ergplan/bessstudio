@@ -143,8 +143,13 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
             kilowatt-hours of contracted energy is certainly not "0.0 MWh". */}
         <Stat label="Rated power" {...units.power(sizing.ratedPowerMW)}
           foot={`${sizing.pcsCount} × ${sizing.pcs.model}${sizing.chargePowerMW > sizing.ratedPowerMW * 1.001 ? ` · sized on ${units.powerText(sizing.chargePowerMW)} charging` : ''}`} />
-        <Stat label="Contracted usable" {...units.energy(sizing.requiredUsableMWh)} foot={`${sizing.effectiveDurationH.toFixed(2)} h duration`} />
-        <Stat label="Installed DC" {...units.energy(sizing.installedDcMWh)} foot={`${sizing.units} × ${sizing.enclosure.model}${sizing.augmentations.length ? ` + ${sizing.totalUnits - sizing.units} augmentation` : ''}`} />
+        <Stat label="Contracted usable" {...units.energy(sizing.requiredUsableMWh)}
+          foot={`${sizing.effectiveDurationH.toFixed(2)} h out · ${sizing.recoveryDurationH.toFixed(2)} h to put back at rated power`} />
+        {/* Nameplate and deliverable are different quantities and belong on the page as two. The
+            gap between them is the depth of discharge, the usable window and the conversion path,
+            and a reader who cannot see both has no way to tell an oversized plant from a lossy one. */}
+        <Stat label="Installed DC, nominal" {...units.energy(sizing.installedDcMWh)}
+          foot={`${sizing.units} × ${sizing.enclosure.model}${sizing.augmentations.length ? ` + ${sizing.totalUnits - sizing.units} augmentation` : ''} · ${units.energyText(sizing.day1UsableMWh)} usable on day one`} />
         {/* A supply-only price is the invoice at the gate. Printed alone it invites a comparison
             with somebody else's installed cost, so the installed figure travels beside it. */}
         <Stat label={priceBook.supplyScope === 'turnkey' ? 'Turnkey price' : 'Delivered equipment price'}
@@ -192,9 +197,20 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
                 ? <Slider label="Usable energy" value={project.sizing.usableEnergyMWh} scale={1000} min={1} max={2000} step={1} unit="kWh" onChange={usableEnergyMWh => set({ usableEnergyMWh })} />
                 : <Slider label="Usable energy" value={project.sizing.usableEnergyMWh} min={1} max={1000} step={0.1} decimals={1} unit="MWh" onChange={usableEnergyMWh => set({ usableEnergyMWh })} />}
                   <Slider label="Discharge duration" value={project.sizing.durationH} min={0.25} max={12} step={0.25} decimals={2} unit="h" onChange={durationH => set({ durationH })} /></>}
-            <Slider label="Hours allowed to charge" value={normaliseSizingInput(project.sizing).chargeDurationH} min={0.25} max={24} step={0.25} decimals={2} unit="h"
+            {/* A window, not a mirror of the discharge. It opens at the time the plant takes at its
+                own rated power, which is longer than the discharge by exactly the round trip, and
+                the hint says what a shorter one costs before anybody pays for it. */}
+            <Slider label="Hours allowed to charge" value={normaliseSizingInput(project.sizing).chargeDurationH} min={0.25} max={24} step={0.05} decimals={2} unit="h"
               onChange={chargeDurationH => set({ chargeDurationH })}
-              hint={`Returning the contracted energy in this window asks ${units.powerText(sizing.chargePowerMW)} at ${sizing.chargeCRate.toFixed(2)} C.`} />
+              hint={`${units.energyText(sizing.requiredUsableMWh)} delivered takes ${units.energyText(sizing.requiredUsableMWh / sizing.rteAc)} back in at ${(sizing.rteAc * 100).toFixed(1)}% round trip, so ${sizing.recoveryDurationH.toFixed(2)} h at rated power. This window asks ${units.powerText(sizing.chargePowerMW)} at ${sizing.chargeCRate.toFixed(2)} C.`} />
+            {sizing.recoveryDurationH > normaliseSizingInput(project.sizing).chargeDurationH * 1.001 && (
+              <div className="row" style={{ marginTop: -4, marginBottom: 8 }}>
+                <button className="btn sm" onClick={() => set({ chargeDurationH: Math.ceil(sizing.recoveryDurationH * 100) / 100 })}>
+                  Charge at rated power instead
+                </button>
+                <span className="muted">The shorter window is what is buying the extra conversion.</span>
+              </div>
+            )}
             <Slider label="Cycles per day" value={project.sizing.cyclesPerDay} min={0.05} max={12} step={0.05} decimals={2} unit="/day" onChange={cyclesPerDay => set({ cyclesPerDay })} />
             <Slider label="Operating days per year" value={project.sizing.daysPerYear} min={30} max={366} step={1} unit="days" onChange={daysPerYear => set({ daysPerYear })} />
             <Slider label="Depth of discharge" value={project.sizing.dod} scale={100} min={20} max={100} step={1} unit="%" onChange={dod => set({ dod })} />

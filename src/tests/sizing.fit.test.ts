@@ -1,17 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { connectionKV, defaultSizingInput, fitEquipment, sizeSystem, type SizingInput } from '../sizing/engine';
+import { connectionKV, defaultSizingInput, fitEquipment, recoveryHours, sizeSystem, type SizingInput } from '../sizing/engine';
 import { evaluateFinance, landedForSizing } from '../sizing/finance';
 import { defaultPriceBook, landedRatesFor, offerPcsInrPerKW } from '../catalog/pricing';
-import { enclosures, packSpecs, transformers, enclosureCRate } from '../catalog/products';
+import { enclosures, packSpecs, transformers, enclosureCRate, enclosureEnergyKWh } from '../catalog/products';
 import { newProject } from '../platform/projects';
 import type { ApplicationId } from '../sizing/applications';
 
 const fx = defaultPriceBook.landed.exchangeRateInrPerUsd;
 /** A duty as the studio states it, sized and priced the way the workbench prices it. */
 const plant = (powerMW: number, durationH: number, applicationId: ApplicationId, over: Partial<SizingInput> = {}) => {
+  // The charge window is left at the derived default — the discharge duration grossed up for the
+  // round trip — because that is what the studio opens with. Forcing it equal to the discharge
+  // duration asserts a recharge requirement nobody stated and sizes the plant to meet it.
+  const base = defaultSizingInput(applicationId);
   const sizing = sizeSystem({
-    ...defaultSizingInput(applicationId), mode: 'power-duration',
-    powerMW, durationH, chargeDurationH: durationH, ...over,
+    ...base, mode: 'power-duration', powerMW, durationH,
+    chargeDurationH: recoveryHours(durationH, base.losses), ...over,
   });
   const finance = evaluateFinance(sizing, defaultPriceBook);
   return { sizing, finance, capexInr: finance.capexUsd * fx, inrPerKWhDc: finance.capexUsd * fx / (sizing.installedDcMWh * 1000) };
@@ -40,11 +44,39 @@ describe('fitting equipment to the duty', () => {
   it('answers a five-kilowatt backup supply with a wall rack, not a shipping container', () => {
     const { sizing, capexInr } = plant(0.005, 1, 'backup-power');
     expect(sizing.enclosure.family).toBe('rack');
-    expect(sizing.units).toBe(1);
     expect(sizing.pcs.ratedKW).toBe(5);
+    expect(sizing.pcsCount).toBe(1);
     expect(sizing.transformer).toBeNull();
-    expect(sizing.installedDcMWh * 1000).toBeLessThan(20);   // kWh, not megawatt-hours
     expect(capexInr).toBeLessThan(1e6);                      // lakhs, not crores
+
+    // Nominal capacity is a consequence, not a default. Five kilowatt-hours contracted, through a
+    // 95% depth of discharge inside a 95% usable window, across a 95.5% discharge path, with the
+    // year-one retention the design is sized at, needs about 6.1 kWh of nameplate — which the
+    // catalogue supplies in 5.12 kWh steps.
+    const nominalKWh = sizing.installedDcMWh * 1000;
+    const minimum = 5 / (sizing.input.dod * sizing.input.losses.usableDcWindow * sizing.dischargePathEfficiency * 0.95);
+    expect(nominalKWh).toBeGreaterThanOrEqual(minimum);
+    expect(nominalKWh).toBeLessThan(minimum + enclosureEnergyKWh(sizing.enclosure));
+    expect(nominalKWh).toBeLessThan(12);
+    // And it is stated separately from the energy the plant can actually deliver on day one.
+    expect(sizing.day1UsableMWh * 1000).toBeGreaterThanOrEqual(5);
+    expect(sizing.day1UsableMWh * 1000).toBeLessThan(nominalKWh);
+  });
+
+  it('recharges in the time the losses say, not in the time it discharged', () => {
+    const { sizing } = plant(0.005, 1, 'backup-power');
+    // 5 kWh at the meter takes 5 ÷ RTE to put back, so an hour out is more than an hour in.
+    expect(sizing.recoveryDurationH).toBeCloseTo(1 / sizing.rteAc, 6);
+    expect(sizing.recoveryDurationH).toBeGreaterThan(1);
+    // At the derived window the plant charges at no more than its rated power, so charging buys
+    // neither an extra converter nor an extra enclosure.
+    expect(sizing.chargePowerMW).toBeLessThanOrEqual(sizing.ratedPowerMW + 1e-9);
+    expect(sizing.warnings.some(w => w.code === 'charge-limited')).toBe(false);
+
+    // Ask for the same hour back and the physics says so out loud, rather than silently.
+    const forced = plant(0.005, 1, 'backup-power', { chargeDurationH: 1 });
+    expect(forced.sizing.chargePowerMW).toBeGreaterThan(forced.sizing.ratedPowerMW);
+    expect(forced.sizing.warnings.some(w => w.code === 'charge-limited')).toBe(true);
   });
 
   it('still gives a container to whoever pins one, and says what it costs them', () => {
@@ -121,17 +153,21 @@ describe('what the ladder costs', () => {
       // kilowatt-hour, as it is in any shop. Neither is ₹2.5 lakh per kilowatt-hour, which is what
       // a flat per-enclosure converter allowance produced for a five-kilowatt system.
       expect(p.inrPerKWhDc, `${p.name} at ₹${Math.round(p.inrPerKWhDc)}/kWh DC`).toBeGreaterThan(7_000);
-      expect(p.inrPerKWhDc, `${p.name} at ₹${Math.round(p.inrPerKWhDc)}/kWh DC`).toBeLessThan(30_000);
+      // The small wall racks are the dear end, as they are in any shop: the case, the management
+      // board and the certification cost much the same whatever is inside them.
+      expect(p.inrPerKWhDc, `${p.name} at ₹${Math.round(p.inrPerKWhDc)}/kWh DC`).toBeLessThan(35_000);
     }
   });
 
   it('charges for the converter that is installed, not the one the offer was struck against', () => {
     const small = plant(0.005, 1, 'backup-power');
-    const perKW = landedForSizing(small.sizing, defaultPriceBook).pcsInr / (small.sizing.pcs.ratedKW * small.sizing.pcsCount);
+    // The breakdown is per enclosure, so the fleet's converter spend is that times the fleet.
+    const fleetPcsInr = landedForSizing(small.sizing, defaultPriceBook).pcsInr * small.sizing.units;
+    const perKW = fleetPcsInr / (small.sizing.pcs.ratedKW * small.sizing.pcsCount);
     expect(perKW).toBeCloseTo(defaultPriceBook.pcsPerKW['pcs-5'] * fx, 6);
     // A five-kilowatt hybrid inverter used to carry the container's ₹32.5 lakh allowance, which was
     // eighty-one per cent of that system's price.
-    expect(landedForSizing(small.sizing, defaultPriceBook).pcsInr).toBeLessThan(100_000);
+    expect(fleetPcsInr).toBeLessThan(100_000);
 
     // The bundled allowance still stands where it was quoted: 2 507.5 kW with a container.
     const reference = plant(2.5, 4, 'solar-shifting');

@@ -5,7 +5,7 @@ import { brand } from '../../brand/brand';
 import { useSession } from '../../platform/auth';
 import { repository } from '../../platform/repo';
 import { nowIso, uid, type Customer, type Project } from '../../platform/types';
-import { defaultSizingInput, sizeSystem } from '../../sizing/engine';
+import { defaultLossChain, defaultSizingInput, recoveryHours, sizeSystem } from '../../sizing/engine';
 import { newProject as makeProject, HOLDING_ACCOUNT } from '../../platform/projects';
 import { application, applications, type ApplicationId } from '../../sizing/applications';
 import { BuildSequence } from '../landing/BuildSequence';
@@ -39,7 +39,10 @@ export function Start() {
 
   const powerMW = number(params.get('power'), 5);
   const dischargeH = number(params.get('discharge'), 4);
-  const chargeH = number(params.get('charge'), 4);
+  // Absent a stated window, the time the plant takes at its own rated power — the discharge grossed
+  // up for the round trip — not a hard four hours. A link without a charge window is a reader who
+  // has not asked for one, and inventing a requirement here sizes converters to meet it.
+  const chargeH = number(params.get('charge'), recoveryHours(dischargeH, defaultLossChain()));
   const applicationId = (applications.some(a => a.id === params.get('application'))
     ? params.get('application') : 'solar-shifting') as ApplicationId;
 

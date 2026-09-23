@@ -4,7 +4,7 @@ import { atRate, currencies, defaultPriceBook, defaultLandedCost, landedCost, lo
 import { applications, application } from '../sizing/applications';
 import {
   defaultSizingInput, sizeSystem, normaliseSizingInput, retentionAt, retentionFromTable,
-  cellTemperature, temperatureFactor, suppliedRetention, defaultLossChain, type SizingInput,
+  cellTemperature, temperatureFactor, suppliedRetention, defaultLossChain, recoveryHours, roundTripAc, type SizingInput,
 } from '../sizing/engine';
 import { evaluateFinance, annualBenefitUsd, chargingEnergyMWh } from '../sizing/finance';
 import { buildQuoteLines, createQuote, nextQuoteNumber, quoteTotals, reviseQuote, uplift } from '../quoting/quote';
@@ -673,15 +673,22 @@ describe('offer document', () => {
 });
 
 describe('charge window', () => {
-  const base = (patch: Partial<SizingInput> = {}) => sizeSystem({ ...defaultSizingInput('solar-shifting'), powerMW: 5, durationH: 4, chargeDurationH: 4, ...patch });
+  const base = (patch: Partial<SizingInput> = {}) => sizeSystem({ ...defaultSizingInput('solar-shifting'), powerMW: 5, durationH: 4, ...patch });
 
   it('sizes the fleet and the converters on whichever direction asks for more power', () => {
+    // The window that puts back exactly what came out, at rated power: the discharge duration
+    // divided by the round trip, which is the default the engine now derives rather than copies.
     const symmetric = base();
-    expect(symmetric.chargePowerMW).toBeCloseTo(symmetric.ratedPowerMW, 6);
+    expect(symmetric.input.chargeDurationH).toBeGreaterThan(symmetric.effectiveDurationH);
+    expect(symmetric.chargePowerMW).toBeLessThanOrEqual(symmetric.ratedPowerMW + 1e-9);
+    expect(symmetric.chargePowerMW).toBeCloseTo(symmetric.ratedPowerMW, 1);
+    expect(symmetric.recoveryDurationH).toBeCloseTo(symmetric.effectiveDurationH / symmetric.rteAc, 6);
 
-    // Half the window to put the same energy back means twice the power on the charge side.
+    // Half the window to put the same energy back means twice the power on the charge side — and
+    // the energy to put back is what was delivered grossed up for the round trip, not what was
+    // delivered. Restoring 20 MWh at the meter takes 20 ÷ RTE at the connection.
     const fast = base({ chargeDurationH: 2 });
-    expect(fast.chargePowerMW).toBeCloseTo(symmetric.requiredUsableMWh / 2, 6);
+    expect(fast.chargePowerMW).toBeCloseTo(symmetric.requiredUsableMWh / symmetric.rteAc / 2, 6);
     expect(fast.pcsCount).toBeGreaterThan(symmetric.pcsCount);
     expect(fast.units).toBeGreaterThanOrEqual(symmetric.units);
     expect(fast.warnings.some(w => w.code === 'charge-limited')).toBe(true);
@@ -707,10 +714,17 @@ describe('charge window', () => {
     expect(base({ chargeDurationH: relaxed }).units).toBeLessThan(fast.units);
   });
 
-  it('defaults the charge window to the discharge duration and survives a record without one', () => {
-    expect(defaultSizingInput('solar-shifting').chargeDurationH).toBe(defaultSizingInput('solar-shifting').durationH);
+  it('derives the charge window from the losses rather than copying the discharge duration', () => {
+    // Copying it asserted a recharge requirement nobody stated, and then sized converters and
+    // enclosures to meet it: a plant asked to refill in the hour it emptied needs a ninth more
+    // power than it discharges at, because the energy crosses the conversion path twice.
+    const d = defaultSizingInput('solar-shifting');
+    expect(d.chargeDurationH).toBeGreaterThan(d.durationH);
+    expect(d.chargeDurationH).toBeCloseTo(recoveryHours(d.durationH, defaultLossChain()), 9);
+    expect(d.chargeDurationH / d.durationH).toBeCloseTo(1 / roundTripAc(defaultLossChain()), 2);
+
     const legacy = { ...defaultSizingInput(), chargeDurationH: undefined } as unknown as SizingInput;
-    expect(normaliseSizingInput(legacy).chargeDurationH).toBe(legacy.durationH);
+    expect(normaliseSizingInput(legacy).chargeDurationH).toBeGreaterThan(legacy.durationH);
     expect(() => sizeSystem(legacy)).not.toThrow();
   });
 });

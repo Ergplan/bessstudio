@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, X } from 'lucide-react';
 import * as units from '../../domain/units';
 import { applications, type ApplicationId } from '../../sizing/applications';
-import { defaultSizingInput, sizeSystem } from '../../sizing/engine';
+import { defaultLossChain, defaultSizingInput, recoveryHours, sizeSystem } from '../../sizing/engine';
 
 export type BuildIntent = { powerMW: number; dischargeH: number; chargeH: number; applicationId: ApplicationId };
 export const intentToQuery = (i: BuildIntent) =>
@@ -23,7 +23,18 @@ export function BuildQuestion({ onClose }: { onClose: () => void }) {
   const [unit, setUnit] = useState<Unit>('MW');
   const [power, setPower] = useState('5');
   const [dischargeH, setDischargeH] = useState(4);
-  const [chargeH, setChargeH] = useState(4);
+  /**
+   * The charge window follows the discharge until somebody says otherwise.
+   *
+   * Not as a copy of it: the energy that comes out crosses the converter, the cables and the
+   * transformer on the way, and crosses them all again going back in, so putting back four hours
+   * takes about four and a half. Offering the two as identical asserted a recharge requirement
+   * nobody had stated, and then sized converters and enclosures to meet it. Once the reader picks
+   * a window of their own it stays picked, because then it *is* a requirement.
+   */
+  const [chargeH, setChargeH] = useState<number | null>(null);
+  const naturalChargeH = HOURS.find(h => h >= recoveryHours(dischargeH, defaultLossChain())) ?? HOURS.at(-1)!;
+  const charge = chargeH ?? naturalChargeH;
   const [applicationId, setApplicationId] = useState<ApplicationId>('solar-shifting');
   const [busy, setBusy] = useState(false);
 
@@ -39,10 +50,10 @@ export function BuildQuestion({ onClose }: { onClose: () => void }) {
     try {
       return sizeSystem({
         ...defaultSizingInput(applicationId),
-        mode: 'power-duration', powerMW, durationH: dischargeH, chargeDurationH: chargeH,
+        mode: 'power-duration', powerMW, durationH: dischargeH, chargeDurationH: charge,
       });
     } catch { return null; }
-  }, [powerMW, dischargeH, chargeH, applicationId]);
+  }, [powerMW, dischargeH, charge, applicationId]);
 
   const valid = powerMW > 0 && powerMW <= 2000;
   const blocking = preview?.warnings.filter(w => w.level === 'error') ?? [];
@@ -50,7 +61,7 @@ export function BuildQuestion({ onClose }: { onClose: () => void }) {
   const start = () => {
     if (!valid || busy) return;
     setBusy(true);
-    router.push(`/start/?${intentToQuery({ powerMW, dischargeH, chargeH, applicationId })}`);
+    router.push(`/start/?${intentToQuery({ powerMW, dischargeH, chargeH: charge, applicationId })}`);
   };
 
   return (
@@ -79,7 +90,7 @@ export function BuildQuestion({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="l-field-row">
-        {([['Hours of discharge', dischargeH, setDischargeH], ['Hours of charge', chargeH, setChargeH]] as const).map(([label, value, set]) => (
+        {([['Hours of discharge', dischargeH, setDischargeH], ['Hours of charge', charge, setChargeH]] as const).map(([label, value, set]) => (
           <div className="l-field" key={label}>
             <span className="l-label">{label}</span>
             <div className="l-hours" role="group" aria-label={label}>

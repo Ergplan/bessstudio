@@ -62,6 +62,22 @@ Definitions in [§18](./SITE.md#18-acceptance-fixtures). F01 to F08 have run and
 | F07 | lifecycle cost, discounting and no-crossover | S9 | **PASS** — `src/tests/sim.india.test.ts` |
 | F08 | cross-tenant access and provenance | S11 | **PASS** — `src/tests/rules.test.ts`, `src/tests/quoting.appendix.test.ts` |
 
+## Where the arithmetic runs
+
+Every number in this product is computed by code in this repository, under test. No language model
+sizes a plant, prices one, or computes a figure that reaches a screen or a document: the engine is
+TypeScript, it is deterministic, its inputs are hashed, and the suite is the record of what it is
+expected to say. A model's job here is to help somebody state their requirement and to explain a
+result once the engine has produced it — never to produce one.
+
+The methods are the ordinary ones and are meant to be checkable against the public reference work
+rather than taken on trust: energy sizing from the contracted duty through depth of discharge, the
+usable state-of-charge window, the conversion path and the design-year retention; power sizing
+against pack continuous current; degradation as a cycle-and-calendar model with an Arrhenius
+temperature term; a discounted lifecycle ledger. Where a figure comes from a supplied document it
+says so, and where it is a platform assumption it says that instead. A result that cannot be
+reproduced from the inputs printed beside it is a defect, not a rounding difference.
+
 ## What is already true, and must stay true
 
 The invariants every stage inherits. Breaking one reopens the stage that broke it.
@@ -1433,6 +1449,26 @@ installation is the largest share of a job.
 
 **Checks after the three decisions:** typecheck clean, **711 unit tests pass**, 17 routes export,
 and the 5 kW design reads 5 kW / 5 kWh / 16.1 kWh / ₹3.88 L with ₹5.70 L installed beside it.
+
+### R4 — the five-kilowatt correction
+
+The customer's own note on the 5 kW / 1 h design, item by item. Four of the seven were defects.
+
+| # | Raised | Finding | Status |
+| --- | --- | --- | --- |
+| D75 | "Remove the default 1 × 16.1 kWh enclosure. Select an appropriately sized battery." | The supplied schedule lists SB51100, SB24100 and SB12100 and the catalogue never built an enclosure around any of them, so the smallest thing the studio could propose was a 16 kWh rack. A duty needing 6.1 kWh of nameplate was answered with 16 — an absence of product, not a sizing decision | **fixed**; SB51100 and SB24100 added as systems. 5 kW / 1 h now fits 2 × SB51100 = 10.24 kWh |
+| D76 | "Charging duration: calculate separately from charging power and efficiency; do not assume it equals discharge duration." | It was copied from the discharge duration in three places, and the charge power behind it ignored the conversion path entirely: restoring 5 kWh at the meter takes 5 ÷ RTE, so every charge-limited plant was undersized by the round-trip loss | **fixed**; charge power is grossed up for the round trip and the window is derived from the loss chain. `recoveryDurationH` is reported as a result |
+| D77 | "Show nominal capacity separately from usable energy." | The page showed nameplate alone. A reader could not tell an oversized plant from a lossy one | **fixed**; nominal and day-one usable both on the headline |
+| D78 | "Display 1 × 5 kW PCS. Do not round to 0.01 MW." | The rounding was fixed in R3; the *second converter* was not. A recharge window copied from the discharge asked 5.6 kW of a 5 kW plant and bought a converter to supply it | **fixed** as part of D76 |
+| — | "Recalculate the C-rate on the selected battery's nominal capacity" | Already computed from nominal capacity; it read 0.31 C because the nominal capacity was wrong. It now reads 0.49 C on 10.24 kWh | no defect |
+| — | "All sizing calculations should run in code" | Already true, and now stated in the contract above | no defect |
+
+**The 5 kW / 1 h design as it now stands:** 5 kW rated, 5 kWh contracted over 1.00 h, **10.24 kWh
+nominal** in 2 × SB51100 racks, **5.83 kWh usable on day one**, 1 × PCS 5 kW hybrid, no transformer,
+connection at 230 V, **1.12 h to recharge at rated power**, 0.49 C. ₹3.12 lakh delivered, ₹4.67 lakh
+installed. It carries `c-rate-margin` and `charge-rate-margin`: two racks give 5.12 kW against a
+5 kW duty, so the plant runs at 98% of the pack's continuous rating. That is a real margin and worth
+a decision — a third rack removes it.
 
 ### Still open for a decision
 
