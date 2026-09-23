@@ -110,6 +110,16 @@ export type LessonStory = {
   /** What the reader can do afterwards that they could not before. Shown on the card. */
   takeaway: string;
   /**
+   * The words this card is the first to use, by glossary id.
+   *
+   * §15.1: "jargon is taught on first use". The prose honoured that and the screen did not — the
+   * first card shows a converter, auxiliaries, a battery management system and a reserve floor
+   * inside its first minute with nothing on the page saying what any of them is. Declaring them
+   * here lets the player teach them before the run rather than interrupting it, and lets a test
+   * refuse a card that introduces a word whose own definition depends on a later one.
+   */
+  teaches: string[];
+  /**
    * The closing beat, drawn from the run that actually happened.
    *
    * Not a caption. A learner who moves a control gets a different sentence because they produced a
@@ -240,6 +250,7 @@ export const chargeDischarge: LessonCard = {
     actId: 'machine',
     situation: 'A battery, a converter and a wire to the grid. No site, no tariff, no weather — just the machine. You choose which way the energy goes and how hard, and watch what comes out at the other end.',
     takeaway: 'Say where the energy went, and why less came out than went in.',
+    teaches: ['charge-level', 'converter', 'losses', 'auxiliaries', 'bms', 'ems'],
     soWhat: r => {
       const moved = (r.values.direction ?? 1) >= 0 ? r.totals.deliveredAcWh : r.totals.drawnAcWh;
       const lost = r.totals.converterLossWh + r.totals.batteryLossWh + r.totals.auxiliaryWh;
@@ -328,6 +339,7 @@ export const reducePeak: LessonCard = {
     actId: 'job',
     situation: 'A factory on a demand tariff. Part of the bill is set by the single highest half-hour of the month, and the evening shift puts it there. The plant is not selling anything today — its whole job is to stop the meter ever seeing that peak.',
     takeaway: 'Set an import limit, and say what happens when the battery runs out of the energy to hold it.',
+    teaches: ['demand-charge', 'reserve'],
     soWhat: r => {
       const step = r.series.timeSeconds[1] - r.series.timeSeconds[0];
       const target = r.values.target ?? 1_500_000;
@@ -409,6 +421,7 @@ export const useSolar: LessonCard = {
     actId: 'job',
     situation: 'An array on the roof making more at noon than the site can use, and a site still working at seven in the evening. Without somewhere to put it, the surplus leaves through the gate for whatever the meter pays — and the evening is bought back at retail.',
     takeaway: 'Account for every kilowatt-hour an array makes: used as it was made, stored, exported, or thrown away.',
+    teaches: ['self-consumption', 'curtailment'],
     soWhat: r => {
       const step = r.series.timeSeconds[1] - r.series.timeSeconds[0], h = step / 3600;
       const generated = energyWh(r.series.generationW, step);
@@ -506,6 +519,7 @@ export const keepBackupReady: LessonCard = {
     actId: 'job',
     situation: 'The same plant, on a site that cannot go dark. The grid will fail at six this evening; nothing in the model knows that yet. Every kilowatt-hour sold before then is a kilowatt-hour that will not be there.',
     takeaway: 'Decide what share of the battery is not for sale, and see exactly what that reserve buys.',
+    teaches: [],
     soWhat: r => {
       const step = r.series.timeSeconds[1] - r.series.timeSeconds[0];
       const lengthH = r.values.outageHours ?? 1;
@@ -609,6 +623,7 @@ export const followPrice: LessonCard = {
     actId: 'job',
     situation: 'A price that moves through the day, and a plant allowed to buy and sell. It looks like the easiest money in the building. It is arithmetic: the trade only works if the gap between the two prices is wider than what the round trip costs you.',
     takeaway: 'Work out whether a price spread actually covers the round trip, before anything is called a saving.',
+    teaches: ['round-trip'],
     soWhat: r => {
       // The battery's own trade, not the site's meter: grid import carries the site load too, and
       // subtracting one from the other would attribute the factory's consumption to the arbitrage.
@@ -703,6 +718,7 @@ export const batteryLimits: LessonCard = {
     actId: 'limits',
     situation: 'The same request, put to the plant three times: at rest, hot, and with one weak cell. The request does not change. What comes back does — and something has to decide, by name, how much of it you get.',
     takeaway: 'Name the subsystem that refused a request, and read the number it refused with.',
+    teaches: [],
     soWhat: r => {
       const held = r.series.bindingConstraint.filter(c => c && c !== 'Request met in full');
       const asked = kWh((r.values.power ?? 0) * 2);
@@ -898,6 +914,7 @@ export const upsSizing: LessonCard = {
     actId: 'limits',
     situation: 'Your own electricity bill, and one figure on it: the contract demand. Every UPS conversation in India starts there, and it is not the answer — it estimates what the whole site draws, not what has to stay up.',
     takeaway: 'Turn a contract demand into a protected load and a duration, and say what the estimate still does not tell you.',
+    teaches: ['contract-demand', 'power-factor'],
     soWhat: r => {
       const step = r.series.timeSeconds[1] - r.series.timeSeconds[0];
       const carried = r.series.unservedLoadW.filter(w => w < 1).length * step / 60;
@@ -1044,7 +1061,7 @@ export const upsSizing: LessonCard = {
 /** A card for a lesson that has not been built, so the catalogue is honest about what exists. */
 const planned = (n: number, title: string, question: string, arrivesIn: string): LessonCard => ({
   arrivesIn,
-  story: { actId: 'limits', situation: 'Not built yet.', takeaway: 'Not built yet.', soWhat: () => 'Not built yet.' },
+  story: { actId: 'limits', situation: 'Not built yet.', takeaway: 'Not built yet.', teaches: [], soWhat: () => 'Not built yet.' },
   template: sealWith(learningTemplateSchema, {
     id: `lesson-${n}`, label: title, kind: 'LearningTemplate', question,
     objective: 'Not built yet.', expectedOutcomes: ['Not built yet.'],

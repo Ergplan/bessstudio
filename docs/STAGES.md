@@ -1590,6 +1590,63 @@ that does not.
 
 **Also fixed:** the ladder's closing note fired at one unit, where there is nothing to buy fewer of.
 
+### R7 — the site, read by somebody who knows nothing about batteries
+
+The whole site was walked as a beginner would walk it: every page, every lesson, in order, reading
+only what is on the screen. **The honest rating afterwards is 3 out of 10** — conversationally
+aware, operationally useless.
+
+| After the whole site, could a beginner… | |
+| --- | :---: |
+| Say a battery loses a few per cent every pass, and roughly why | **yes** |
+| Name four reasons somebody buys one | **yes** |
+| Say that something refuses requests, and that it matters | **yes** |
+| Separate a megawatt from a megawatt-hour | **no** |
+| Say what the converter physically is, or why it sets the power rating | **no** |
+| Say what a cell, a pack, a rack and an enclosure are | **no** |
+| Read the energy cascade on a design | **no** |
+| Say what depth of discharge, the usable window or retention mean | **no** |
+
+The last four are the ones that matter, because they are the studio. A reader can finish all seven
+cards and still meet **every word in the cascade cold** — nameplate, usable window, depth of
+discharge, retention, deliverable energy. Not one of them is used in a lesson.
+
+**The contract already required the fix and it had not been done.** §15.1: *"Jargon is taught on
+first use — the default label is Battery charge level (SOC), not SOC."* The prose honoured that; the
+screen did not. The first card shows a converter, auxiliaries, a battery management system, an
+energy management system, a reserve floor and a string voltage inside its first minute, and nothing
+on the page says what any of them is.
+
+**What was built.** Four things, none of them a gate — §15.1 forbids a tutorial gate and a quiz, and
+there is neither:
+
+1. **`src/sim/glossary.ts`** — 25 terms as data: the full name, the abbreviation spelt out, the
+   unit, one plain sentence, where the reader first meets it, and which terms that sentence leans
+   on. `src/tests/glossary.test.ts` refuses any definition whose prerequisite is introduced later,
+   so the list can grow but cannot get out of order. It also ties the glossary to the cascade: every
+   step the studio draws must have a word that explains it.
+2. **A primer in front of the seven cards** — power × duration = energy, worked, with the point
+   that the same 4 MWh is three completely different plants. Not an eighth lesson: §15 fixes the
+   catalogue at seven. The whole glossary opens from it.
+3. **The words each card introduces, taught before the run** — declared on `story.teaches`, shown
+   open by default, because a reader who does not know they are missing words will not open a box
+   that says they might. Capped at six a card by test.
+4. **Progress and a handover** — which cards are finished, "3 of 7", and Continue going to the first
+   card *not* done rather than the last one opened. It is marked on playing a card through to the
+   end, not on opening it, and kept in the browser rather than the workspace: one person's reading
+   is not a fact about the organisation. At the end, **What you now know** names each thing learned
+   beside the screen in the studio that uses it, so the learning does not stay in the lessons.
+
+**Checks:** `src/tests/glossary.test.ts` (7), `src/tests/progress.test.ts` (4, including storage
+that is missing, corrupt and full), and `browser/learning.test.ts` (5) which reads the rendered page
+— that every glossary term is reachable with its definition, that the first card teaches its own
+words with "Battery management system (BMS)" spelt out, and that progress survives a reload.
+
+**Rating with these in place: 6 out of 10.** A reader can now separate power from energy, name what
+each box is, and read the cascade. What is still missing is practice — nothing asks them to do
+anything and tell them whether they were right, and §15.1's ban on quizzes means that needs a
+different shape than a test. That is the next honest increment.
+
 ### Still open for a decision
 
 1. **The pack data sheet.** `pack-16s-314` stays `assumed` at 150 A / 200 A until the supplier's

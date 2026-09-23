@@ -11,6 +11,8 @@ import {
   type LessonCard, type Metric, type Readout,
 } from '../../sim/lessons';
 import { lfpParameterSet } from '../../sim/presets';
+import { glossary, termById, termsFirstMetIn, firstUseLabel, type Term } from '../../sim/glossary';
+import { completedLessons, markLessonComplete, nextUnfinished, progressOf } from '../../sim/progress';
 import { accounting, simulate } from '../../sim/engine';
 import { comparePolicies } from '../../sim/compare';
 import { indiaPresets, teachingTariffs } from '../../sim/india';
@@ -48,13 +50,33 @@ function Catalogue({ projectId }: { projectId: string | null }) {
   const { projects } = useWorkspace();
   const project = projects.find(p => p.id === projectId);
   const href = (id: string) => `/app/lessons?lesson=${id}${projectId ? `&project=${projectId}` : ''}`;
+  // Read after mount, never during render: the export is prerendered on a machine with no reader
+  // and no storage, and a first paint that already claimed progress would be claiming somebody
+  // else's.
+  const [done, setDone] = useState<string[]>([]);
+  useEffect(() => setDone(completedLessons()), []);
+  const order = lessons.filter(l => !l.arrivesIn).map(l => l.template.id);
+  const progress = progressOf(order, done);
+  const next = nextUnfinished(order, done);
   return (
     <div className="grid" style={{ gap: 16 }}>
       <div className="row">
         {project && <Link className="btn ghost sm" href={`/app/projects?id=${project.id}`}><ArrowLeft size={15} /> {project.name}</Link>}
         <div className="spacer" />
-        <span className="muted">Seven cards, in order. Two to five minutes each.</span>
+        {progress.done > 0 && (
+          <span className="lesson-progress" aria-label={`${progress.done} of ${progress.total} lessons finished`}>
+            <i style={{ width: `${progress.fraction * 100}%` }} />
+            <b>{progress.done} of {progress.total}</b>
+          </span>
+        )}
+        {next && (
+          <Link className="btn accent sm" href={href(next)}>
+            <Play size={13} /> {progress.done > 0 ? 'Continue' : 'Start at the beginning'}
+          </Link>
+        )}
       </div>
+
+      <Primer />
       {/* The cards are a sequence, so they are shown as one: three acts, each with the argument it
           makes, and each card saying what the reader is left holding. Seven tiles in a grid gave a
           reader no reason to start at one or to carry on to the next. */}
@@ -74,14 +96,24 @@ function Catalogue({ projectId }: { projectId: string | null }) {
               <p className="lesson-premise">{act.premise}</p>
               <div className="lesson-cards">
                 {inAct.map(l => (
-                  <div key={l.template.id} className={`lesson-card${l.arrivesIn ? ' later' : ''}`}>
+                  <div key={l.template.id} className={`lesson-card${l.arrivesIn ? ' later' : ''}${done.includes(l.template.id) ? ' done' : ''}`}>
                     <div className="lesson-number">{lessons.indexOf(l) + 1}</div>
                     <h4>{l.template.label}</h4>
                     <p>{l.template.question}</p>
                     {!l.arrivesIn && <p className="lesson-takeaway"><b>After this</b> {l.story.takeaway}</p>}
+                    {/* The words this card is the first to use, named on the tile so a reader can
+                        see what they are about to be asked to understand before they commit. */}
+                    {l.story.teaches.length > 0 && (
+                      <p className="lesson-words">
+                        <b>New words</b> {l.story.teaches.map(id => termById(id)?.term).filter(Boolean).join(' · ')}
+                      </p>
+                    )}
                     {l.arrivesIn
                       ? <Badge tone="neutral">Not built yet</Badge>
-                      : <Link className="btn accent sm" href={href(l.template.id)}><Play size={13} /> Start · {l.template.estimatedMinutes} min</Link>}
+                      : <Link className="btn accent sm" href={href(l.template.id)}>
+                        <Play size={13} /> {done.includes(l.template.id) ? 'Again' : 'Start'} · {l.template.estimatedMinutes} min
+                      </Link>}
+                    {done.includes(l.template.id) && <span className="lesson-done">Finished</span>}
                   </div>
                 ))}
               </div>
@@ -94,6 +126,132 @@ function Catalogue({ projectId }: { projectId: string | null }) {
           product specification.
         </p>
       </Card>
+
+      <Handover projectId={projectId} done={done} total={order.length} />
+    </div>
+  );
+}
+
+/**
+ * The words before the first run, and the one distinction the rest of the studio stands on.
+ *
+ * A reader who cannot separate a megawatt from a megawatt-hour cannot read a single figure this
+ * product prints — not the sizing, not the quotation, not the cascade — and nothing taught it. It
+ * is not a lesson: §15 fixes the catalogue at seven cards, and this is thirty seconds of reading in
+ * front of them rather than an eighth thing to do.
+ */
+function Primer() {
+  const [open, setOpen] = useState(false);
+  const terms = termsFirstMetIn('primer');
+  return (
+    <Card title="Before you start" subtitle="Two numbers, and why a plant is always quoted as both">
+      <div className="primer">
+        <div className="primer-eq">
+          <span><b>1 MW</b><i>power — how hard</i></span>
+          <em>×</em>
+          <span><b>4 h</b><i>duration — how long</i></span>
+          <em>=</em>
+          <span><b>4 MWh</b><i>energy — how much</i></span>
+        </div>
+        <p>
+          A megawatt is a rate and a megawatt-hour is an amount, and they are not interchangeable.
+          The same 4 MWh is 1 MW for four hours, 4 MW for one, or 0.5 MW for eight — three completely
+          different plants, three different prices, three different jobs. This is why the studio asks
+          for power and duration separately and will not let you give it one number.
+        </p>
+        <button className="btn sm" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+          {open ? 'Hide the words' : `The ${glossary.length} words this studio uses`}
+        </button>
+        {open && (
+          <>
+            <Words terms={terms} heading="Start with these" />
+            <Words terms={glossary.filter(t => t.firstMet !== 'primer')} heading="Met later, kept here" muted />
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** A definition list, written so each entry can be read on its own. */
+function Words({ terms, heading, muted }: { terms: Term[]; heading: string; muted?: boolean }) {
+  return (
+    <div className={`words${muted ? ' muted-block' : ''}`}>
+      <h4>{heading}</h4>
+      <dl>
+        {terms.map(t => (
+          <div key={t.id}>
+            <dt>{firstUseLabel(t)}{t.unit && <span className="words-unit">{t.unit}</span>}</dt>
+            <dd>{t.plain}</dd>
+          </div>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+/**
+ * What the reader is holding at the end, and where each of those things is waiting for them.
+ *
+ * Seven cards that end with "Next lesson" and then stop leave the learning in the lessons. The
+ * point of the catalogue is that the studio becomes readable, so the last thing it does is name
+ * each thing learned beside the screen that uses it.
+ */
+function Handover({ projectId, done, total }: { projectId: string | null; done: string[]; total: number }) {
+  const finished = done.length >= total && total > 0;
+  return (
+    <Card title={finished ? 'What you now know' : 'Where this is going'}
+      subtitle={finished ? 'And the screen each of them turns up on' : `Finish the ${total} cards and each of these becomes readable`}>
+      <ul className="handover">
+        <li><b>Energy is lost every pass</b><span>The <i>Where the nameplate goes</i> cascade on a design, which takes the same losses off a real container.</span></li>
+        <li><b>A peak is billed differently from consumption</b><span>The application preset on a project, which sets the duty the plant is sized for.</span></li>
+        <li><b>Surplus has to go somewhere</b><span>Solar shifting, and the cycles-a-day figure that drives ageing.</span></li>
+        <li><b>Reserve is energy you agreed not to sell</b><span>Depth of discharge on the design tab — the same decision, written into a contract.</span></li>
+        <li><b>A spread has to beat the round trip</b><span>The economics tab: LCOS, and why a cheap plant can lose money.</span></li>
+        <li><b>Something always decides what is possible</b><span>The design checks, which refuse a duty the equipment cannot carry.</span></li>
+        <li><b>Contract demand is an estimate, not a measurement</b><span>The quotation&rsquo;s assumptions, where that is said out loud.</span></li>
+      </ul>
+      <div className="row" style={{ marginTop: 12 }}>
+        <Link className="btn accent sm" href={projectId ? `/app/projects?id=${projectId}` : '/app/projects'}>
+          {projectId ? 'Back to the design' : 'Open a design'} <ArrowRight size={14} />
+        </Link>
+        <span className="muted">
+          The cascade there is the first lesson&rsquo;s arithmetic, run on a container somebody can buy.
+        </span>
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * The words this card is the first to use, before the run rather than during it.
+ *
+ * §15.1 asks for jargon to be taught on first use. Teaching it inside the run would mean
+ * interrupting the run, which is the one thing the lesson loop is built not to do — so it is taught
+ * in front of it, in the half-minute a reader spends deciding to press Play. Open by default the
+ * first time, because a reader who does not know they do not know the words will not open a box
+ * that says they might.
+ */
+function NewWords({ ids }: { ids: string[] }) {
+  const terms = ids.map(id => termById(id)).filter((t): t is Term => Boolean(t));
+  const [open, setOpen] = useState(true);
+  if (!terms.length) return null;
+  return (
+    <div className={`new-words${open ? ' open' : ''}`}>
+      <button className="new-words-head" aria-expanded={open} onClick={() => setOpen(o => !o)}>
+        <b>New words in this lesson</b>
+        <span>{terms.map(t => t.term).join(' · ')}</span>
+      </button>
+      {open && (
+        <dl>
+          {terms.map(t => (
+            <div key={t.id}>
+              <dt>{firstUseLabel(t)}{t.unit && <span className="words-unit">{t.unit}</span>}</dt>
+              <dd>{t.plain}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </div>
   );
 }
@@ -124,9 +282,16 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
     if (timer.current) { clearInterval(timer.current); timer.current = null; }
     if (!playing || steps === 0) return;
     // A two-hour scenario plays in about twelve seconds, which §15 asks to be under a minute.
-    timer.current = setInterval(() => setCursor(c => (c + 1 >= steps ? (setPlaying(false), steps - 1) : c + 1)), 100);
+    timer.current = setInterval(() => setCursor(c => {
+      if (c + 1 < steps) return c + 1;
+      setPlaying(false);
+      // Finished means played to the end at least once, not opened. Marked here rather than on
+      // mount so the count says what a reader has been through rather than what they clicked on.
+      markLessonComplete(card.template.id);
+      return steps - 1;
+    }), 100);
     return () => { if (timer.current) clearInterval(timer.current); };
-  }, [playing, steps]);
+  }, [playing, steps, card.template.id]);
 
   if (out.run.status === 'failed') {
     return <Empty title="That configuration cannot be run" message={out.run.failure ?? 'The model refused it.'} />;
@@ -178,6 +343,7 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
             numbers and two charts left the reader to work out what they were looking at and why. */}
         <p className="lesson-scene"><b>{actOf(card).title}</b> · {card.story.situation}</p>
         <p className="lesson-goal">{card.template.objective}</p>
+        <NewWords ids={card.story.teaches} />
         <div className="row" style={{ marginTop: 12 }}>
           {/* The accessible name has to be the words on the button. A control labelled "Simulate
               grid failure" that announces itself as "Play" cannot be asked for by name. */}
