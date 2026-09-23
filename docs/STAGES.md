@@ -1550,6 +1550,46 @@ cannot be read from here. Three independent manufacturers now publish 10 000–1
 cell format against the 8 000 our schedule carries; that is a question for the supplier, not a
 change to make from search results.
 
+### R6 — the two things the build was still missing
+
+Two gaps, both of the same kind: something the code already knew that nothing could see.
+
+**1. The design the studio did not pick.** `fitEquipment` ranks candidates on the money the customer
+pays — the quoted scope — and computes the turnkey answer beside it so it can tell when the two are
+different plants. That second answer was computed and then dropped: a comment in `sizeSystem` said
+*"what else the fit found travels to the rationale"*, and it never did. So the engine knew, at
+0.25–1 MW, that a cabinet fleet would be cheaper once installation was in the price, and nobody who
+could act on it ever saw it. It now travels on `rationale.cheaperInstalled` and renders under **Why
+this much equipment**, with both plants priced on the same installed basis and a line saying which
+scope this quotation is on. Shown, not acted on: ranking on a scope nobody is buying is what once
+put twenty-five cabinets at ₹10.23 crore against two containers at ₹9.98 crore.
+
+**2. Nothing guarded the browser.** The unit suite proves the engine's arithmetic and says nothing
+about the screen; the earlier crawls were done by hand and left no artefact, which is why "every
+link is broken" could happen twice. `npm run test:browser` builds the export, serves it the way a
+static host would, and drives it:
+
+| Check | What it catches |
+| --- | --- |
+| Every exported route, discovered rather than listed | A page that stops being written, or starts 404ing an asset |
+| No console error, no failed request, no empty shell | A route that returns 200 and renders nothing |
+| Every internal link on the landing page resolves | The broken-links complaint, encoded |
+| All five project tabs open without a page error | A card that throws only on one tab |
+| **The cascade's printed working multiplies out** | The screen and the engine disagreeing |
+| The ladder's delivered column rises with nameplate | A table sorted on one column and computed on another |
+
+The fifth is the one worth having. The cascade prints its own arithmetic — `5,016 kWh × 0.9500 ×
+0.8500 × 0.9457 − 167 kWh = 3,664 kWh` — and the test parses that line off the rendered page and
+multiplies it out. A formatter that drops a factor, a component reading the wrong field, a card
+showing the previous design: all of them pass a unit suite and a smoke crawl, and all of them put a
+wrong number in front of a buyer. This is the only check in the repository that reads the page back.
+
+It runs against `out/`, so it is its own command rather than part of `npm run test`: a suite that
+needs a four-minute build before it can run is a suite people skip if it shares a command with one
+that does not.
+
+**Also fixed:** the ladder's closing note fired at one unit, where there is nothing to buy fewer of.
+
 ### Still open for a decision
 
 1. **The pack data sheet.** `pack-16s-314` stays `assumed` at 150 A / 200 A until the supplier's

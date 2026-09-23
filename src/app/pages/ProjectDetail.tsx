@@ -33,7 +33,10 @@ type Tab = 'requirements' | 'losses' | 'design' | 'performance' | 'economics';
  * the engineering justification for the quantities on the invoice; read bottom to top it is the
  * list of things to change if they are too large.
  */
-function Rationale({ sizing, onRelaxCharge }: { sizing: SizingResult; onRelaxCharge: () => void }) {
+function Rationale({ sizing, onRelaxCharge, money, scope }: {
+  sizing: SizingResult; onRelaxCharge: () => void;
+  money: (usd: number, compact?: boolean) => string; scope: 'supply-only' | 'turnkey';
+}) {
   const r = sizing.rationale;
   const chain = (steps: typeof r.energy, won: boolean) => (
     <table className="data rationale">
@@ -79,7 +82,44 @@ function Rationale({ sizing, onRelaxCharge }: { sizing: SizingResult; onRelaxCha
           <span className="muted">Recharge in {sizing.recoveryDurationH.toFixed(2)} h and the charge window stops setting the size.</span>
         </div>
       )}
+      {r.cheaperInstalled && <Alternative alt={r.cheaperInstalled} sizing={sizing} money={money} scope={scope} />}
     </Card>
+  );
+}
+
+/**
+ * The plant that would be cheaper installed, where the quoted scope picked a different one.
+ *
+ * The fit ranks on the money the customer actually pays. Ranking on turnkey instead — a scope
+ * nobody had asked for — once proposed twenty-five cabinets at ₹10.23 crore delivered against two
+ * containers at ₹9.98 crore, reasoning that installing the cabinets would have been cheaper for
+ * somebody else. So the quoted scope decides. But it computed the other answer and then threw it
+ * away, which left the studio quietly holding a fact the customer is entitled to: that a different
+ * design is cheaper once installation is in the price, and that asking for a turnkey comparison
+ * would change the recommendation. Shown, not acted on.
+ */
+function Alternative({ alt, sizing, money, scope }: {
+  alt: NonNullable<SizingResult['rationale']['cheaperInstalled']>;
+  sizing: SizingResult; money: (usd: number, compact?: boolean) => string;
+  scope: 'supply-only' | 'turnkey';
+}) {
+  const saving = alt.thisInstalledUsd > 0 ? 1 - alt.installedUsd / alt.thisInstalledUsd : 0;
+  return (
+    <div className="notice alt">
+      <b>A different plant is cheaper once installation is in the price</b>
+      <p>
+        <b>{alt.units} × {alt.model}</b> with {alt.pcsCount} × {units.powerText(alt.pcsKW / 1000)} of
+        conversion — {units.energyText(alt.nameplateMWh)} nominal — comes to{' '}
+        <b>{money(alt.installedUsd)}</b> installed, against {money(alt.thisInstalledUsd)} for the{' '}
+        {sizing.units} × {sizing.enclosure.model} above. That is {(saving * 100).toFixed(0)}% less,
+        on the same installed basis.
+      </p>
+      <p className="muted">
+        {scope === 'turnkey'
+          ? 'This quotation is already turnkey, so that difference is real money on this invoice — the design above is the better buy only if something other than price decides it.'
+          : 'This quotation is for delivered equipment, and on that scope the design above is the cheaper of the two. The studio ranks on the scope you are buying rather than on one you are not, so it has not switched — but if the installed figure is the one that matters, ask for the turnkey comparison.'}
+      </p>
+    </div>
   );
 }
 
@@ -434,7 +474,8 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
                 shrink five times, each step named and owned, can check it by hand and knows which
                 supplier to ask about which figure. */}
             <EnergyCascade sizing={sizing} />
-            <Rationale sizing={sizing} onRelaxCharge={() => set({ chargeDurationH: Math.ceil(sizing.recoveryDurationH * 100) / 100 })} />
+            <Rationale sizing={sizing} money={money} scope={priceBook.supplyScope}
+              onRelaxCharge={() => set({ chargeDurationH: Math.ceil(sizing.recoveryDurationH * 100) / 100 })} />
             <Card title="Configuration" subtitle={`${sizing.enclosure.model} · ${sizing.enclosure.cooling} cooled · ${sizing.enclosure.ipRating}`}>
               <div className="grid cols-2" style={{ gap: 0, columnGap: 26 }}>
                 <div>

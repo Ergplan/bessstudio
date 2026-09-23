@@ -182,6 +182,10 @@ table.data td b{color:var(--ink);font-weight:600}
 .notice.error{border-left-color:var(--rose);background:rgba(226,104,94,.07)}
 .notice.warning{border-left-color:var(--amber);background:rgba(232,142,63,.07)}
 .notice.info{border-left-color:var(--blue);background:rgba(79,168,218,.07)}
+/* The design the studio did not pick, shown rather than acted on. */
+.notice.alt{margin:12px 0 0;border-left-color:var(--green);background:rgba(147,190,73,.06)}
+.notice.alt p+p{margin-top:5px}
+.notice.alt p.muted{font-size:11.5px;line-height:1.6;max-width:80ch}
 
 .empty{text-align:center;padding:52px 20px;color:var(--slate-light)}
 .empty h3{font-size:15px;margin-bottom:8px;color:var(--ink)}

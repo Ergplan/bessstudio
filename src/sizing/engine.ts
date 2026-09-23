@@ -131,6 +131,30 @@ export type SizingRationale = {
   installedDcMWh: number;
   /** Named causes of every difference between what was asked for and what is installed. */
   reasons: { code: string; text: string }[];
+  /**
+   * A different plant that would cost less delivered, where one exists.
+   *
+   * The fit ranks on the money the customer actually pays, which is the quoted scope. Ranking on
+   * turnkey instead — a scope nobody had asked for — once proposed twenty-five cabinets at ₹10.23
+   * crore delivered against two containers at ₹9.98 crore, on the reasoning that installing the
+   * cabinets would have been cheaper for somebody else. So the quoted scope decides. But where the
+   * two answers are different plants, the customer is entitled to know a cheaper delivered design
+   * exists and to ask for it, rather than have the studio either act on it silently or hide it.
+   */
+  cheaperInstalled: CheaperInstalled | null;
+};
+
+/** The alternative design, and both plants priced on the same installed basis so they compare. */
+export type CheaperInstalled = {
+  units: number;
+  model: string;
+  pcsCount: number;
+  pcsKW: number;
+  nameplateMWh: number;
+  /** What that design costs installed. */
+  installedUsd: number;
+  /** What the quoted design costs installed, so the difference is between like and like. */
+  thisInstalledUsd: number;
 };
 
 /**
@@ -688,6 +712,9 @@ export function sizeSystem(raw: SizingInput): SizingResult {
     energy: energySteps, power: powerSteps, binding,
     unitsForEnergy: Number.isFinite(unitsForEnergy) ? unitsForEnergy : 0,
     unitsForPower, units, installedDcMWh: units * unitDcMWh, reasons,
+    // Only meaningful when the studio chose the equipment. A pinned design was not ranked against
+    // anything, so there is no alternative to report and claiming one would be an invention.
+    cheaperInstalled: fitted?.cheaperInstalled ?? null,
   };
 
   // Year-by-year roll-forward with per-vintage cohorts, so augmented capacity ages from its own year.

@@ -121,7 +121,9 @@ function ContainerLadder({ sizing }: { sizing: SizingResult }) {
           {ladder.rungs.map(r => <Rung key={r.nameplateKWh} rung={r} />)}
         </tbody>
       </table>
-      {ours && ladder.rungs.some(r => r.nameplateKWh > ours.nameplateKWh && r.units >= ours.units) && (
+      {/* Only worth saying when there is a fleet to shrink. At one unit nothing can buy fewer, and
+          the note read as a complaint about a design that has no spare units to lose. */}
+      {ours && ours.units > 1 && ladder.rungs.some(r => r.nameplateKWh > ours.nameplateKWh && r.units >= ours.units) && (
         <p className="cascade-check" style={{ marginTop: 10 }}>
           Note the rungs above ours that still need {ours.units}: a larger container does not always
           buy fewer of them, and when it does not it is simply more nameplate standing idle. That is

@@ -515,3 +515,60 @@ describe('granularity, and what it costs', () => {
     expect(three.capexInr).toBeLessThan(four.capexInr * 0.6);
   });
 });
+
+/**
+ * The design the studio did not pick.
+ *
+ * `fitEquipment` ranks on the money the customer pays, and computes the turnkey answer beside it so
+ * it can tell when the two are different plants. That second answer was computed and then dropped
+ * on the floor: the engine knew a cheaper installed design existed and nobody who could act on it
+ * ever saw it. It now travels on the rationale, which means it has to be true — a claim that a
+ * different plant is cheaper installed is worth nothing unless both plants were priced the same way.
+ */
+describe('the cheaper-installed alternative', () => {
+  const auto = (powerMW: number, durationH: number) => {
+    const base = defaultSizingInput('peak-shaving');
+    return sizeSystem({ ...base, mode: 'power-duration', powerMW, durationH,
+      chargeDurationH: recoveryHours(durationH, base.losses) });
+  };
+  const installed = { ...defaultPriceBook, supplyScope: 'turnkey' as const };
+
+  it('prices both plants the same way, and the alternative really is cheaper', () => {
+    // The band where the two answers part company. If the catalogue moves and none of these
+    // produce an alternative the test still has to mean something, so it asserts one exists.
+    const cases = [[0.25, 8], [0.5, 4], [0.5, 8], [1, 2], [1, 4]] as [number, number][];
+    const withAlt = cases.map(([p, h]) => auto(p, h)).filter(s => s.rationale.cheaperInstalled);
+    expect(withAlt.length, 'no duty in the sampled band produces an alternative').toBeGreaterThan(0);
+
+    for (const s of withAlt) {
+      const alt = s.rationale.cheaperInstalled!;
+      // Cheaper, on the installed basis, than this design on the same basis.
+      expect(alt.installedUsd).toBeLessThan(alt.thisInstalledUsd);
+      // And `thisInstalledUsd` is this design priced turnkey, not the quoted figure under another name.
+      expect(alt.thisInstalledUsd).toBeCloseTo(evaluateFinance(s, installed).capexUsd, 6);
+      // A different plant, or there would be nothing to report.
+      expect(alt.units !== s.units || alt.model !== s.enclosure.model).toBe(true);
+      expect(alt.units).toBeGreaterThan(0);
+      expect(alt.nameplateMWh).toBeGreaterThan(0);
+    }
+  });
+
+  it('claims nothing when the equipment was pinned', () => {
+    // A pinned design was never ranked against anything. Reporting an alternative there would be
+    // an invention, and the one place a studio must not invent is the page that says "cheaper".
+    const s = auto(1, 4);
+    const pinned = sizeSystem({ ...s.input, equipment: 'pinned' });
+    expect(pinned.rationale.cheaperInstalled).toBeNull();
+  });
+
+  it('stays quiet when the quoted scope and the installed scope agree', () => {
+    // Most of the catalogue: the two rankings pick the same plant, and a notice saying "there is a
+    // cheaper design" that names the design you already have is noise dressed as diligence.
+    const same = [[2.5, 4], [5, 4], [10, 4], [20, 1]] as [number, number][];
+    for (const [p, h] of same) {
+      const s = auto(p, h);
+      const alt = s.rationale.cheaperInstalled;
+      if (alt) expect(alt.units !== s.units || alt.model !== s.enclosure.model, `${p} MW / ${h} h`).toBe(true);
+    }
+  });
+});
