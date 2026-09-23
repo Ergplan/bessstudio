@@ -1786,6 +1786,46 @@ the charge level with two gauges and never one, both instruments with their limi
 bands and their absent-signals note, no negative held-back reading anywhere, and the chemistry panel
 explaining either the plateau or the end it has reached.
 
+### R11 — the factory gets the same treatment, and the day audits the year
+
+The factory answered in rupees a year. That is the answer a finance director wants and the wrong one
+to look at while deciding what the battery should *do* — every figure in it is really a claim about
+one working day, and a player who cannot see the day cannot see why the reserve and the evening are
+competing for the same kilowatt-hours.
+
+**Three sections now**, like a lesson: rounds and controls at the top, then *The day*, *The bill*,
+*The battery*. The day lays the same numbers out in hours — night charging, solar charging through
+the middle until the allocation is full, the outage at ten, exports once the battery is full, the
+evening emptying it — and **every total reconciles against the bill's own allocation to the
+kilowatt-hour**. It is one model shown twice, and the tests hold it to that.
+
+**Building it audited the fixture, and the fixture lost twice.**
+
+| What the day exposed | What it was | What it is now |
+| --- | --- | --- |
+| The array never exported anything | `solarSurplusPortion: 0.35` was **declared**, on a site whose best solar hour (864 kW) never reached its own base load (950 kW) | Derived from the two profiles: `Σ max(0, solar − load)`. The array is 3.2 MWp, and the surplus is what the shape actually leaves over |
+| Solar was carrying the outage | The day credited generation against the islanded load, so a thin battery showed **no diesel at all** | The array is off through the outage. A grid-following inverter needs a grid to follow, and a site whose outage supply is a generator has none — the array trips with the feeder |
+
+The second is the more dangerous of the two: it is the single most flattering mistake this model
+could make, and it would have made every battery look better than it is.
+
+**A third finding changed the game.** Partial solar shifting was reported as a *shortfall*, which
+made the last round unwinnable — the array makes 4,889 kWh of surplus a day and no battery a site
+would buy can store it. A shortfall now means something asked for and not delivered; storing every
+unit an array makes was never a commitment, so it is a **note**. The finale is winnable again: 900 kW
+/ 3.6 MWh, reserve at 16%, ₹6.44 cr down to ₹5.20 cr, **₹1.12 cr a year net, 7.0-year payback**.
+
+**The battery panel** reuses the lessons' instrument component and reads as a specification rather
+than telemetry — power against the protected load it must carry, reserve against the outage, C-rate,
+the evening it can hold — and says on its own face that nothing is dispatching. A year's arithmetic
+dressed as live signals would be a lie in the shape of a dashboard.
+
+**Checks:** `src/tests/factory.test.ts` grew to 25 — the day is 24 hours each in one price window,
+the load and the generation total what the bill is written against, the battery discharges exactly
+what the year allocated and puts back what it took through the losses, the generator runs only in
+the outage and only for what the battery missed, nothing crosses the meter while the feeder is away,
+and the surplus is a share of the day somebody would recognise. `browser/factory.test.ts` grew to 7.
+
 ### Still open for a decision
 
 1. **The pack data sheet.** `pack-16s-314` stays `assumed` at 150 A / 200 A until the supplier's

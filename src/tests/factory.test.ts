@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   teachingFactory, playFactory, noBess, dieselInrPerKWh, backupNeedKWh, solarSurplusKWh,
   usableKWh, CHAIN, type Moves,
-  rounds, roundById, unlockedBy,
+  rounds, roundById, unlockedBy, factoryDay, dayTotals, solarProfileKW, loadProfileKW,
 } from '../sim/factory';
 
 const s = teachingFactory;
@@ -152,8 +152,22 @@ describe('one battery cannot do everything at once', () => {
 describe('the fixture is arithmetic anybody can check', () => {
   it('states its own daily quantities', () => {
     expect(backupNeedKWh(s)).toBeCloseTo(600 * 0.75, 6);
-    expect(solarSurplusKWh(s)).toBeCloseTo(1500 * 4.4 * 0.35, 6);
     expect(usableKWh(1000)).toBeCloseTo(1000 * 0.95 * 0.9, 6);
+  });
+
+  it('exports only what its own profiles leave over', () => {
+    // Derived, never declared. The array's best hour has to beat the site's base load before a
+    // single unit leaves the gate, and a fixture that says otherwise is describing another site.
+    const solar = solarProfileKW(s), load = loadProfileKW(s);
+    expect(solarSurplusKWh(s))
+      .toBeCloseTo(solar.reduce((t, kW, h) => t + Math.max(0, kW - load[h]), 0), 6);
+    expect(Math.max(...solar), 'the array never beats the base load, so nothing is ever exported')
+      .toBeGreaterThan(s.baseLoadKW);
+    expect(solarSurplusKWh(s)).toBeGreaterThan(0);
+    // And it is a share of the day somebody would recognise, not all of it.
+    const daily = s.solarKWp * s.solarKWhPerKWpDay;
+    expect(solarSurplusKWh(s) / daily).toBeGreaterThan(0.1);
+    expect(solarSurplusKWh(s) / daily).toBeLessThan(0.6);
   });
 });
 
@@ -223,5 +237,69 @@ describe('the six rounds', () => {
     // And it is a plant somebody could actually buy: under 1 C, and paying back inside its life.
     expect(won.bessPowerKW / won.bessEnergyKWh).toBeLessThan(1);
     expect(y.simplePaybackYears!).toBeLessThan(12);
+  });
+});
+
+/**
+ * The day, held to the year.
+ *
+ * Laying the same numbers out in time is only useful if they are the same numbers. A day view that
+ * drifted from the bill would be a second model telling the player a second story, and the one
+ * thing this studio does not do is run two models and show whichever looks better.
+ */
+describe('the day the year assumes', () => {
+  const played = move({
+    bessPowerKW: 900, bessEnergyKWh: 3600, reservePortion: 0.16,
+    shiftSolar: true, peakTargetKVA: 1800, retireLeadAcid: true,
+  });
+
+  it('is twenty-four hours, each in one price window', () => {
+    const day = factoryDay(s, played);
+    expect(day.map(h => h.hour)).toEqual(Array.from({ length: 24 }, (_, i) => i));
+    expect(day.filter(h => h.window === 'peak')).toHaveLength(s.peakWindowHours);
+    expect(day.filter(h => h.outage)).toHaveLength(1);
+    // The evening window is where the peak load sits, which is the whole reason it is charged for.
+    for (const h of day.filter(x => x.window === 'peak')) expect(h.loadKW).toBe(s.peakLoadKW);
+  });
+
+  it('draws the same site load the bill is written against', () => {
+    const load = loadProfileKW(s);
+    expect(load.reduce((t, kW) => t + kW, 0))
+      .toBeCloseTo(s.baseLoadKW * s.baseHours + s.peakLoadKW * s.peakWindowHours, 6);
+  });
+
+  it('generates the day of sun the year is costed on', () => {
+    expect(dayTotals(factoryDay(s, played)).solarKWh)
+      .toBeCloseTo(s.solarKWp * s.solarKWhPerKWpDay, 6);
+  });
+
+  it('discharges exactly what the year allocated, and no more', () => {
+    const year = playFactory(s, played);
+    const discharged = dayTotals(factoryDay(s, played)).dischargedKWh;
+    // Carried the outage, plus whatever went into the evening. Nothing else discharges.
+    expect(discharged).toBeCloseTo(year.allocation.backupCoveredKWh + year.allocation.peakShavedKWh, 6);
+  });
+
+  it('puts back what it took out, through the losses, and not from the sun twice', () => {
+    const year = playFactory(s, played);
+    const t = dayTotals(factoryDay(s, played));
+    // Charge comes from two places: the night tariff and the surplus. The surplus never crosses the
+    // meter, so only the grid share carries the round-trip gross-up.
+    const fromGrid = Math.max(0, year.allocation.peakShavedKWh - year.allocation.solarShiftedKWh)
+      + year.allocation.backupCoveredKWh;
+    expect(t.chargedKWh).toBeCloseTo(fromGrid / CHAIN.roundTrip + year.allocation.solarShiftedKWh, 0);
+  });
+
+  it('runs the generator only during the outage, and only for what the battery missed', () => {
+    const t = dayTotals(factoryDay(s, played));
+    expect(t.dieselKWh).toBeCloseTo(0, 6);
+    // A battery too small to carry it leaves the generator the balance.
+    const thin = factoryDay(s, move({ bessPowerKW: 200, bessEnergyKWh: 300, reservePortion: 1 }));
+    expect(dayTotals(thin).dieselKWh).toBeGreaterThan(0);
+    expect(thin.filter(h => h.dieselKW > 0).every(h => h.outage)).toBe(true);
+  });
+
+  it('never imports during the outage, because there is no grid to import from', () => {
+    for (const h of factoryDay(s, played).filter(x => x.outage)) expect(h.gridKW).toBe(0);
   });
 });

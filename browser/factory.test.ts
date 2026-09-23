@@ -50,6 +50,8 @@ describe('a player working through the factory', () => {
   });
 
   it('opens on a bill with nothing installed and nothing to install', async () => {
+    await page.getByRole('tab', { name: 'The bill' }).click();
+    await page.waitForTimeout(250);
     const body = await page.locator('body').innerText();
     expect(body).toContain('The bill');
     // Every line of the year, before anything.
@@ -57,8 +59,12 @@ describe('a player working through the factory', () => {
       expect(body, line).toContain(line);
     }
     // The five prices that are the whole reason a battery has anything to do here.
+    await page.getByRole('tab', { name: 'The battery' }).click();
+    await page.waitForTimeout(250);
     expect(await page.locator('.price-strip span').count()).toBe(5);
-    expect(await page.locator('input[type="range"]').count(), 'round one hands over no controls').toBe(0);
+    await page.getByRole('tab', { name: 'The bill' }).click();
+    expect(await page.locator('.controls-row input[type="range"]').count(),
+      'round one hands over no controls').toBe(0);
     // The teaching label is never optional.
     expect(body).toContain('teaching value');
   });
@@ -72,6 +78,8 @@ describe('a player working through the factory', () => {
     const body = await page.locator('body').innerText();
     // The round is won, and the diesel line has gone.
     expect(body).toContain('here is what it was about');
+    await page.getByRole('tab', { name: 'The bill' }).click();
+    await page.waitForTimeout(250);
     const diesel = await page.locator('table.bill tr', { hasText: 'Diesel' }).first().innerText();
     expect(diesel).toContain('₹0');
     // And it is not free: the recharge turns up on the energy line.
@@ -84,12 +92,14 @@ describe('a player working through the factory', () => {
     await page.getByText('Store the midday surplus').click();
     await set(page, 'Hold the meter at', 1800);
     await page.waitForTimeout(250);
+    await page.getByRole('tab', { name: 'The bill' }).click();
+    await page.waitForTimeout(250);
     const body = await page.locator('body').innerText();
     expect(body).toContain('Asked for more than it has');
-    const said = await page.locator('ul.shortfalls li').allInnerTexts();
+    const said = await page.locator('.notice.warning ul.shortfalls li').allInnerTexts();
     expect(said.length).toBeGreaterThan(0);
     // Named, in the player's terms, not a silent smaller number.
-    expect(said.join(' ')).toMatch(/surplus|meter|reserve/);
+    expect(said.join(' ')).toMatch(/meter|reserve|critical load/);
     // The round is not won while something is short.
     expect(body).not.toContain('here is what it was about');
   });
@@ -99,15 +109,50 @@ describe('a player working through the factory', () => {
     await set(page, 'Battery power', 900);
     await set(page, 'Held in reserve', 15);
     await page.waitForTimeout(250);
-    const body = await page.locator('body').innerText();
-    expect(body).not.toContain('Asked for more than it has');
-    expect(body).toContain('here is what it was about');
+    expect(await page.locator('body').innerText()).toContain('here is what it was about');
+    await page.getByRole('tab', { name: 'The bill' }).click();
+    await page.waitForTimeout(250);
+    expect(await page.locator('body').innerText()).not.toContain('Asked for more than it has');
     // The allocation bar is the argument: one pool, three duties, and what is left standing.
+    await page.getByRole('tab', { name: 'The battery' }).click();
+    await page.waitForTimeout(250);
     expect(await page.locator('.alloc-bar i').count()).toBe(4);
     const key = await page.locator('ul.alloc-key').innerText();
     for (const duty of ['Outage carried', 'Surplus solar stored', 'Into the evening', 'Left standing']) {
       expect(key, duty).toContain(duty);
     }
+  });
+
+  it('lays the same year out as one working day', async () => {
+    await page.getByRole('tab', { name: 'The day' }).click();
+    await page.waitForTimeout(300);
+    // Twenty-four columns, the evening window and the outage marked, and both reference lines.
+    expect(await page.locator('.day-svg rect.day-grid, .day-svg rect.day-solar').count()).toBeGreaterThan(12);
+    expect(await page.locator('.day-window').count()).toBe(1);
+    expect(await page.locator('.day-outage').count()).toBe(1);
+    expect(await page.locator('.day-load').count()).toBe(1);
+    expect(await page.locator('.day-stored').count()).toBe(1);
+    const note = (await page.locator('.day-note').innerText()).toLowerCase();
+    // The array is off while the feeder is, and the day says so rather than quietly crediting sun
+    // against an outage — the most flattering mistake this model could make.
+    expect(note).toContain('grid-following inverter');
+    expect(note).toContain('assumptions of this fixture');
+  });
+
+  it('reads the battery as a specification, and says that is what it is', async () => {
+    await page.getByRole('tab', { name: 'The battery' }).click();
+    await page.waitForTimeout(300);
+    const panel = await page.locator('.instr').first().innerText();
+    expect(panel.toLowerCase()).toContain('battery energy storage system');
+    for (const row of ['Rated power', 'Nameplate energy', 'Held in reserve', 'Rate it is worked at']) {
+      expect(panel, row).toContain(row);
+    }
+    // Nothing is dispatching, and dressing a year's arithmetic as live telemetry would be a lie in
+    // the shape of a dashboard.
+    expect((await page.locator('.instr-absent').innerText()).toLowerCase())
+      .toContain('not telemetry');
+    // The power is judged against the load it has to carry, not against its own maximum.
+    expect(await page.locator('.instr-bar i.derate').count()).toBeGreaterThanOrEqual(2);
   });
 
   it('offers every round, in order', async () => {

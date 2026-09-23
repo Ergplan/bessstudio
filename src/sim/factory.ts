@@ -65,8 +65,6 @@ export type FactorySite = {
   solarKWp: number;
   /** Generation per kilowatt-peak per day, averaged over the year. A teaching value. */
   solarKWhPerKWpDay: number;
-  /** The share of a day's generation the site cannot use as it is made, and exports instead. */
-  solarSurplusPortion: number;
   /** What the exported unit earns, against the retail price of buying it back later. */
   exportInrPerKWh: number;
 };
@@ -119,6 +117,8 @@ export type FactoryYear = {
   };
   /** Where the battery was asked for more than it had, named so the player can fix it. */
   shortfalls: string[];
+  /** True but not a failure: what it could do more of, if it were larger. */
+  notes: string[];
 };
 
 /**
@@ -154,8 +154,60 @@ export const teachingFactory: FactorySite = {
   outageMinutesPerDay: 45, criticalLoadKW: 600,
   dieselPriceInrPerLitre: 95, dgLitresPerKWh: 0.29, dgUpkeepInrPerKWh: 1.5,
   leadAcidKWh: 400, leadAcidUsablePortion: 0.5, leadAcidInrPerKWh: 9000, leadAcidLifeYears: 4,
-  solarKWp: 1500, solarKWhPerKWpDay: 4.4, solarSurplusPortion: 0.35, exportInrPerKWh: 3.0,
+  solarKWp: 3200, solarKWhPerKWpDay: 4.4, exportInrPerKWh: 3.0,
 };
+
+/**
+ * The hours the fixture places things at. Assumptions, named, so a site can replace them.
+ *
+ * They are here rather than beside the day view because the year's arithmetic depends on them: how
+ * much of an array's output a site exports is not a number anybody can assert independently of when
+ * the site is working and when the sun is up. Asserting it is what a first version of this fixture
+ * did, and it claimed a third of the generation left the gate on a site whose midday output never
+ * once exceeded its own base load.
+ */
+export const DAY_SHAPE = {
+  baseFrom: 6, peakFrom: 18, outageAt: 10,
+  sunrise: 6, sunset: 18, offPeakFrom: 22, offPeakTo: 6,
+} as const;
+
+export const windowAt = (hour: number): 'peak' | 'normal' | 'off-peak' => {
+  if (hour >= DAY_SHAPE.peakFrom && hour < DAY_SHAPE.peakFrom + 4) return 'peak';
+  if (hour >= DAY_SHAPE.offPeakFrom || hour < DAY_SHAPE.offPeakTo) return 'off-peak';
+  return 'normal';
+};
+
+/**
+ * A symmetric bell between sunrise and sunset.
+ *
+ * The array is off while the feeder is: a grid-following inverter needs a grid to follow, and on a
+ * site whose outage supply is a generator there is none. So the outage hour carries no generation,
+ * and the day's stated total is spread across the hours the array is actually running — the daily
+ * figure being an observed average, which already has that downtime in it.
+ */
+const solarShape = (hour: number, outageHours: number) => {
+  const { sunrise, sunset, outageAt } = DAY_SHAPE;
+  if (hour < sunrise || hour >= sunset) return 0;
+  const bell = Math.sin(((hour + 0.5 - sunrise) / (sunset - sunrise)) * Math.PI);
+  return hour === outageAt ? bell * Math.max(0, 1 - outageHours) : bell;
+};
+
+/** Generation hour by hour, in kilowatts, totalling the day the site is costed on. */
+export function solarProfileKW(s: FactorySite): number[] {
+  const outageHours = s.outageMinutesPerDay / 60;
+  const shapes = Array.from({ length: 24 }, (_, h) => solarShape(h, outageHours));
+  const sum = shapes.reduce((a, b) => a + b, 0) || 1;
+  const daily = s.solarKWp * s.solarKWhPerKWpDay;
+  return shapes.map(v => (daily * v) / sum);
+}
+
+/** The site's own draw, hour by hour, before anything supplies it. */
+export function loadProfileKW(s: FactorySite): number[] {
+  return Array.from({ length: 24 }, (_, h) => {
+    if (windowAt(h) === 'peak') return s.peakLoadKW;
+    return h >= DAY_SHAPE.baseFrom && h < DAY_SHAPE.baseFrom + s.baseHours ? s.baseLoadKW : 0;
+  });
+}
 
 /** What a kilowatt-hour out of the generator costs, fuel and upkeep together. */
 export const dieselInrPerKWh = (s: FactorySite) =>
@@ -164,9 +216,18 @@ export const dieselInrPerKWh = (s: FactorySite) =>
 /** The energy an outage asks for on an average working day. */
 export const backupNeedKWh = (s: FactorySite) => s.criticalLoadKW * (s.outageMinutesPerDay / 60);
 
-/** A day's generation, and the part of it that currently leaves the gate. */
-export const solarSurplusKWh = (s: FactorySite) =>
-  s.solarKWp * s.solarKWhPerKWpDay * s.solarSurplusPortion;
+/**
+ * The part of a day's generation the site cannot use as it is made.
+ *
+ * Derived from the two profiles rather than declared. A declared portion can contradict the site it
+ * is a portion of, and the first version of this fixture did exactly that: it claimed 35% of the
+ * array left the gate while the array's best hour was below the site's base load, so there was
+ * never anything to export at all. The day view is what found it.
+ */
+export const solarSurplusKWh = (s: FactorySite) => {
+  const solar = solarProfileKW(s), load = loadProfileKW(s);
+  return solar.reduce((total, kW, h) => total + Math.max(0, kW - load[h]), 0);
+};
 
 /** Usable energy out of a nameplate, through the same chain the studio shows. */
 export const usableKWh = (nameplateKWh: number) =>
@@ -182,6 +243,7 @@ export const usableKWh = (nameplateKWh: number) =>
 export function playFactory(s: FactorySite, m: Moves): FactoryYear {
   const days = s.workingDaysPerYear;
   const shortfalls: string[] = [];
+  const notes: string[] = [];
 
   // ---- What the battery actually has, and how it is divided --------------------------------
   const usable = usableKWh(m.bessEnergyKWh);
@@ -220,8 +282,11 @@ export function playFactory(s: FactorySite, m: Moves): FactoryYear {
   const surplus = solarSurplusKWh(s);
   const solarWanted = m.shiftSolar ? Math.min(surplus, m.bessPowerKW * s.peakWindowHours) : 0;
   const solarShifted = Math.min(solarWanted, cycling);
-  if (m.shiftSolar && solarShifted < solarWanted) {
-    shortfalls.push(`${Math.round(surplus)} kWh of surplus is made each day and ${Math.round(solarShifted)} kWh of it fits in what is left after the reserve. The rest still leaves at the export price.`);
+  if (m.shiftSolar && solarShifted < surplus - 1) {
+    // A note, not a shortfall. Storing every unit an array makes is not a commitment anybody gave —
+    // a shortfall is something asked for and not delivered, and treating best-effort as failure
+    // made the last round unwinnable on any battery a site would actually buy.
+    notes.push(`${Math.round(surplus)} kWh of surplus is made each day and ${Math.round(solarShifted)} kWh of it fits in what is left after the reserve. The rest still leaves at ₹${s.exportInrPerKWh}.`);
   }
   cycling -= solarShifted;
   const exportBaseline = -surplus * days * s.exportInrPerKWh;
@@ -314,6 +379,7 @@ export function playFactory(s: FactorySite, m: Moves): FactoryYear {
   return {
     lines, baselineTotalInr, withBessTotalInr, grossSavingInr, bessCapexInr, bessUpkeepInr, netSavingInr,
     simplePaybackYears: netSavingInr > 0 ? bessCapexInr / netSavingInr : null,
+    notes,
     allocation: {
       usableKWh: usable, reserveKWh: reserve, cyclingKWh: Math.max(0, cycling),
       backupNeedKWh: need, backupCoveredKWh: covered,
@@ -414,3 +480,133 @@ export const roundById = (id: string) => rounds.find(r => r.id === id);
 /** Every control the player has by a given round, in the order they were handed over. */
 export const unlockedBy = (n: number): (keyof Moves)[] =>
   rounds.filter(r => r.n <= n).flatMap(r => r.unlocks);
+
+/* --------------------------------------------------------- the day it assumes ---- */
+
+/**
+ * The same year, arranged in hours.
+ *
+ * {@link playFactory} answers in rupees a year, which is the answer a finance director wants and
+ * the wrong one to look at while deciding *what the battery should do*. Every quantity in that
+ * arithmetic is really a statement about one working day — forty-five minutes of outage at ten,
+ * twelve hours of base load, four hours of evening peak, a bell of generation over the middle — and
+ * a player who cannot see the day cannot see why the reserve and the evening are competing for the
+ * same kilowatt-hours.
+ *
+ * So this lays the same numbers out in time. It is **not a second model**: every total here is
+ * reconciled against the allocation `playFactory` computed, to the kilowatt-hour, by
+ * `src/tests/factory.test.ts`. If the two ever disagree the day is wrong, not the bill.
+ *
+ * The placement of the hours is a stated assumption of the fixture, in the way §15.4 already
+ * requires of a tariff: the outage sits at ten in the morning, the evening window runs from six,
+ * and generation is a symmetric bell between six and six. A real site replaces all three from its
+ * own load data.
+ */
+export type DayHour = {
+  hour: number;
+  /** What the site is drawing, before anything supplies it. */
+  loadKW: number;
+  /** What the array is making. */
+  solarKW: number;
+  /**
+   * Positive discharging, negative charging.
+   *
+   * Every figure on an hour is that hour's **energy**, written as an average power, so the day adds
+   * up by plain summation. A forty-five minute outage therefore shows three quarters of the
+   * critical load on its hour rather than all of it — the instantaneous figure is in the caption,
+   * where it cannot be summed by accident.
+   */
+  batteryKW: number;
+  /** What the generator is carrying, which is only ever during an outage. */
+  dieselKW: number;
+  /** What crosses the meter. Positive import, negative export. */
+  gridKW: number;
+  /** Energy in the battery at the start of this hour, in kilowatt-hours of usable capacity. */
+  storedKWh: number;
+  /** Which price applies. */
+  window: 'peak' | 'normal' | 'off-peak';
+  outage: boolean;
+};
+
+export function factoryDay(s: FactorySite, m: Moves): DayHour[] {
+  const year = playFactory(s, m);
+  const a = year.allocation;
+  const solar = solarProfileKW(s), load = loadProfileKW(s);
+  const outageHours = s.outageMinutesPerDay / 60;
+
+  // The charge the battery takes overnight, to be spent in the evening. What it takes from the sun
+  // is stored as it is made and does not cross the meter at all.
+  const fromGridKWh = Math.max(0, a.peakShavedKWh - a.solarShiftedKWh) / CHAIN.roundTrip
+    + a.backupCoveredKWh / CHAIN.roundTrip;
+  const offPeakHours = Array.from({ length: 24 }, (_, h) => h).filter(h => windowAt(h) === 'off-peak');
+  const perOffPeakHour = offPeakHours.length ? fromGridKWh / offPeakHours.length : 0;
+
+  const rows: DayHour[] = [];
+  let stored = 0, solarStored = 0;
+  for (let hour = 0; hour < 24; hour++) {
+    const window = windowAt(hour);
+    const outage = hour === DAY_SHAPE.outageAt && outageHours > 0;
+    // The outage hour carries the protected load while the grid is away and the ordinary load for
+    // the rest of it, averaged — the site does not stop when the feeder comes back.
+    const loadKW = outage
+      ? s.criticalLoadKW * outageHours + load[hour] * (1 - outageHours)
+      : load[hour];
+    const solarKW = solar[hour];
+
+    let batteryKW = 0, dieselKW = 0;
+    if (outage) {
+      // The battery carries what the reserve and its power rating allow; the generator takes the
+      // rest, which is the line the second round is about.
+      //
+      // The array is deliberately given nothing to do here. A grid-following inverter needs a grid
+      // to follow, and on a site whose outage supply is a generator there is none — the array trips
+      // with the feeder. Counting the sun against a mid-morning outage would be the single most
+      // flattering mistake this model could make, and it is the reason the bill's diesel line has
+      // no solar term in it either.
+      const carriedKW = Math.min(a.backupCoveredKWh / Math.max(outageHours, 1e-9), s.criticalLoadKW);
+      // Averaged over the hour, like everything else on this row.
+      batteryKW = carriedKW * outageHours;
+      dieselKW = Math.max(0, s.criticalLoadKW - carriedKW) * outageHours;
+      stored -= batteryKW;
+    } else if (window === 'peak') {
+      batteryKW = a.peakShavedKWh / s.peakWindowHours;
+      stored -= batteryKW;
+    } else if (window === 'off-peak') {
+      batteryKW = -perOffPeakHour;
+      stored += perOffPeakHour * CHAIN.roundTrip;
+    } else if (solarKW > loadKW && a.solarShiftedKWh > 0) {
+      // Surplus goes into the battery rather than out of the gate, up to what the year allocated.
+      // Counted against the solar taken so far and not against everything in the battery, or the
+      // charge taken from the night tariff would silently cancel the sun's share of it.
+      const surplusKW = solarKW - loadKW;
+      const wanted = Math.min(surplusKW, Math.max(0, a.solarShiftedKWh - solarStored));
+      batteryKW = -wanted;
+      solarStored += wanted;
+      stored += wanted * CHAIN.roundTrip;
+    }
+
+    // Nothing crosses the meter while the feeder is away; the rest of that hour is ordinary.
+    const gridKW = outage
+      ? Math.max(0, load[hour] * (1 - outageHours) - solarKW)
+      : loadKW - solarKW - batteryKW;
+    rows.push({
+      hour, loadKW, solarKW, batteryKW, dieselKW, gridKW,
+      storedKWh: Math.max(0, stored), window, outage,
+    });
+  }
+  return rows;
+}
+
+/** What the day totals, so it can be held to the year's own allocation. */
+export const dayTotals = (day: DayHour[]) => {
+  const sum = (f: (h: DayHour) => number) => day.reduce((t, h) => t + f(h), 0);
+  return {
+    loadKWh: sum(h => h.loadKW),
+    solarKWh: sum(h => h.solarKW),
+    dischargedKWh: sum(h => Math.max(0, h.batteryKW)),
+    chargedKWh: sum(h => Math.max(0, -h.batteryKW)),
+    dieselKWh: sum(h => h.dieselKW),
+    importedKWh: sum(h => Math.max(0, h.gridKW)),
+    exportedKWh: sum(h => Math.max(0, -h.gridKW)),
+  };
+};

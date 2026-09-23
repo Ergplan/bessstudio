@@ -1233,6 +1233,39 @@ charge level and current direction and nothing else.
 
 ### 15.1a The factory — one site, one bill, six rounds
 
+The factory is sectioned like a lesson: the rounds and the controls at the top, then **The day**,
+**The bill** and **The battery**.
+
+**The day** lays the same year out in hours, because every figure in the annual arithmetic is really
+a claim about one working day and a player who cannot see the day cannot see why the reserve and the
+evening compete for the same kilowatt-hours. It is **not a second model** — every total reconciles
+against the allocation the bill computed, to the kilowatt-hour, and the tests hold them together. If
+they disagree the day is wrong, not the bill.
+
+Each bar is that hour's energy drawn as an average power, so the day adds up by eye; above the line
+is what supplied the site, below it is what was exported or stored. **The array is off through the
+outage**: a grid-following inverter needs a grid to follow and there is none, so crediting sun
+against a mid-morning outage — the most flattering mistake this model could make — is refused in
+both the day and the bill. Where the outage sits, when the evening window runs and what shape the
+generation takes are named as assumptions of the fixture.
+
+**The export share is derived, never declared.** How much of an array's output a site cannot use is
+a consequence of when it works and when the sun is up, and the first version of this fixture asserted
+35% on a site whose best solar hour never reached its own base load — so nothing could ever have been
+exported. The day view found it.
+
+**The battery** reads as a specification and says so: nothing is dispatching, so it shows what was
+ordered and whether it is enough — power against the protected load, reserve against the outage,
+C-rate, the evening it can hold — using the same instrument panel the lessons use. Dressing a year's
+arithmetic as live telemetry would be a lie in the shape of a dashboard.
+
+**Shortfalls and notes are different things.** A shortfall is something asked for and not delivered —
+the reserve cannot cover the outage, the meter cannot be held. Storing every unit an array makes was
+never a commitment, so partial solar shifting is a note. Treating best effort as failure made the
+last round unwinnable on any battery a site would actually buy.
+
+
+
 `BUILT`. Lesson 1 renders an isometric enclosure whose fill follows the charge level, the supply and
 the offtake named for the occasion chosen, and two engineering panels — the battery management
 system's signals and the converter's.

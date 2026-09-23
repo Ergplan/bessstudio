@@ -2,10 +2,13 @@
 import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { ArrowRight, Check, Play, RotateCcw } from 'lucide-react';
-import { Card, Slider, Badge } from '../components/ui';
+import { Card, Slider, Badge, Tabs } from '../components/ui';
+import { FactoryDay } from '../components/FactoryDay';
+import { Instrument, Row, type Reading } from '../components/instruments';
 import {
   teachingFactory, playFactory, noBess, rounds, unlockedBy, dieselInrPerKWh,
-  backupNeedKWh, solarSurplusKWh, TEACHING_LABEL, CHAIN, type Moves, type FactoryYear,
+  backupNeedKWh, solarSurplusKWh, factoryDay, usableKWh, TEACHING_LABEL, CHAIN,
+  type Moves, type FactoryYear,
 } from '../../sim/factory';
 import { inr } from '../../sim/lifecycle';
 
@@ -27,10 +30,15 @@ import { inr } from '../../sim/lifecycle';
  */
 const s = teachingFactory;
 
+/** The three questions the game answers, one at a time. */
+type View = 'day' | 'bill' | 'battery';
+
 export function Factory() {
   const [round, setRound] = useState(1);
+  const [view, setView] = useState<View>('day');
   const [moves, setMoves] = useState<Moves>(noBess());
   const year = useMemo(() => playFactory(s, moves), [moves]);
+  const day = useMemo(() => factoryDay(s, moves), [moves]);
   const current = rounds[round - 1];
   const unlocked = new Set(unlockedBy(round));
   const won = current.won(year);
@@ -77,9 +85,69 @@ export function Factory() {
         <Controls moves={moves} unlocked={unlocked} set={set} />
       </Card>
 
-      <Bill year={year} moves={moves} />
-      <Allocation year={year} moves={moves} />
+      <Tabs<View> active={view} onChange={setView} tabs={[
+        { id: 'day', label: 'The day' },
+        { id: 'bill', label: 'The bill' },
+        { id: 'battery', label: 'The battery' },
+      ]} />
+
+      {view === 'day' && (
+        <Card title="One working day" subtitle="The same year, arranged in hours — which is where the battery's decisions actually happen">
+          <FactoryDay day={day} site={s} />
+        </Card>
+      )}
+      {view === 'bill' && <Bill year={year} moves={moves} />}
+      {view === 'battery' && (
+        <>
+          <Plant moves={moves} year={year} />
+          <Allocation year={year} moves={moves} />
+        </>
+      )}
     </div>
+  );
+}
+
+/**
+ * The battery as specified, read like a nameplate rather than like telemetry.
+ *
+ * The lessons' instruments show a running plant, which this one is not: nothing here is dispatching
+ * at this instant, and dressing a year's arithmetic as live signals would be a lie in the shape of a
+ * dashboard. What a panel can honestly show is what was ordered and whether it is enough — the
+ * power against the load it has to carry, the energy against the duties asked of it, the rate it
+ * will be worked at. The checks beside each are the same ones the game wins and loses on.
+ */
+function Plant({ moves, year }: { moves: Moves; year: FactoryYear }) {
+  const usable = usableKWh(moves.bessEnergyKWh);
+  const cRate = moves.bessEnergyKWh > 0 ? moves.bessPowerKW / moves.bessEnergyKWh : 0;
+  const shaveKW = year.allocation.peakShavedKVA * s.powerFactor;
+  const rows: Reading[] = [
+    { label: 'Rated power', value: moves.bessPowerKW.toLocaleString('en'), unit: 'kW',
+      from: `${s.criticalLoadKW} kW of protected load to carry`,
+      bar: { value: moves.bessPowerKW, min: 0, max: Math.max(s.criticalLoadKW * 2, 1),
+        derateFrom: 0, derateTo: s.criticalLoadKW },
+      tone: moves.bessPowerKW > 0 && moves.bessPowerKW < s.criticalLoadKW ? 'warn' : undefined },
+    { label: 'Nameplate energy', value: moves.bessEnergyKWh.toLocaleString('en'), unit: 'kWh',
+      from: `${Math.round(usable).toLocaleString('en')} kWh of it usable in a cycle` },
+    { label: 'Held in reserve', value: Math.round(year.allocation.reserveKWh).toLocaleString('en'), unit: 'kWh',
+      from: `${Math.round(year.allocation.backupNeedKWh)} kWh of outage to cover`,
+      tone: moves.bessEnergyKWh > 0 && year.allocation.reserveKWh < year.allocation.backupNeedKWh ? 'warn' : undefined },
+    { label: 'Left for the daily cycle', value: Math.round(year.allocation.cyclingKWh).toLocaleString('en'), unit: 'kWh',
+      from: 'after the reserve and the stored surplus' },
+    { label: 'Rate it is worked at', value: cRate.toFixed(2), unit: 'C',
+      from: cRate > 0 ? `${(1 / cRate).toFixed(1)} h from full at rated power` : 'nothing installed',
+      bar: { value: cRate, min: 0, max: 1, derateFrom: 0.5, derateTo: 1 },
+      tone: cRate > 0.5 ? 'warn' : undefined },
+    { label: 'Evening it can hold', value: Math.round(shaveKW).toLocaleString('en'), unit: 'kW',
+      from: `for ${s.peakWindowHours} h, every working day of the month` },
+  ];
+  return (
+    <Card title="The battery, as ordered" subtitle="What was bought, and whether it is enough for what is being asked of it">
+      <Instrument tag="BESS-01" name="Battery energy storage system" state={moves.bessEnergyKWh > 0 ? 'SPECIFIED' : 'NONE'}
+        lamp={moves.bessEnergyKWh <= 0 ? 'idle' : year.shortfalls.length ? 'warn' : 'ok'}
+        absent="A specification, not telemetry. Nothing here is dispatching — these are the figures the year's arithmetic was done on.">
+        {rows.map(r => <Row key={r.label} r={r} />)}
+      </Instrument>
+    </Card>
   );
 }
 
@@ -177,6 +245,14 @@ function Bill({ year, moves }: { year: FactoryYear; moves: Moves }) {
         <div className="notice warning" style={{ marginTop: 12 }}>
           <b>Asked for more than it has</b>
           <ul className="shortfalls">{year.shortfalls.map(t => <li key={t}>{t}</li>)}</ul>
+        </div>
+      )}
+      {/* True, and not a failure. Storing every unit an array makes was never a commitment, and
+          reporting best-effort as a shortfall made the last round unwinnable on any real battery. */}
+      {year.notes.length > 0 && (
+        <div className="notice info" style={{ marginTop: 12 }}>
+          <b>It could do more of this if it were larger</b>
+          <ul className="shortfalls">{year.notes.map(t => <li key={t}>{t}</li>)}</ul>
         </div>
       )}
       <p className="muted" style={{ marginTop: 12, maxWidth: '84ch' }}>{TEACHING_LABEL}</p>
