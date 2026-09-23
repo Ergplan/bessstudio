@@ -163,8 +163,14 @@ describe('the lesson loop', () => {
       expect(reset.series.soc, card.template.label).toEqual(opened.series.soc);
       // Not every control is part of the scenario — what the learner asks of the plant is not the
       // day it is asked on — so the check is that the *run* moved, whichever of the two changed.
-      expect(fiddled.series.achievedPowerW, `${card.template.label} really did change in between`)
-        .not.toEqual(opened.series.achievedPowerW);
+      //
+      // Across the run, not on one series: an option that takes the grid away and puts a site on
+      // the other side of the converter discharges the same megawatt, and everything about where it
+      // goes is different. A control that changes nothing anywhere is still caught, which is what
+      // this is for — a caption dressed as a choice.
+      const moving = ['achievedPowerW', 'gridPowerW', 'siteLoadW', 'generationW', 'unservedLoadW', 'soc'] as const;
+      expect(moving.some(k => JSON.stringify(fiddled.series[k]) !== JSON.stringify(opened.series[k])),
+        `${card.template.label} really did change in between`).toBe(true);
     }
   });
 

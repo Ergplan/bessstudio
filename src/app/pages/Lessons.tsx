@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, ArrowRight, Pause, Play, RotateCcw, Zap } from 'lucide-react';
 import { Card, Stat, Badge, Empty, Slider, KV, type Tone } from '../components/ui';
 import { LineChart, series as chartSeries } from '../components/viz';
+import { PlantDashboard } from '../components/PlantDashboard';
 import { useWorkspace } from '../../platform/workspace';
 import {
   lessons, lessonById, defaultControls, holdSystem, resizeSystem, acts, actOf, nextLesson,
@@ -373,6 +374,17 @@ function Player({ card, projectId }: { card: LessonCard; projectId: string | nul
       <div className={`grid cols-${Math.min(4, Math.max(1, metrics.length))}`}>
         {metrics.map(m => <Stat key={m.label} label={m.label} value={m.value} unit={m.unit} foot={m.foot} />)}
       </div>
+
+      {/* The first card is where a reader meets the machine, so it is drawn rather than tabulated:
+          the enclosure with its supply and its offtake, and beside it the two sets of signals an
+          engineer would actually open — the management system's and the converter's. The later
+          cards are about a site, a tariff or a limit, and a picture of a box does not help them. */}
+      {card.template.id === 'lesson-1' && (
+        <Card title="The plant, at this moment"
+          subtitle="Where the energy is coming from, what it is doing to the cells, and what each subsystem is reading">
+          <PlantDashboard readout={readout} occasion={values.direction ?? 1} />
+        </Card>
+      )}
 
       <div className={`grid cols-${Math.min(2, Math.max(1, plots.length))}`}>
         {plots.map(plot => (

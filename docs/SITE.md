@@ -1190,6 +1190,25 @@ if clearly identified, but a changed input must run, or retrieve the exactly mat
 While computation is pending the last valid result is retained with an explicit updating state.
 **An animation is never substituted for a simulation result.**
 
+### 15.1b The first card is a dashboard
+
+`BUILT`. Lesson 1 renders an isometric enclosure whose fill follows the charge level, the supply and
+the offtake named for the occasion chosen, and two engineering panels — the battery management
+system's signals and the converter's.
+
+Its four occasions are **scenarios, not captions**: charging from solar puts an array on the
+scenario, and carrying an outage removes the grid and puts a site on the other side of the
+converter. Two options that produce an identical run are one option, and the suite enforces it.
+
+The charge gauge is drawn **beside** a cell-voltage gauge, never alone. This chemistry is flat across
+the middle of its range — under 2 mV per point of charge, pinned by `src/tests/plateau.test.ts` — so
+a single fill bar would teach the water-cup intuition that a lithium iron phosphate pack exists to
+break, and would not explain why the management system counts coulombs instead of reading a meter.
+
+Charts in the lesson are live, per §15.1. `npm run plates` renders **committed reference plates**
+from the same engine with matplotlib into `docs/plates/`, for a reader without the application; a
+plate is never substituted for the run.
+
 ### 15.1a The factory — one site, one bill, six rounds
 
 `BUILT` — `/app/factory`.

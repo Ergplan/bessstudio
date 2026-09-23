@@ -1692,6 +1692,52 @@ and that the allocation bar shows one pool divided four ways.
 they can see. What is still absent is their own bill — the fixture is a teaching site, and the step
 after this is letting somebody put their own tariff, outage log and generation into it.
 
+### R9 — the first card, drawn as the machine it describes
+
+A reader meeting a battery plant for the first time was shown four numbers and two line charts. Both
+were true and neither was a picture of anything: nothing on the screen said that energy arrives from
+somewhere, crosses a converter, sits in cells and leaves again — which is the entire content of the
+card.
+
+**The left is the machine.** An isometric enclosure whose fill follows the charge level, with the
+supply on one side and the offtake on the other, named for the occasion chosen.
+
+**The occasions are scenarios, not captions.** `Charging from solar` puts an array on the scenario
+making exactly what the dial asks the battery to take; `Carrying an outage` takes the grid away for
+the whole window and puts a site on the other side of the converter, so the discharge has somewhere
+it *has* to go and unserved load says so when it cannot. The suite refuses a caption dressed as a
+choice — two options producing an identical run are, to the machine, one option — and catching that
+is what forced the second one to be real.
+
+**The fill is two bars, and that is the point.** A water cup tells you how full it is by how hard it
+pushes. Lithium iron phosphate does not, and the card now says so with a number measured off the run
+on the screen: *"the charge level has moved 39 points and the cell has moved 43 mV."* Drawing the
+charge level alone would teach the water-cup intuition this chemistry spends its whole life
+breaking, which is also why a pack needs a management system counting coulombs rather than a
+voltmeter on the terminals. `src/tests/plateau.test.ts` pins the property — under **2 mV per point
+of charge** — so the sentence cannot become a lie told live.
+
+**The right is what an engineer opens:** the management system's signals (highest and lowest cell
+against the protected window, and the pack current) and the converter's (asked / battery side / at
+the connection, and where each kilowatt of loss went). `Readout.series` now carries the
+direct-current side, the pack terminals, the current and the loss split — the engine produced all of
+it and the player was simply not passing it through.
+
+**On plotting with Python.** The charts in the browser have to be live: §15.1 requires a changed
+input to produce a run, and a picture rendered on somebody's laptop last Tuesday is not a simulation
+result — so matplotlib cannot draw them. It is used where it *can* be honest, beside the PySAM
+harness: `npm run plates` runs the four occasions through this same engine and renders committed
+reference plates into `docs/plates/`, which a reader without the application can look at and argue
+with. They earned their keep immediately — the converter plate shows the charge **stopping at minute
+64** while the request carries on, which is act three's "who refuses" arriving unannounced in the
+first card, and the plateau plate shows the terminal voltage rebounding to open circuit the moment
+the current stops. Both are now drawn and labelled rather than smoothed away.
+
+**Checks:** `src/tests/plateau.test.ts` (3), `browser/lesson1.test.ts` (5 — the enclosure's fill is a
+real polygon following the charge, two gauges with the reason for the second stated, the supply and
+offtake renaming themselves per occasion, both signal panels rendering real geometry, and the model
+rerunning rather than redrawing when the occasion changes).
+
 ### Still open for a decision
 
 1. **The pack data sheet.** `pack-16s-314` stays `assumed` at 150 A / 200 A until the supplier's

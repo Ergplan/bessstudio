@@ -43,6 +43,17 @@ export type Readout = {
     soc: number[]; cellTempC: number[]; cellTempMaxC: number[]; cellVoltageMinV: number[];
     cellVoltageV: number[]; siteLoadW: number[]; generationW: number[]; gridImportW: number[];
     gridExportW: number[]; curtailedW: number[]; unservedLoadW: number[]; bindingConstraint: string[];
+    /**
+     * What the battery and the converter are actually doing, rather than what the plant delivered.
+     *
+     * The card's four figures and two charts are a beginner's view and stay that way. These are the
+     * signals an engineer reads — the direct-current side, the pack terminals, the current through
+     * them and where the losses went — and the first card's dashboard draws the battery management
+     * and converter panels from them. Present in every run the engine produces; they were simply
+     * not carried through to the player.
+     */
+    dcPowerW: number[]; packVoltageV: number[]; packCurrentA: number[]; cellVoltageMaxV: number[];
+    converterLossW: number[]; batteryLossW: number[]; auxiliaryW: number[];
   };
   totals: {
     deliveredAcWh: number; drawnAcWh: number; converterLossWh: number; batteryLossWh: number;
@@ -245,10 +256,51 @@ export const chargeDischargeScenario: Scenario = sealWith(scenarioSchema, {
   controls: ['direction', 'power', 'initialSoc'],
 });
 
+/**
+ * The four occasions, as four scenarios rather than four captions.
+ *
+ * A caption that changes nothing the model does is decoration, and the suite catches it: two
+ * options that produce an identical run are, to the machine, one option. So the two that claim a
+ * source and an occasion actually bring one.
+ *
+ * *Charging from solar* puts an array on the scenario, making exactly what the dial asks the
+ * battery to take. Nothing else changes, which is the point — the cells cannot tell a rooftop from
+ * a feeder, and seeing the identical charge curve under a different supply is the lesson, not a
+ * disappointment.
+ *
+ * *Carrying an outage* takes the grid away for the whole window and puts a site on the other side
+ * of the converter. Now the discharge has somewhere it has to go, and if the plant cannot hold it
+ * the unserved load says so. That is a different run, not a different word for the same one.
+ */
+const STEPS = chargeDischargeScenario.durationSeconds / chargeDischargeScenario.stepSeconds;
+const flat = (name: string, watts: number): Profile =>
+  ({ name, unit: 'W', samples: Array.from({ length: STEPS }, () => Math.round(watts)) });
+
+export const chargeDischargeFor = (values: Record<string, number>): Scenario => {
+  const occasion = values.direction ?? 1;
+  const asked = values.power ?? 0;
+  if (occasion === -2) {
+    return sealWith(scenarioSchema, {
+      ...withSoc(chargeDischargeScenario, values),
+      id: 'lesson-1-from-solar', label: 'Charging from solar',
+      generation: flat('Rooftop array', asked),
+    });
+  }
+  if (occasion === 2) {
+    return sealWith(scenarioSchema, {
+      ...withSoc(chargeDischargeScenario, values),
+      id: 'lesson-1-outage', label: 'Carrying an outage',
+      siteLoad: flat('The site that cannot go dark', asked),
+      outage: { fromSeconds: 0, toSeconds: chargeDischargeScenario.durationSeconds },
+    });
+  }
+  return withSoc(chargeDischargeScenario, values);
+};
+
 export const chargeDischarge: LessonCard = {
   story: {
     actId: 'machine',
-    situation: 'A battery, a converter and a wire to the grid. No site, no tariff, no weather — just the machine. You choose which way the energy goes and how hard, and watch what comes out at the other end.',
+    situation: 'A battery, a converter and a wire to the grid. You choose what is happening — an evening discharge, an outage to carry, a charge off the grid or off the roof — and how hard, and watch what it does to the cells. The last two bring a site and an array with them; the first two are the machine on its own.',
     takeaway: 'Say where the energy went, and why less came out than went in.',
     teaches: ['charge-level', 'converter', 'losses', 'auxiliaries', 'bms', 'ems'],
     soWhat: r => {
@@ -279,9 +331,23 @@ export const chargeDischarge: LessonCard = {
   }),
   controls: [
     {
-      kind: 'choice', id: 'direction', label: 'Direction', start: 1,
-      options: [{ value: 1, label: 'Discharge' }, { value: -1, label: 'Charge' }],
-      hint: 'Discharging sends energy to the grid; charging takes it from the grid.',
+      /**
+       * Four occasions, two directions.
+       *
+       * The sign is what the machine sees: positive is energy leaving the battery, negative is
+       * energy going in, and the cells cannot tell whether the electrons came off a roof or a
+       * feeder. The occasion is what a reader sees, and it is not decoration — it is the difference
+       * between a plant that is earning and a plant that is the only thing keeping a site alive.
+       * Both are true at once, and saying so is the honest version of "charge from solar".
+       */
+      kind: 'choice', id: 'direction', label: 'What is happening', start: 1,
+      options: [
+        { value: 1, label: 'Evening discharge' },
+        { value: 2, label: 'Carrying an outage' },
+        { value: -1, label: 'Charging from the grid' },
+        { value: -2, label: 'Charging from solar' },
+      ],
+      hint: 'Discharging sends energy out of the battery; charging takes it in. The cells cannot tell a rooftop from a feeder — the occasion changes what it is worth, not what the machine does.',
     },
     {
       kind: 'slider', id: 'power', label: 'Power', unit: 'kW', scale: 1 / 1000,
@@ -291,9 +357,9 @@ export const chargeDischarge: LessonCard = {
     socControl(0.8),
   ],
   runWith: values => ({
-    scenario: withSoc(chargeDischargeScenario, values),
+    scenario: chargeDischargeFor(values),
     policy: manualPolicy, plant: teachingPlant,
-    manualRequestW: (values.direction ?? 1) >= 0 ? (values.power ?? 0) : -(values.power ?? 0),
+    manualRequestW: Math.sign(values.direction ?? 1) * (values.power ?? 0),
   }),
   readout: r => {
     const moved = (r.values.direction ?? 1) >= 0 ? r.totals.deliveredAcWh : r.totals.drawnAcWh;

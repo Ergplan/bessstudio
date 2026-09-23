@@ -21,7 +21,8 @@
     "validate": "vitest run --config vitest.validation.config.ts validation/export-cases.test.ts && python3 validation/sam_reference.py && python3 validation/compare.py",
     "quote": "vitest run --config vitest.validation.config.ts validation/quote.test.ts",
     "verify": "vitest run --config vitest.validation.config.ts validation/verification.test.ts",
-    "test:browser": "npm run build && vitest run --config vitest.browser.config.ts"
+    "test:browser": "npm run build && vitest run --config vitest.browser.config.ts",
+    "plates": "vitest run --config vitest.validation.config.ts validation/lesson-plates.test.ts && python3 validation/plates.py"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",
