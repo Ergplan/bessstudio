@@ -1339,6 +1339,78 @@ is a commercial decision, not a defect.
 
 ---
 
+## R3 — the studio answering a five-kilowatt question
+
+Not a stage. A user ran the studio for 5 kW of backup and got one five-megawatt-hour container, a
+2 507.5 kW converter and ₹5.55 crore, headed "0.01 MW" and "0.0 MWh", with lessons they described
+as having no story. Three complaints, one session, recorded here because none of them is a numbered
+goal and all three were real.
+
+**Revision:** `e635415`
+
+### What was wrong, and how it was found
+
+The studio was run across fourteen duties from 5 kW to 100 MW and twelve edge cases, and each was
+read against its own cost lines rather than against a summary. Six faults came out of the sweep
+that no single design would have shown.
+
+| # | Defect | Severity | Status |
+| --- | --- | --- | --- |
+| D62 | Every design started from the flagship container because that is what the form held. A 5 kW backup supply came back as one container, a 2 507.5 kW converter and ₹5.55 crore — with warnings attached, which is not the same as an answer. | **critical** | **fixed**; equipment follows the duty unless pinned, and 5 kW now fits one 16 kWh wall rack at ₹3.88 lakh |
+| D63 | Every converter carried the flat ₹32.5 lakh allowance the supply offer bundles with a container, whatever it was: 81% of the 5 kW system's price, and about seventy times what a 5 kW hybrid inverter costs. | **critical** | **fixed**; the bundle applies at the 2 507.5 kW it was quoted for and the rate card's per-kW figure elsewhere. The reference container is unchanged at ₹32.5 lakh |
+| D64 | The landed build-up charged $68/kWh FOB for every enclosure, so a 261 kWh cabinet cost the same per kilowatt-hour as a 5 MWh container. Cabinets fit a small duty more tightly, so the sizing proposed 46 cabinets where 3 containers were cheaper. | **critical** | **fixed**; the quoted rate applies to the container it was struck for, others scale on the book's own relative rates |
+| D65 | Candidates were ranked on the quotation's own scope. Supply-only pays for boxes and nothing else, so 88 cabinets genuinely undercut 5 containers — the 83 extra foundations and commissioning visits appear on nobody's invoice. The studio proposed exactly that for 2.5 MW, and 240 cabinets for 20 MW. | major | **fixed**; candidates are compared at turnkey scope whatever the offer sells |
+| D66 | The unit caps that decided when to give up were 24, so every candidate for 50 MW was rejected and the fit silently fell back to the form's own defaults — seventeen transformers chosen by nobody. | major | **fixed**; caps are absurdity bounds now, and cost decides |
+| D67 | `pack-16s-314` carries 50 A continuous beside a cabinet its own schedule rates at 5 kW, which at 51.2 V is 98 A. Taken at 50 A the engine refused every small design outright. Every other pack in the schedule is 0.5 C; this one read as 0.16 C. | major | **reconciled to the cabinet rating and marked `assumed`** — it needs confirming against the pack data sheet before issue |
+| D68 | No transformer below 1 600 kVA existed, so a 250 kW plant was quoted six times the transformer it wants — ₹37 lakh of iron on a ₹1 crore system. No price at all for the 5 000 kVA converter or the 6 300 kVA transformer. | major | **fixed**; 500 and 1 000 kVA distribution-class units added, and every catalogue product now carries a price |
+| D69 | Nothing checked the connection voltage. A 5 kW plant presented 230 V at its inverter terminals while declaring a 33 kV connection. | major | **fixed**; a design says when nothing in it can reach the voltage it claims |
+| D70 | Power and energy were written in MW and MWh whatever the number. Five kilowatt-hours of contracted energy read "0.0 MWh" — not a rounding slip but a wrong answer. | major | **fixed**; the unit follows the number, across the workbench, the build sequence and the whole proposal |
+| D71 | The equipment selectors read from the form rather than from the design, so the 5 kW page showed a container, a 2 507.5 kW converter and a 3 150 kVA transformer beside a headline correctly reporting one wall rack. | major | **fixed** |
+| D72 | §15.1 ends the lesson loop with "Reset, Next lesson, or take it back to the design". There was no next lesson, and nothing said why the seven cards were in that order. | major | **fixed**; three acts, a takeaway per card, and a closing beat written from the run |
+| D73 | The price lesson read grid import as the plant's purchases, when it carries the site's load too; and its day starts half full, so the plant could deliver more than it drew and appear to have made energy. | major | **fixed**; the round trip is stated from the losses and the open position is disclosed rather than netted away |
+
+### What the studio now costs, across four orders of magnitude
+
+Delivered equipment, default price book, landed-import basis.
+
+| Duty | Fitted | Installed DC | Capex | ₹/kWh DC |
+| --- | --- | --- | --- | --- |
+| 5 kW × 1 h backup | 1 × SB51314 rack, 1 × 5 kW | 16 kWh | ₹3.88 L | 24,127 |
+| 50 kW × 2 h peak | 1 × SWESLC832V314Ah, 1 × 125 kW | 261 kWh | ₹42.98 L | 16,454 |
+| 250 kW × 2 h peak | 5 × SWESLC832V314Ah, 2 × 125 kW, 500 kVA | 1.31 MWh | ₹2.15 cr | 16,498 |
+| 1 MW × 4 h microgrid | 23 × SWESLC832V314Ah, 8 × 125 kW, 1 600 kVA | 6.01 MWh | ₹9.38 cr | 15,609 |
+| 2.5 MW × 4 h solar | 5 × SWESLC1331.2V314Ah, 1 × 2 507.5 kW, 3 150 kVA | 25.08 MWh | ₹25.01 cr | 9,972 |
+| 10 MW × 4 h arbitrage | 11 × SWESLC1331.2V314Ah, 2 × 5 000 kW, 2 × 6 300 kVA | 55.18 MWh | ₹55.83 cr | 10,118 |
+| 100 MW × 4 h arbitrage | 110 × SWESLC1331.2V314Ah, 20 × 5 000 kW, 17 × 6 300 kVA | 551.76 MWh | ₹554.79 cr | 10,055 |
+
+Monotone in plant size throughout, and no fitted design on the ladder carries an error-level
+warning.
+
+### Checks
+
+| Check | Command | Expected | Observed | Result |
+| --- | --- | --- | --- | --- |
+| Typecheck | `npx tsc --noEmit` | clean | clean | **PASS** |
+| Unit suite | `npm run test` | all pass | **705 passed** (+28 on the S12 baseline) | **PASS** |
+| Static export | `npm run build` | 17 routes | 17 routes | **PASS** |
+| Scenario sweep | 14 duties, 5 kW → 100 MW | monotone cost, no error-level design | monotone, none | **PASS** |
+| Edge cases | 12, including usable-energy mode, 0.25 h, pinned equipment, 500 MW | no throw, no silent fallback | none | **PASS** |
+| Reference container | unit | converter unchanged at ₹32.5 lakh | ₹3,250,000 exactly | **PASS** |
+| Small-plant documents | unit | no real quantity written as nothing | none in title, configuration table, qualifications or appendix | **PASS** |
+| Cold browser walkthrough | 5 kW from the opening question | headline, selectors and price agree | agree; no page error | **PASS** |
+| Lesson story | unit + browser | a closing sentence per card, changing with the controls | 7 of 7 | **PASS** |
+
+### Open for a decision
+
+1. **The pack rating.** `pack-16s-314` is marked `assumed` at 100 A until the data sheet settles it.
+   At the supplied 50 A the smallest design this studio can sell is a 261 kWh cabinet.
+2. **`oversize-day1` as the default** for duties under one cycle a day. It buys 2.5× the contracted
+   energy on day one so the plant needs no augmentation for twenty years. Defensible, and a large
+   commercial assumption to make on a customer's behalf.
+3. **jouleWise on a white-labelled proposal**, still open from R2.
+
+---
+
 ## Acceptance packet template
 
 Copy per stage. A skipped, quarantined, unavailable or not-run mandatory check **is not a pass**.
