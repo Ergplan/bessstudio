@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 import { ArrowLeft, Box, FileText, GraduationCap, RotateCcw, Trash2 } from 'lucide-react';
 import { Card, Stat, Badge, Empty, Tabs, KV, NumberInput, SelectInput, TextInput, TextArea, Field, Slider, pct, date } from '../components/ui';
 import { LineChart, BarChart, CompositionBar, series, status } from '../components/viz';
+import { EnergyCascade } from '../components/EnergyCascade';
 import { quotesLeftBehind, reassign, HOLDING_ACCOUNT } from '../../platform/projects';
 import { useWorkspace, quotesOf } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
@@ -428,6 +429,11 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
                 back at rated power" on the same screen, and never saying that the shorter window
                 was what bought the third container. A reader could not tell an oversized plant
                 from a duty that costs what it costs, and was right not to approve it. */}
+            {/* The factors first, then the count. A reader told that three containers deliver
+                10.9 MWh has to take five numbers on trust; a reader who watches the nameplate
+                shrink five times, each step named and owned, can check it by hand and knows which
+                supplier to ask about which figure. */}
+            <EnergyCascade sizing={sizing} />
             <Rationale sizing={sizing} onRelaxCharge={() => set({ chargeDurationH: Math.ceil(sizing.recoveryDurationH * 100) / 100 })} />
             <Card title="Configuration" subtitle={`${sizing.enclosure.model} · ${sizing.enclosure.cooling} cooled · ${sizing.enclosure.ipRating}`}>
               <div className="grid cols-2" style={{ gap: 0, columnGap: 26 }}>

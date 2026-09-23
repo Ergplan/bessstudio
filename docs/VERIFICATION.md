@@ -38,6 +38,11 @@ With this container: **5,015.962 kWh** × **95.00%** × **90.00%** × **94.57%**
 | 5 | Auxiliary consumption | 500 kWh a cycle | 500 kWh a day, liquid-cooled, marked `supplied`. | The integrator — and it is the number most often left out | The thermal management rating and a heat-balance calculation at the site's design ambient. **Ask explicitly whether the quoted round-trip efficiency is measured inside or outside the auxiliaries**; the answer moves it by several points. |
 | 6 | Capacity retention | 69.00% at year 20 | The supplied 20-year schedule (`table` basis). | Nobody can measure it in advance — the warranty settles it | The supplier's guaranteed capacity curve, year by year, with its conditions: cycles a year, depth, temperature, and what happens if it is missed. Cycle-life evidence per **IEC 61427-2** (on-grid endurance, which also measures round-trip efficiency before, during and after) or **IEC 62620**. |
 
+The same six are on the **Design** tab of any project in the studio, under *Where the
+nameplate goes*: one bar per factor, shrinking as each takes its share, with **Who settles
+this** and **Evidence to ask for** on every step. They are generated from the same module as
+this table, so the pack a buyer holds and the screen an engineer works on cannot drift apart.
+
 ## Then stop verifying factors and measure the result
 
 Five of the six can be checked on paper before anything is bought. The sixth cannot: nobody

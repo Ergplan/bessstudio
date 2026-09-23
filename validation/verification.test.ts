@@ -3,6 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultSizingInput, sizeSystem, recoveryHours, enclosureHierarchy, retentionFromTable, suppliedRetention } from '../src/sizing/engine';
 import { packOf, cellOf, enclosureEnergyKWh, enclosureCellCount } from '../src/catalog/products';
+import { energyCascade } from '../src/sizing/cascade';
 import * as u from '../src/domain/units';
 
 /**
@@ -67,6 +68,12 @@ describe('verification pack', () => {
     w('');
     w('| # | Factor | Figure used | Where it comes from now | Who settles it | The document to demand |');
     w('| --- | --- | ---: | --- | --- | --- |');
+    // Read from the same module the workbench draws, so a buyer holding this pack and an engineer
+    // looking at the Design tab are reading one set of claims rather than two that have drifted.
+    const cascade = energyCascade(s, 0);
+    const _rowsFromScreen: [string, string, string, string, string][] = cascade.steps.map(step => [
+      step.label, step.factor === null ? '—' : pc(step.factor), step.detail, step.settledBy, step.evidence,
+    ]);
     const rows: [string, string, string, string, string][] = [
       ['Nameplate energy',
         `${nameplate.toLocaleString('en-IN')} kWh`,
@@ -100,6 +107,11 @@ describe('verification pack', () => {
         'The supplier\'s guaranteed capacity curve, year by year, with its conditions: cycles a year, depth, temperature, and what happens if it is missed. Cycle-life evidence per **IEC 61427-2** (on-grid endurance, which also measures round-trip efficiency before, during and after) or **IEC 62620**.'],
     ];
     rows.forEach((r, i) => w(`| ${i + 1} | ${r[0]} | ${r[1]} | ${r[2]} | ${r[3]} | ${r[4]} |`));
+    w('');
+    w('The same six are on the **Design** tab of any project in the studio, under *Where the');
+    w('nameplate goes*: one bar per factor, shrinking as each takes its share, with **Who settles');
+    w('this** and **Evidence to ask for** on every step. They are generated from the same module as');
+    w('this table, so the pack a buyer holds and the screen an engineer works on cannot drift apart.');
     w('');
     w('## Then stop verifying factors and measure the result');
     w('');

@@ -8,6 +8,7 @@ import { defaultPriceBook, formatMoney, localRate } from '../../catalog/pricing'
 import { evaluateFinance } from '../../sizing/finance';
 import { application } from '../../sizing/applications';
 import type { SizingResult } from '../../sizing/engine';
+import { energyCascade } from '../../sizing/cascade';
 import { BuildScene, MAX_DRAWN, STAGE_COUNT, STAGE_MS } from './BuildScene';
 
 type Row = [string, string];
@@ -63,6 +64,7 @@ export function BuildSequence({ sizing, saving, onDone }: { sizing: SizingResult
     // The count and its unit have to agree: a number animating up to 16 under a "MWh" heading is
     // not a rounding slip, it is a plant a thousand times the one being drawn.
     const ratedScale = units.powerScale(sizing.ratedPowerMW), perUnitScale = units.energyScale(mwhPerUnit);
+    const cascade = energyCascade(sizing, 0);
     return [
       {
         label: 'Duty cycle', title: 'Reading the duty cycle',
@@ -94,11 +96,16 @@ export function BuildSequence({ sizing, saving, onDone }: { sizing: SizingResult
         value: mwhPerUnit * perUnitScale.factor,
         render: n => round(n, units.scaleDigits(mwhPerUnit * perUnitScale.factor)),
         unit: `${perUnitScale.unit} installed per enclosure`,
+        // The four factors between the label and the meter, in the order they are met. A reader who
+        // sees only "5.02 MWh installed per enclosure" and later "3.56 MWh deliverable" has to take
+        // the gap on trust; here the sequence shows what takes it, one line at a time.
         rows: [
-          ['Enclosure', sizing.enclosure.model],
-          ['DC window', `${round(sizing.dcVoltageWindow[0])}–${round(sizing.dcVoltageWindow[1])} V`],
-          ['Cooling', `${sizing.enclosure.cooling} · ${sizing.enclosure.ipRating}`],
-          ['Auxiliaries', `${units.energyText(sizing.auxMWhPerDay / Math.max(sizing.units, 1))}/day each`],
+          ['Nameplate', units.energyText(cascade.nameplateKWh / 1000)],
+          ...cascade.steps.filter(x => x.factor !== null && x.factor < 0.999).map(x =>
+            [x.label.replace('Usable state-of-charge window', 'Usable window')
+              .replace('Conversion and cable losses', 'Conversion and cables'),
+            `× ${x.factor!.toFixed(3)} → ${units.energyText(x.toKWh / 1000)}`] as [string, string]),
+          ['Less auxiliaries', `${units.energyText(cascade.deliverableKWh / 1000)} delivered`],
         ],
       },
       {
@@ -109,7 +116,7 @@ export function BuildSequence({ sizing, saving, onDone }: { sizing: SizingResult
           ['Power conversion', `${sizing.pcsCount} × ${units.powerText(sizing.pcs.ratedKW / 1000)}`],
           ['Footprint', `${round(sizing.footprintM2)} m²`],
           ['Mass', `${round(sizing.massTonnes)} t`],
-          ['Augmentations', sizing.augmentations.length ? `${sizing.augmentations.length} over ${sizing.input.projectYears} years` : `None · ${round(sizing.endOfLifeRetention * 100)} % at year ${sizing.input.projectYears}`],
+          ['Delivered at the connection', `${units.energyText(sizing.day1UsableMWh)} of ${units.energyText(sizing.installedDcMWh)}`],
         ],
         note: sizing.units > MAX_DRAWN ? `Showing ${MAX_DRAWN} of ${sizing.units} enclosures.` : undefined,
       },
