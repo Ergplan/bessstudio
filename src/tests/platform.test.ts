@@ -6,7 +6,7 @@ import {
   defaultSizingInput, sizeSystem, normaliseSizingInput, retentionAt, retentionFromTable,
   cellTemperature, temperatureFactor, suppliedRetention, defaultLossChain, recoveryHours, roundTripAc, type SizingInput,
 } from '../sizing/engine';
-import { evaluateFinance, annualBenefitUsd, chargingEnergyMWh } from '../sizing/finance';
+import { evaluateFinance, landedForSizing, annualBenefitUsd, chargingEnergyMWh } from '../sizing/finance';
 import { buildQuoteLines, createQuote, nextQuoteNumber, quoteTotals, reviseQuote, uplift } from '../quoting/quote';
 import { defaultOfferContent, energySchedule, offerOf, offerTotals, plantConfiguration } from '../quoting/offer';
 import { defaultBranding } from '../brand/brand';
@@ -524,14 +524,23 @@ describe('editable design inputs', () => {
     expect(directFinance.lines.some(l => l.id === 'civil')).toBe(true);
     expect(directFinance.capexUsd).toBeGreaterThan(landedFinance.capexUsd);
 
-    // The landed battery line must equal the delivered price of the fleet, to the rupee.
-    const perUnit = landedCost(landedBook.landed, sizing.installedDcMWh * 1000 / sizing.units, sizing.enclosure.ratedKW);
+    // The landed battery line must equal the delivered price of the fleet, to the rupee — read
+    // through the same function the product prices with, not a second copy of the arithmetic.
+    const perUnit = landedForSizing(sizing, landedBook);
     const batteryLine = landedFinance.lines.find(l => l.id === 'battery')!;
     expect(batteryLine.totalUsd).toBeCloseTo(sizing.units * perUnit.deliveredInr / landedBook.landed.exchangeRateInrPerUsd, 6);
-    // The issued proposal bundles one converter allowance per enclosure.
+    // This plant runs one 5 MW converter across six containers, which is not the arrangement the
+    // offer bundled its allowance for, so the converters installed are priced from the rate card.
+    expect(sizing.pcsCount).not.toBe(sizing.units);
     const pcsLine = landedFinance.lines.find(l => l.id === 'pcs')!;
     expect(pcsLine.quantity).toBe(sizing.units);
-    expect(pcsLine.totalUsd).toBeCloseTo(sizing.units * landedBook.landed.pcsCostInrPerUnit / landedBook.landed.exchangeRateInrPerUsd, 6);
+    expect(pcsLine.totalUsd).toBeCloseTo(sizing.units * perUnit.pcsInr / landedBook.landed.exchangeRateInrPerUsd, 6);
+    expect(pcsLine.totalUsd).toBeLessThan(sizing.units * landedBook.landed.pcsCostInrPerUnit / landedBook.landed.exchangeRateInrPerUsd);
+
+    // Where the design *is* that arrangement — a converter per container — the allowance stands.
+    const bundled = sizeSystem({ ...base(), equipment: 'pinned', enclosureId: 'enc-5mwh-20ft', pcsId: 'pcs-2507', powerMW: 2.5075, durationH: 1 });
+    expect(bundled.pcsCount).toBe(bundled.units);
+    expect(landedForSizing(bundled, landedBook).pcsInr).toBeCloseTo(landedBook.landed.pcsCostInrPerUnit, 6);
     // On the per-kW basis it follows the converters actually installed instead.
     const perKw = evaluateFinance(sizing, { ...landedBook, landed: { ...landedBook.landed, pcsBasis: 'per-installed-kw' as const } });
     const perKwLine = perKw.lines.find(l => l.id === 'pcs')!;
@@ -586,13 +595,10 @@ describe('offer document', () => {
 
   it('reconciles the per-enclosure build-up with the order value on the same page', () => {
     // The customer-facing build-up carries contingency and margin inside the basic rate.
+    // Struck by the same function the offer page uses, because a second copy of this arithmetic is
+    // exactly what drifted once the rates stopped being one number for every product.
     const factor = uplift(finance);
-    const sell = landedCost({
-      ...book.landed,
-      basicPriceUsdPerKWh: book.landed.basicPriceUsdPerKWh * factor,
-      pcsCostInrPerUnit: book.landed.pcsCostInrPerUnit * factor,
-      pcsCostInrPerKW: book.landed.pcsCostInrPerKW * factor,
-    }, finance.landed!.kWh, finance.landed!.ratedKW);
+    const sell = landedForSizing(sizing, book, factor);
     const enclosures = sizing.units * sell.deliveredInr, pcs = sizing.units * sell.pcsInr;
     // Anything outside the landed build-up — here the transformers — is carried as its own row, so
     // the three parts add up to the subtotal the customer sees.
@@ -612,11 +618,7 @@ describe('offer document', () => {
       sizing: supplyOnly, finance: soFinance, priceBook: book, currency: 'INR', number: 'N', ownerUid: 'u_sales',
       preparedBy: 'T', preparedByEmail: 't@example.com',
     });
-    const soFactor = uplift(soFinance);
-    const soSell = landedCost({
-      ...book.landed, basicPriceUsdPerKWh: book.landed.basicPriceUsdPerKWh * soFactor,
-      pcsCostInrPerUnit: book.landed.pcsCostInrPerUnit * soFactor, pcsCostInrPerKW: book.landed.pcsCostInrPerKW * soFactor,
-    }, soFinance.landed!.kWh, soFinance.landed!.ratedKW);
+    const soSell = landedForSizing(supplyOnly, book, uplift(soFinance));
     expect(Math.abs(supplyOnly.units * (soSell.deliveredInr + soSell.pcsInr) - soQuote.subtotal)).toBeLessThan(10);
   });
 

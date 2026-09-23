@@ -18,7 +18,8 @@
     "login": "npx -y firebase-tools@latest login",
     "test:rules": "firebase emulators:exec --only firestore --project bessstudio-rules-test \"vitest run --config vitest.rules.config.ts\"",
     "audit": "vitest run --config vitest.validation.config.ts validation/audit.test.ts",
-    "validate": "vitest run --config vitest.validation.config.ts validation/export-cases.test.ts && python3 validation/sam_reference.py && python3 validation/compare.py"
+    "validate": "vitest run --config vitest.validation.config.ts validation/export-cases.test.ts && python3 validation/sam_reference.py && python3 validation/compare.py",
+    "quote": "vitest run --config vitest.validation.config.ts validation/quote.test.ts"
   },
   "dependencies": {
     "@react-three/drei": "10.7.8",

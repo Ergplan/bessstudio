@@ -46,7 +46,18 @@ export const landedForSizing = (sizing: SizingResult, pb: PriceBook, factor = 1)
   const cardInrPerKW = pb.pcsPerKW[sizing.pcs.id] === undefined
     ? l.pcsCostInrPerKW                                           // no rate for this product: the offer's own rate
     : pb.pcsPerKW[sizing.pcs.id] * l.exchangeRateInrPerUsd * factor;
-  const perUnitPcsInr = bundleAppliesTo(l, sizing.enclosure.ratedKW)
+  /**
+   * The bundle is a price for one arrangement, not for anything shaped roughly like it.
+   *
+   * It was tested against the *enclosure's* rating, so any design built on a 2 507.5 kW container
+   * got the ₹32.5 lakh allowance whatever converter was actually chosen and however many: two
+   * containers with one 1 725 kW converter between them were billed two full allowances — ₹65 lakh
+   * for a converter the rate card prices at ₹28 lakh — and picking a smaller converter changed the
+   * quotation not at all. The offer bundled one 2 507.5 kW converter with each container; where the
+   * design is not that, the converters installed are priced from the rate card.
+   */
+  const isTheBundledArrangement = bundleAppliesTo(l, sizing.pcs.ratedKW) && sizing.pcsCount === sizing.units;
+  const perUnitPcsInr = isTheBundledArrangement
     ? undefined
     : cardInrPerKW * sizing.pcs.ratedKW * sizing.pcsCount / Math.max(sizing.units, 1);
   return landedCost(l, sizing.installedDcMWh * 1000 / sizing.units, sizing.enclosure.ratedKW, perUnitPcsInr);
@@ -108,7 +119,12 @@ export function costLines(sizing: SizingResult, pb: PriceBook): CostLine[] {
         `FOB $${(landed.fobUsd / Math.max(landed.kWh, 1e-9)).toFixed(0)}/kWh + ${pb.landed.oceanFreightPct}% freight + ${pb.landed.customsDutyPct}% duty + ${pb.landed.inlandClearancePct}% clearance`),
       pb.landed.pcsBasis === 'per-enclosure'
         ? line('pcs', 'equipment', `${sizing.pcs.model} power conversion system`, sizing.units, 'enclosure', landed.pcsInr / fx,
-            `One converter allowance per enclosure; ${sizing.pcsCount} × ${sizing.pcs.ratedKW} kW installed · ${sizing.pcs.approvedVendors.slice(0, 3).join(', ')}`)
+            // The note has to say which basis produced the number beside it. It claimed the bundled
+            // allowance whatever had actually been used, which on a plant sharing one converter
+            // across several enclosures was a sentence describing a different price.
+            `${bundleAppliesTo(pb.landed, sizing.pcs.ratedKW) && sizing.pcsCount === sizing.units
+              ? 'The offer\'s bundled allowance, one converter per enclosure'
+              : `Rate card, ${sizing.pcsCount} × ${sizing.pcs.ratedKW} kW spread across ${sizing.units} ${sizing.units === 1 ? "enclosure" : "enclosures"}`}; ${sizing.pcsCount} × ${sizing.pcs.ratedKW} kW installed · ${sizing.pcs.approvedVendors.slice(0, 3).join(', ')}`)
         : line('pcs', 'equipment', `${sizing.pcs.model} power conversion system`, sizing.pcsCount * sizing.pcs.ratedKW, 'kW', pb.landed.pcsCostInrPerKW / fx,
             `${sizing.pcsCount} × ${sizing.pcs.ratedKW} kW · ${sizing.pcs.approvedVendors.slice(0, 3).join(', ')}`),
     );

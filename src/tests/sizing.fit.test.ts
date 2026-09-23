@@ -169,10 +169,26 @@ describe('what the ladder costs', () => {
     // eighty-one per cent of that system's price.
     expect(fleetPcsInr).toBeLessThan(100_000);
 
-    // The bundled allowance still stands where it was quoted: 2 507.5 kW with a container.
-    const reference = plant(2.5, 4, 'solar-shifting');
-    expect(landedForSizing(reference.sizing, defaultPriceBook).pcsInr).toBeCloseTo(3_250_000, 6);
+    // The bundled allowance stands where the design is the arrangement it was quoted for: one
+    // 2 507.5 kW converter with each container. It is a price for one arrangement, not for anything
+    // shaped roughly like it — two containers sharing a 1 725 kW converter were billed two full
+    // allowances, ₹65 lakh for a converter the rate card prices at ₹28 lakh, and choosing the
+    // smaller converter changed the quotation not at all.
+    const bundled = sizeSystem({
+      ...defaultSizingInput('peak-shaving'), equipment: 'pinned',
+      enclosureId: 'enc-5mwh-20ft', pcsId: 'pcs-2507', powerMW: 2.5075, durationH: 1,
+    });
+    expect(bundled.pcsCount).toBe(bundled.units);
+    expect(landedForSizing(bundled, defaultPriceBook).pcsInr).toBeCloseTo(3_250_000, 6);
     expect(offerPcsInrPerKW * 2507.5).toBeCloseTo(3_250_000, 6);
+
+    // And a plant running one converter across several containers pays for one converter.
+    const shared = plant(2.5, 4, 'solar-shifting');
+    expect(shared.sizing.pcsCount).toBeLessThan(shared.sizing.units);
+    const fleetPcs = landedForSizing(shared.sizing, defaultPriceBook).pcsInr * shared.sizing.units;
+    expect(fleetPcs).toBeCloseTo(
+      defaultPriceBook.pcsPerKW[shared.sizing.pcs.id] * shared.sizing.pcs.ratedKW * shared.sizing.pcsCount * fx, 6);
+    expect(fleetPcs).toBeLessThan(shared.sizing.units * 3_250_000);
   });
 
   it('charges each enclosure its own import rate rather than the container rate', () => {
