@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
+import * as units from '../../domain/units';
 import { Card, Badge, Empty, Field, Modal, TextInput, date } from '../components/ui';
 import { useWorkspace } from '../../platform/workspace';
 import { useSession } from '../../platform/auth';
@@ -69,7 +70,7 @@ export function Projects() {
                   <td><Link href={`/app/customers?id=${p.customerId}`}>{p.customerName}</Link></td>
                   <td>{application(p.sizing.applicationId).name}</td>
                   <td className="num">{s ? `${s.ratedPowerMW.toFixed(2)} MW` : '—'}</td>
-                  <td className="num">{s ? `${s.requiredUsableMWh.toFixed(1)} MWh` : '—'}</td>
+                  <td className="num">{s ? units.energyText(s.requiredUsableMWh) : '—'}</td>
                   <td className="num">{s?.totalUnits ?? '—'}</td>
                   <td>{errors ? <Badge tone="bad">{errors} error{errors > 1 ? 's' : ''}</Badge> : warns ? <Badge tone="warn">{warns} to review</Badge> : <Badge tone="good">Clear</Badge>}</td>
                   <td><Badge tone={p.status === 'awarded' ? 'good' : p.status === 'quoted' ? 'info' : 'neutral'}>{p.status}</Badge></td>

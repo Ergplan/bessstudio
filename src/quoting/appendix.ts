@@ -4,6 +4,7 @@ import type { SimulationRun, TimeSeriesResult } from '../sim/records';
 import { badgeLabels, badgeMeanings, type EvidenceBadge } from '../sim/provenance';
 import type { SizingResult } from '../sizing/engine';
 import type { UpsRequirement, UpsOption } from '../sim/ups';
+import * as units from '../domain/units';
 
 /**
  * The engineering appendix, and the three rules that do not bend.
@@ -135,9 +136,9 @@ export function engineeringAppendix(input: AppendixInput): EngineeringAppendix {
     heading: 'The plant, as configured',
     status: 'reviewed',
     rows: [
-      { label: 'Nominal energy', value: `${sizing.installedDcMWh.toFixed(2)} MWh` },
-      { label: 'Usable energy, day one', value: `${sizing.day1UsableMWh.toFixed(2)} MWh` },
-      { label: 'Power at the AC boundary', value: `${sizing.ratedPowerMW.toFixed(2)} MW` },
+      { label: 'Nominal energy', value: units.energyText(sizing.installedDcMWh) },
+      { label: 'Usable energy, day one', value: units.energyText(sizing.day1UsableMWh) },
+      { label: 'Power at the AC boundary', value: units.powerText(sizing.ratedPowerMW) },
       { label: 'Round-trip efficiency, AC to AC', value: `${(sizing.rteAc * 100).toFixed(1)}%` },
       { label: 'Enclosures', value: `${sizing.units} × ${sizing.enclosure.model}` },
       { label: 'Converters', value: `${sizing.pcsCount} × ${sizing.pcs.model}` },

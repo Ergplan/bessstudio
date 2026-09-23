@@ -5,11 +5,12 @@ import { brand } from '../../brand/brand';
 import { useSession } from '../../platform/auth';
 import { repository } from '../../platform/repo';
 import { nowIso, uid, type Customer, type Project } from '../../platform/types';
-import { defaultSizingInput, sizeSystem } from '../../sizing/engine';
+import { connectionKV, defaultSizingInput, sizeSystem } from '../../sizing/engine';
 import { newProject as makeProject, HOLDING_ACCOUNT } from '../../platform/projects';
 import { application, applications, type ApplicationId } from '../../sizing/applications';
 import { BuildSequence } from '../landing/BuildSequence';
 import '../landing/landing.css';
+import * as units from '../../domain/units';
 
 const number = (value: string | null, fallback: number) => {
   const n = Number(value);
@@ -56,7 +57,7 @@ export function Start() {
     if (!org || !user || !sizing || started.current) return;
     started.current = true;
     try {
-      const label = `${powerMW >= 1 ? powerMW.toFixed(powerMW % 1 ? 2 : 0) : `${Math.round(powerMW * 1000)} k`}${powerMW >= 1 ? ' MW' : 'W'} / ${sizing.requiredUsableMWh.toFixed(sizing.requiredUsableMWh < 10 ? 2 : 0)} MWh`;
+      const label = `${units.powerText(powerMW)} / ${units.energyText(sizing.requiredUsableMWh)}`;
 
       const repo = repository();
       // New opportunities land against a holding account until the real customer is known.
@@ -70,7 +71,10 @@ export function Start() {
 
       const already = (await repo.list(org.id, 'projects')).filter(p => p.customerId === customer.id).length;
       const project: Project = makeProject({
-        orgId: org.id, customer, existing: already, sizing: sizingInput,
+        // The opening question asks for power and hours, not for a connection voltage, so the
+        // design opens at the one it actually makes: a five-kilowatt supply with a 230 V inverter
+        // and no transformer should not open carrying the grid-scale default of 33 kV.
+        orgId: org.id, customer, existing: already, sizing: { ...sizingInput, gridKV: connectionKV(sizing) },
         name: `${label} · ${application(applicationId).name}`,
         by: { uid: user.uid, displayName: user.displayName },
       });
@@ -90,7 +94,7 @@ export function Start() {
   }, [played, projectId, router]);
 
   const onDone = useCallback(() => setPlayed(true), []);
-  const summary = `${powerMW >= 1 ? `${powerMW} MW` : `${Math.round(powerMW * 1000)} kW`} · ${dischargeH} h discharge · ${chargeH} h charge`;
+  const summary = `${units.powerText(powerMW)} · ${dischargeH} h discharge · ${chargeH} h charge`;
 
   if (ready && user && org && sizing && !error) {
     return <div className="landing"><BuildSequence sizing={sizing} saving={!projectId} onDone={onDone} /></div>;

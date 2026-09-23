@@ -2,6 +2,7 @@ import type { SizingResult } from '../sizing/engine';
 import type { FinanceResult } from '../sizing/finance';
 import { cellOf, packOf } from '../catalog/products';
 import type { Organization, Quote } from '../platform/types';
+import * as units from '../domain/units';
 
 /**
  * Narrative content of the offer document. Everything here is editable on the quotation; the
@@ -37,9 +38,9 @@ export function defaultOfferContent(args: {
 
   return {
     reference: args.number,
-    title: `${powerMW >= 1 ? powerMW.toFixed(0) : powerMW.toFixed(2)} MW / ${energyMWh >= 10 ? energyMWh.toFixed(0) : energyMWh.toFixed(1)} MWh`,
+    title: `${units.powerText(powerMW)} / ${units.energyText(energyMWh)}`,
     subtitle: `${enc.cooling === 'liquid' ? 'Liquid-Cooled' : 'Air-Cooled'} ${cell.chemistry} Battery Energy Storage System`,
-    configuration: `${sizing.units} × ${(sizing.installedDcMWh / sizing.units).toFixed(3)} MWh ${enc.cooling}-cooled ${enc.family === 'container' ? 'enclosures' : enc.family + 's'}`,
+    configuration: `${sizing.units} × ${units.energyText(sizing.installedDcMWh / sizing.units)} ${enc.cooling}-cooled ${enc.family === 'container' ? 'enclosures' : enc.family + 's'}`,
     submittedTo: args.customerName,
     attentionName: args.contactName ?? '', attentionEmail: args.contactEmail ?? '',
     priceBasis: 'Inclusive of GST, freight delivered at site',
@@ -54,12 +55,12 @@ export function defaultOfferContent(args: {
       { title: 'Single point of accountability', body: 'Manufacturing, supply, commissioning support and warranty under one contract, serviced from the works.' },
     ],
     qualifications: [
-      `Figures are derived from the ${b.displayName} BESS sizing model for a single ${(sizing.installedDcMWh / sizing.units).toFixed(3)} MWh enclosure, scaled linearly to ${sizing.units} enclosures.`,
+      `Figures are derived from the ${b.displayName} BESS sizing model for a single ${units.energyText(sizing.installedDcMWh / sizing.units)} enclosure, scaled linearly to ${sizing.units} enclosures.`,
       // Two figures for energy appear on the document — what is installed and what is contracted —
       // and on a power-limited duty they are a factor of four apart. Left unexplained, that reads
       // as an over-specified plant rather than as the duty the customer asked for.
-      `Nameplate energy of ${sizing.installedDcMWh.toFixed(1)} MWh carries a contracted ${sizing.requiredUsableMWh.toFixed(0)} MWh, a factor of ${(sizing.installedDcMWh / Math.max(sizing.requiredUsableMWh, 1e-9)).toFixed(1)}. ${sizing.binding === 'power'
-        ? `The fleet is set by power, not energy: ${Math.max(sizing.ratedPowerMW, sizing.chargePowerMW).toFixed(1)} MW across enclosures rated ${(enc.ratedKW / 1000).toFixed(3)} MW takes ${sizing.unitsForPower} enclosures, where the contracted energy alone would take ${sizing.unitsForEnergy}.`
+      `Nameplate energy of ${units.energyText(sizing.installedDcMWh)} carries a contracted ${units.energyText(sizing.requiredUsableMWh)}, a factor of ${(sizing.installedDcMWh / Math.max(sizing.requiredUsableMWh, 1e-9)).toFixed(1)}. ${sizing.binding === 'power'
+        ? `The fleet is set by power, not energy: ${units.powerText(Math.max(sizing.ratedPowerMW, sizing.chargePowerMW))} across enclosures rated ${units.powerText(enc.ratedKW / 1000)} takes ${sizing.unitsForPower} enclosures, where the contracted energy alone would take ${sizing.unitsForEnergy}.`
         : `The fleet is set by the energy it must still deliver in its design year, which takes ${sizing.unitsForEnergy} enclosures against the ${sizing.unitsForPower} its rated power alone would need.`} Each cycle then uses ${Math.round(sizing.input.dod * sizing.input.losses.usableDcWindow * 100)}% of nameplate — ${Math.round(sizing.input.dod * 100)}% depth of discharge within a ${Math.round(sizing.input.losses.usableDcWindow * 100)}% usable DC window.`,
       `Capacity retention follows the modelled degradation curve at ${Math.round(sizing.input.cyclesPerDay * sizing.input.daysPerYear)} cycles per year and the stated operating window.`,
       'Energy supplied to the customer is measured at the AC delivery point after DC cable, conversion, AC cable and transformer losses and after auxiliary consumption.',
@@ -122,16 +123,17 @@ export function plantConfiguration(sizing: SizingResult) {
   return [
     { sl: 1, parameter: `Cell — prismatic ${cell.chemistry}`, unit: `${cell.nominalV} V / ${cell.ah} Ah = ${(cell.nominalV * cell.ah / 1000).toFixed(3)} kWh`, total: `${sizing.cells.toLocaleString()} cells` },
     { sl: 2, parameter: `Battery pack — ${pack.model}`, unit: `${pack.parallel}P${pack.series}S, ${pack.nominalV} V, ${pack.labelKWh} kWh`, total: `${sizing.packs.toLocaleString()} packs` },
-    { sl: 3, parameter: `Enclosure — ${enc.cooling}-cooled ESS`, unit: `${enc.racks * enc.packsPerRack} packs = ${unitMWh.toFixed(3)} MWh`, total: `${sizing.units} enclosures` },
-    { sl: 4, parameter: 'Nominal DC power', unit: `${(enc.ratedKW / 1000).toFixed(3)} MW per enclosure`, total: `${(sizing.units * enc.ratedKW / 1000).toFixed(1)} MW` },
-    { sl: 5, parameter: 'Nameplate energy at BOL', unit: `${unitMWh.toFixed(3)} MWh per enclosure`, total: `${sizing.installedDcMWh.toFixed(1)} MWh` },
-    { sl: 6, parameter: 'Contracted rating', unit: '—', total: `${sizing.ratedPowerMW.toFixed(1)} MW / ${sizing.requiredUsableMWh.toFixed(0)} MWh` },
+    { sl: 3, parameter: `Enclosure — ${enc.cooling}-cooled ESS`, unit: `${enc.racks * enc.packsPerRack} packs = ${units.energyText(unitMWh)}`, total: `${sizing.units} enclosures` },
+    { sl: 4, parameter: 'Nominal DC power', unit: `${units.powerText(enc.ratedKW / 1000)} per enclosure`, total: units.powerText(sizing.units * enc.ratedKW / 1000) },
+    { sl: 5, parameter: 'Nameplate energy at BOL', unit: `${units.energyText(unitMWh)} per enclosure`, total: units.energyText(sizing.installedDcMWh) },
+    { sl: 6, parameter: 'Contracted rating', unit: '—', total: `${units.powerText(sizing.ratedPowerMW)} / ${units.energyText(sizing.requiredUsableMWh)}` },
     // The plant's own rates, not the pack's rating printed twice. A plant running at 0.23 C
     // described to its customer as a 0.50 C plant is describing the product's limit, not the duty
     // it was sized for — and the two are only ever the same on a plant with no margin at all.
     { sl: 7, parameter: 'Duration / C-rate', unit: `${sizing.effectiveDurationH.toFixed(1)} hours at rated power`, total: `${sizing.chargeCRate.toFixed(2)} C charge / ${sizing.systemCRate.toFixed(2)} C discharge, against ${sizing.packCRate.toFixed(2)} C continuous` },
-    { sl: 8, parameter: 'Enclosure footprint', unit: `${(enc.lengthMm / 1000).toFixed(3)} × ${(enc.widthMm / 1000).toFixed(3)} m = ${(enc.lengthMm * enc.widthMm / 1e6).toFixed(1)} m²`, total: `≈ ${Math.round(sizing.footprintM2).toLocaleString()} m² enclosure footprint` },
-    { sl: 9, parameter: 'Power conversion', unit: `${sizing.pcs.model}`, total: `${sizing.pcsCount} × ${(sizing.pcs.ratedKW / 1000).toFixed(3)} MW` },
+    // A rack that occupies a quarter of a square metre is not "≈ 0 m²" of site.
+    { sl: 8, parameter: 'Enclosure footprint', unit: `${(enc.lengthMm / 1000).toFixed(3)} × ${(enc.widthMm / 1000).toFixed(3)} m = ${(enc.lengthMm * enc.widthMm / 1e6).toFixed(2)} m²`, total: `≈ ${sizing.footprintM2.toLocaleString('en', { maximumFractionDigits: sizing.footprintM2 < 10 ? 2 : 0 })} m² enclosure footprint` },
+    { sl: 9, parameter: 'Power conversion', unit: `${sizing.pcs.model}`, total: `${sizing.pcsCount} × ${units.powerText(sizing.pcs.ratedKW / 1000)}` },
     ...(sizing.transformer ? [{ sl: 10, parameter: 'LV/MV transformer', unit: `${(sizing.transformer.ratedKVA / 1000).toFixed(1)} MVA, ${sizing.transformer.lvKV} / ${sizing.transformer.hvKV} kV`, total: `${sizing.transformerCount} units` }] : []),
   ];
 }

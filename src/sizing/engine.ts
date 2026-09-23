@@ -94,6 +94,7 @@ export const warningTitles: Record<string, string> = {
   headroom: 'Where the installed energy goes',
   'power-limited': 'Power sets the size, not energy',
   'pcs-granularity': 'Conversion capacity rounded up',
+  'grid-voltage': 'Connection voltage and what reaches it',
   'idt-discharge': 'Transformer loss on discharge',
   'degradation-extrapolated': 'Degradation schedule extrapolated',
   validation: 'Basis of this sizing',
@@ -141,6 +142,12 @@ export const defaultSizingInput = (applicationId: ApplicationId = 'peak-shaving'
     losses: defaultLossChain(), degradation: defaultDegradation(),
   };
 };
+
+/**
+ * The voltage a design actually presents at its boundary: the transformer's high side, or the
+ * converter's own terminals where no transformer is in scope.
+ */
+export const connectionKV = (s: SizingResult) => (s.transformer ? s.transformer.hvKV : s.pcs.acV / 1000);
 
 /** Cell temperature seen by the ageing model, from ambient and the cooling strategy. */
 export const cellTemperature = (ambientC: number, cooling: EnclosureSpec['cooling']) =>
@@ -522,6 +529,18 @@ export function sizeSystem(raw: SizingInput): SizingResult {
     });
   }
   if (enclosure.dcMinV < pcs.dcMinV) warnings.push({ code: 'dc-window-low', level: 'warning', text: `String minimum ${enclosure.dcMinV} V falls below the ${pcs.model} minimum of ${pcs.dcMinV} V; usable energy at low state of charge is curtailed.` });
+
+  // What the plant actually presents at its boundary, against the connection it is said to make.
+  // A five-kilowatt supply with a 230 V inverter and no transformer was carrying a declared 33 kV
+  // connection because that is what the form opened with. Either a transformer is missing from the
+  // scope or the stated voltage is not this plant's — and both are worth saying out loud.
+  const boundaryKV = transformer ? transformer.hvKV : pcs.acV / 1000;
+  if (Math.abs(input.gridKV - boundaryKV) > Math.max(boundaryKV * 0.05, 0.02)) warnings.push({
+    code: 'grid-voltage', level: 'warning',
+    text: transformer
+      ? `The ${transformer.model} steps up to ${transformer.hvKV} kV, against a connection stated at ${input.gridKV} kV. Either the transformer or the stated connection voltage needs changing before the single-line diagram is drawn.`
+      : `With no transformer in scope the plant presents ${pcs.acV} V at the ${pcs.model} terminals, against a connection stated at ${input.gridKV} kV. Add a transformer or restate the connection as ${boundaryKV < 1 ? `${pcs.acV} V` : `${boundaryKV} kV`}.`,
+  });
   if (input.ambientC > cell.dischargeTempC[1]) warnings.push({ code: 'ambient-high', level: 'error', text: `Design ambient ${input.ambientC} °C exceeds the cell discharge limit of ${cell.dischargeTempC[1]} °C.` });
   if (input.ambientC > 40 && enclosure.cooling === 'air') warnings.push({ code: 'cooling', level: 'warning', text: 'Air-cooled system at high ambient: derating and accelerated ageing are likely. Consider a liquid-cooled product.' });
   if (input.altitudeM > 2000) warnings.push({ code: 'altitude', level: 'warning', text: `Altitude ${input.altitudeM} m requires insulation-coordination and cooling derating review.` });

@@ -2,6 +2,7 @@ import { type SizingResult } from '../sizing/engine';
 import { type FinanceResult } from '../sizing/finance';
 import { atRate, currencies, localRate, toLocal, type Currency, type PriceBook } from '../catalog/pricing';
 import { nowIso, uid, type Customer, type Project, type Quote, QuoteKind, type QuoteLine } from '../platform/types';
+import * as units from '../domain/units';
 
 export const scopeIncludedDefault = [
   'Supply of battery energy storage enclosures with integrated BMS, thermal management and fire detection',
@@ -27,7 +28,7 @@ export const assumptionsDefault = (sizing: SizingResult) => {
     `Design ambient temperature ${sizing.input.ambientC} °C at ${sizing.input.altitudeM} m altitude; site thermal study to confirm.`,
     `Grid connection at ${sizing.input.gridKV} kV, ${sizing.input.frequencyHz} Hz, power factor ${sizing.input.powerFactor}.`,
     `Efficiency chain: ${(L.dcCableLoss * 100).toFixed(2)}% DC cable, ${(L.pcsLoss * 100).toFixed(2)}% conversion, ${(L.acCableLoss * 100).toFixed(2)}% AC cable and ${(L.idtLoss * 100).toFixed(2)}% transformer loss, giving ${(sizing.rteAc * 100).toFixed(1)}% round trip at AC.`,
-    `Auxiliary consumption of ${sizing.auxMWhPerDay.toFixed(2)} MWh per day across the installed fleet.`,
+    `Auxiliary consumption of ${units.energyText(sizing.auxMWhPerDay)} per day across the installed fleet.`,
     // The schedule describes one enclosure ageing from the day it was installed; the performance
     // table shows the fleet, which augmentation refreshes. Quoting the first beside the second
     // without saying which is which put 74% and 77% for the same year in one document.

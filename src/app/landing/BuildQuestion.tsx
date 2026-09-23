@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, X } from 'lucide-react';
+import * as units from '../../domain/units';
 import { applications, type ApplicationId } from '../../sizing/applications';
 import { defaultSizingInput, sizeSystem } from '../../sizing/engine';
 
@@ -103,8 +104,8 @@ export function BuildQuestion({ onClose }: { onClose: () => void }) {
         {preview ? (
           <>
             {[
-              [`${preview.requiredUsableMWh.toFixed(preview.requiredUsableMWh < 10 ? 2 : 1)} MWh`, 'Usable energy'],
-              [`${preview.units} units`, `× ${(preview.installedDcMWh / preview.units).toFixed(2)} MWh enclosure`],
+              [units.energyText(preview.requiredUsableMWh), 'Usable energy'],
+              [`${preview.units} units`, `× ${units.energyText(preview.installedDcMWh / preview.units)} enclosure`],
               [`${preview.systemCRate.toFixed(2)} / ${preview.chargeCRate.toFixed(2)} C`, 'Discharge / charge rate'],
               [`${preview.pcsCount} × ${(preview.pcs.ratedKW / 1000).toFixed(2)} MW`, 'Power conversion'],
             ].map(([v, k]) => <div key={k}><b>{v}</b><span className="l-label">{k}</span></div>)}

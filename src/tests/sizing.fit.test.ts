@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultSizingInput, fitEquipment, sizeSystem, type SizingInput } from '../sizing/engine';
+import { connectionKV, defaultSizingInput, fitEquipment, sizeSystem, type SizingInput } from '../sizing/engine';
 import { evaluateFinance, landedForSizing } from '../sizing/finance';
 import { defaultPriceBook, landedRatesFor, offerPcsInrPerKW } from '../catalog/pricing';
 import { enclosures, packSpecs, transformers, enclosureCRate } from '../catalog/products';
@@ -178,5 +178,33 @@ describe('the catalogue agrees with itself', () => {
   it('offers a transformer small enough for a plant that needs one at all', () => {
     const smallest = Math.min(...transformers.map(t => t.ratedKVA));
     expect(smallest).toBeLessThanOrEqual(500);
+  });
+});
+
+/**
+ * What the plant presents at its boundary, against the connection it says it makes.
+ */
+describe('the connection voltage', () => {
+  it('says so when nothing in the design can reach the stated voltage', () => {
+    const small = sizeSystem({
+      ...defaultSizingInput('backup-power'), mode: 'power-duration',
+      powerMW: 0.005, durationH: 1, chargeDurationH: 1, gridKV: 33,
+    });
+    expect(small.transformer).toBeNull();
+    const w = small.warnings.find(x => x.code === 'grid-voltage');
+    expect(w?.text).toContain('230 V');
+  });
+
+  it('is quiet where the design already makes the connection it claims', () => {
+    const small = sizeSystem({
+      ...defaultSizingInput('backup-power'), mode: 'power-duration',
+      powerMW: 0.005, durationH: 1, chargeDurationH: 1, gridKV: 0.23,
+    });
+    expect(small.warnings.some(w => w.code === 'grid-voltage')).toBe(false);
+    expect(connectionKV(small)).toBeCloseTo(0.23, 6);
+
+    const big = sizeSystem({ ...defaultSizingInput('solar-shifting'), mode: 'power-duration', powerMW: 2.5, durationH: 4, chargeDurationH: 4, gridKV: 33 });
+    expect(connectionKV(big)).toBe(33);
+    expect(big.warnings.some(w => w.code === 'grid-voltage')).toBe(false);
   });
 });

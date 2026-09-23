@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { brand } from '../../brand/brand';
+import * as units from '../../domain/units';
 import { atRate, formatMoney, fromLanded, localRate, type Currency } from '../../catalog/pricing';
 import { uplift } from '../../quoting/quote';
 import { packOf, cellOf } from '../../catalog/products';
@@ -64,8 +65,8 @@ const Section = ({ n, title, note, children }: { n: number; title: string; note?
 );
 
 /** Twenty-year energy chart: two stacked plots on one shared year axis, never a second scale. */
-function EnergyChart({ rows, accent, navy }: { rows: ReturnType<typeof energySchedule>; accent: string; navy: string }) {
-  const years = rows.filter(r => r.year > 0);
+function EnergyChart({ rows, accent, navy, scale }: { rows: ReturnType<typeof energySchedule>; accent: string; navy: string; scale: { factor: number; unit: string } }) {
+  const years = rows.filter(r => r.year > 0).map(r => ({ ...r, suppliedGWh: r.suppliedGWh * scale.factor, chargingGWh: r.chargingGWh * scale.factor }));
   if (!years.length) return null;
   const w = 720, padL = 44, padR = 12, barsH = 86, lineH = 34, gap = 10;
   const maxE = Math.max(...years.map(r => Math.max(r.suppliedGWh, r.chargingGWh))) * 1.1 || 1;
@@ -78,7 +79,7 @@ function EnergyChart({ rows, accent, navy }: { rows: ReturnType<typeof energySch
     <>
       <svg className="offer-chart" viewBox={`0 0 ${w} ${barsH + gap + lineH + 18}`} role="img" aria-label="Annual energy and capacity retention over the project life">
         {ticks.map(t => <g key={t}><line x1={padL} x2={w - padR} y1={yE(t)} y2={yE(t)} stroke="#E4EAEE" strokeWidth="1" /><text x={padL - 6} y={yE(t) + 3} textAnchor="end" fontSize="8">{t}</text></g>)}
-        <text x={padL - 6} y={10} textAnchor="end" fontSize="8" fontWeight="600">GWh</text>
+        <text x={padL - 6} y={10} textAnchor="end" fontSize="8" fontWeight="600">{scale.unit.replace('/yr', '')}</text>
         {years.map((r, i) => (
           <g key={r.year}>
             <rect x={x(i) - bw - 1} y={yE(r.chargingGWh)} width={bw} height={barsH - yE(r.chargingGWh)} rx="1.5" fill="#B9CCDA" />
@@ -111,6 +112,13 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
   const rows = allRows.length > 21 ? allRows.slice(0, 21) : allRows;
   const truncated = allRows.length - rows.length;
   const unitMWh = sizing.installedDcMWh / sizing.units;
+  // A proposal for a 16 kWh cabinet that states its rated energy as "0.016 MWh" is not a document
+  // anybody reads twice. Each column takes the scale of the figures in it, stated in its heading.
+  const dc = units.energyScale(sizing.installedDcMWh), perUnit = units.energyScale(unitMWh);
+  const perCycle = units.energyScale(sizing.day1UsableMWh);
+  const annualPeak = Math.max(...allRows.map(r => Math.max(r.suppliedGWh, r.chargingGWh)), 0);
+  const annual = annualPeak >= 1 ? { factor: 1, unit: 'GWh/yr' }
+    : annualPeak >= 1e-3 ? { factor: 1e3, unit: 'MWh/yr' } : { factor: 1e6, unit: 'kWh/yr' };
   const rate = localRate(priceBook, local);
 
   // The build-up on the customer's page is a SELLING price build-up: contingency and margin ride
@@ -147,8 +155,8 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
 
         <div className="stat-row">
           {[
-            [`${num(sizing.installedDcMWh, 1)} MWh`, 'Nameplate energy'],
-            [`${num(sizing.units * enc.ratedKW / 1000, 1)} MW`, 'Nominal DC power'],
+            [units.energyText(sizing.installedDcMWh), 'Nameplate energy'],
+            [units.powerText(sizing.units * enc.ratedKW / 1000), 'Nominal DC power'],
             [`${sizing.input.projectYears} years`, 'Design life modelled'],
             [`≥ ${num(cell.cycleLife)}`, `Cycles at ${Math.round(cell.cycleLifeDod * 100)}% DoD`],
           ].map(([v, k]) => <div className="stat-tile" key={k} style={{ background: b.primary, borderBottomColor: b.accent }}><b>{v}</b><span>{k}</span></div>)}
@@ -158,7 +166,7 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
           {content.coverImage
             ? <img src={content.coverImage} alt={`${enc.model} assembly`} />
             : <EnclosureDiagram sizing={sizing} accent={b.accent} navy={b.primary} />}
-          <figcaption>{enc.cooling === 'liquid' ? 'Liquid-cooled' : 'Air-cooled'} {unitMWh.toFixed(3)} MWh enclosure{content.coverImage ? '' : ' — cut-away'}. Illustrative; the approved general arrangement drawing governs.</figcaption>
+          <figcaption>{enc.cooling === 'liquid' ? 'Liquid-cooled' : 'Air-cooled'} {units.energyText(unitMWh)} enclosure{content.coverImage ? '' : ' — cut-away'}. Illustrative; the approved general arrangement drawing governs.</figcaption>
         </figure>
 
         <div className="two-col">
@@ -199,7 +207,7 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
 
       {/* ------------------------------------------------------------- technical */}
       <Page n={2} org={org} content={content} title="Technical & Commercial Proposal">
-        <Section n={1} title="Plant Configuration" note={`How the contracted ${sizing.ratedPowerMW.toFixed(1)} MW / ${sizing.requiredUsableMWh.toFixed(0)} MWh rating is built up from the repeating units.`}>
+        <Section n={1} title="Plant Configuration" note={`How the contracted ${units.powerText(sizing.ratedPowerMW)} / ${units.energyText(sizing.requiredUsableMWh)} rating is built up from the repeating units.`}>
           <table className="offer-table">
             <thead><tr><th style={{ width: '8%' }}>Sl.</th><th style={{ width: '34%' }}>Parameter</th><th>Unit value</th><th>Plant total</th></tr></thead>
             <tbody>{plantConfiguration(sizing).map(r => (
@@ -213,8 +221,8 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
             <table className="offer-table spec-table">
               <thead><tr><th>Enclosure</th><th>Specification</th></tr></thead>
               <tbody>
-                <tr><td>Rated energy</td><td>{unitMWh.toFixed(3)} MWh ({enc.racks * enc.packsPerRack} × {pack.labelKWh} kWh)</td></tr>
-                <tr><td>Nominal DC power</td><td>{(enc.ratedKW / 1000).toFixed(3)} MW at {sizing.packCRate.toFixed(2)} C</td></tr>
+                <tr><td>Rated energy</td><td>{units.energyText(unitMWh)} ({enc.racks * enc.packsPerRack} × {pack.labelKWh} kWh)</td></tr>
+                <tr><td>Nominal DC power</td><td>{units.powerText(enc.ratedKW / 1000)} at {sizing.packCRate.toFixed(2)} C</td></tr>
                 <tr><td>Cell count</td><td>{num(sizing.cells / sizing.units)} prismatic {cell.chemistry} cells</td></tr>
                 <tr><td>Cooling</td><td>{enc.cooling === 'liquid' ? 'Liquid-cooled, closed-loop to every rack' : 'Forced-air cooling'}</td></tr>
                 <tr><td>Dimensions L×W×H</td><td>{num(enc.lengthMm)} × {num(enc.widthMm, 1)} × {num(enc.heightMm)} mm</td></tr>
@@ -292,15 +300,15 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
               ['PCS losses', `${(L.pcsLoss * 100).toFixed(2)}%`],
               ['AC cable losses', `${(L.acCableLoss * 100).toFixed(2)}%`],
               ['Inverter duty transformer', `${(L.idtLoss * 100).toFixed(2)}%`],
-              ['Auxiliaries, each way', `${(enc.auxMWhPerDayCharge * L.auxScale).toFixed(2)} MWh/day`],
+              ['Auxiliaries, each way', `${units.energyText(enc.auxMWhPerDayCharge * L.auxScale)}/day`],
             ].map(([k, v]) => <div className="chip" key={k} style={{ borderLeftColor: b.accent }}><span>{k}</span><b>{v}</b></div>)}
           </div>
 
           <table className="offer-table">
             <thead><tr>
               <th>Year</th><th className="num">Annual cycles</th><th className="num">Capacity retention</th>
-              <th className="num">Max DC energy stored (MWh)</th><th className="num">AC energy dispatched per cycle (MWh)</th>
-              <th className="num">Energy supplied to customer (GWh/yr)</th><th className="num">Charging energy required (GWh/yr)</th>
+              <th className="num">Max DC energy stored ({dc.unit})</th><th className="num">AC energy dispatched per cycle ({perCycle.unit})</th>
+              <th className="num">Energy supplied to customer ({annual.unit})</th><th className="num">Charging energy required ({annual.unit})</th>
             </tr></thead>
             <tbody>{rows.map(r => (
               <tr key={r.year}>
@@ -310,21 +318,21 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
                 {/* A decimal place: at whole megawatt-hours a fleet that fades a percent a year
                     and steps up at each augmentation reads as a column of numbers going up and
                     down at random. */}
-                <td className="num">{num(r.storedMWh, 1)}</td>
-                <td className="num">{r.year === 0 ? '—' : num(r.usablePerCycleMWh, 1)}</td>
-                <td className="num">{r.year === 0 ? '—' : num(r.suppliedGWh, 1)}</td>
-                <td className="num">{r.year === 0 ? '—' : num(r.chargingGWh, 1)}</td>
+                <td className="num">{num(r.storedMWh * dc.factor, 1)}</td>
+                <td className="num">{r.year === 0 ? '—' : num(r.usablePerCycleMWh * perCycle.factor, 1)}</td>
+                <td className="num">{r.year === 0 ? '—' : num(r.suppliedGWh * annual.factor, 1)}</td>
+                <td className="num">{r.year === 0 ? '—' : num(r.chargingGWh * annual.factor, 1)}</td>
               </tr>
             ))}
               <tr className="total">
                 <td>{sizing.input.projectYears}-year total</td><td className="num">{num(totals.cycles)}</td>
                 <td className="num">—</td><td className="num">—</td><td className="num">—</td>
-                <td className="num">{num(totals.suppliedGWh)}</td><td className="num">{num(totals.chargingGWh)}</td>
+                <td className="num">{num(totals.suppliedGWh * annual.factor, 1)}</td><td className="num">{num(totals.chargingGWh * annual.factor, 1)}</td>
               </tr>
             </tbody>
           </table>
 
-          <EnergyChart rows={rows} accent={b.accent} navy={b.primary} />
+          <EnergyChart rows={rows} accent={b.accent} navy={b.primary} scale={annual} />
           {truncated > 0 && <p style={{ fontSize: '6.4pt', color: 'var(--o-muted)', marginTop: '1mm' }}>
             The table shows the first 20 years; the totals cover all {sizing.input.projectYears} years of the study.
           </p>}
@@ -382,7 +390,7 @@ export function Offer({ quote, org, sizing, finance, content, priceBook }: Offer
 
             <div>
               <table className="offer-table">
-                <thead><tr><th>Order value — {sizing.units} enclosures / {num(sizing.installedDcMWh, 1)} MWh</th><th className="num">{local}</th></tr></thead>
+                <thead><tr><th>Order value — {sizing.units} enclosures / {units.energyText(sizing.installedDcMWh)}</th><th className="num">{local}</th></tr></thead>
                 <tbody>
                   {landed && <tr><td>BESS enclosures ({sizing.units} × {num(perEnclosure)})</td><td className="num">{num(enclosuresTotal)}</td></tr>}
                   {landed && <tr><td>Power conversion systems ({sizing.units} × {num(perPcs)})</td><td className="num">{num(pcsTotal)}</td></tr>}

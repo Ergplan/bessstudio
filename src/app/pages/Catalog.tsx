@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { Card, Badge, Tabs, KV } from '../components/ui';
+import * as units from '../../domain/units';
 import { cells, enclosures, packSpecs, pcsUnits, transformers, cellOf, packOf, packEnergyKWh, enclosureStrings } from '../../catalog/products';
 import { enclosureSummary } from '../../sizing/engine';
 import { applications } from '../../sizing/applications';
@@ -28,7 +29,7 @@ export function Catalog() {
             <tbody>{enclosures.map(e => { const s = enclosureSummary(e); return (
               <tr key={e.id}><td><b>{e.model}</b><div className="muted" style={{ fontSize: 11 }}>{e.lengthMm}×{e.widthMm}×{e.heightMm} mm · {(e.massKg / 1000).toFixed(2)} t · {packOf(e).model}</div></td>
                 <td style={{ textTransform: 'capitalize' }}>{e.family}</td>
-                <td className="num"><b>{(s.energyKWh / 1000).toFixed(3)} MWh</b><div className="muted" style={{ fontSize: 11 }}>label {(e.labelKWh / 1000).toFixed(3)}</div></td>
+                <td className="num"><b>{units.energyText(s.energyKWh / 1000)}</b><div className="muted" style={{ fontSize: 11 }}>label {units.energyText(e.labelKWh / 1000)}</div></td>
                 <td className="num">{e.ratedKW.toLocaleString()} kW</td>
                 <td className="num">{e.packsInSeries}S × {enclosureStrings(e)}P<div className="muted" style={{ fontSize: 11 }}>{e.racks} racks × {e.packsPerRack}</div></td>
                 <td className="num">{s.cells.toLocaleString()}</td>

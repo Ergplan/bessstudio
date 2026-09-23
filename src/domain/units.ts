@@ -18,14 +18,25 @@ export type Scaled = { value: string; unit: string };
 /** Enough figures to be useful at any size, without pretending to a precision the model has not got. */
 const digits = (n: number) => (Math.abs(n) >= 100 ? 0 : Math.abs(n) >= 10 ? 1 : Math.abs(n) >= 1 ? 2 : 3);
 
+const scaleOf = (mega: number, small: string, large: string) =>
+  (mega !== 0 && Math.abs(mega) < 1 ? { factor: 1000, unit: small } : { factor: 1, unit: large });
+
 const scaled = (mega: number, small: string, large: string): Scaled => {
-  if (mega === 0) return { value: '0', unit: large };
-  if (Math.abs(mega) < 1) {
-    const kilo = mega * 1000;
-    return { value: kilo.toLocaleString('en', { maximumFractionDigits: digits(kilo) }), unit: small };
-  }
-  return { value: mega.toLocaleString('en', { maximumFractionDigits: digits(mega) }), unit: large };
+  const { factor, unit } = scaleOf(mega, small, large), n = mega * factor;
+  return { value: n.toLocaleString('en', { maximumFractionDigits: digits(n) }), unit };
 };
+
+/**
+ * The multiplier and unit a figure should be written at.
+ *
+ * For the places that animate a number up to its value and cannot take it pre-formatted: they need
+ * the scale before they have the number, and both have to be the same scale or the count runs to
+ * five thousand and lands on "5 MWh".
+ */
+export const powerScale = (mw: number) => scaleOf(mw, 'kW', 'MW');
+export const energyScale = (mwh: number) => scaleOf(mwh, 'kWh', 'MWh');
+/** Figures worth showing for a number at this scale, matching what {@link power} would print. */
+export const scaleDigits = digits;
 
 /** Power, given in megawatts. Shown in kilowatts below one megawatt. */
 export const power = (mw: number): Scaled => scaled(mw, 'kW', 'MW');

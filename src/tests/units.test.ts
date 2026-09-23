@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { energy, energyText, power, powerText } from '../domain/units';
+import { defaultSizingInput, sizeSystem } from '../sizing/engine';
+import { defaultOfferContent, plantConfiguration } from '../quoting/offer';
+import { engineeringAppendix } from '../quoting/appendix';
+import { defaultBranding } from '../brand/brand';
+import type { Organization } from '../platform/types';
 
 /**
  * The unit follows the number.
@@ -38,5 +43,42 @@ describe('power and energy are written at the scale they are', () => {
   it('says nothing is nothing, in the unit the reader expects', () => {
     expect(energy(0)).toEqual({ value: '0', unit: 'MWh' });
     expect(power(0)).toEqual({ value: '0', unit: 'MW' });
+  });
+});
+
+/**
+ * The documents, not just the helper.
+ *
+ * A proposal that states a 16 kWh cabinet's rated energy as "0.016 MWh", or a contracted energy of
+ * "0 MWh", is the same fault as the screen that started this — and it is the one the customer keeps.
+ */
+describe('a small plant reads as a small plant everywhere it is written down', () => {
+  const small = sizeSystem({ ...defaultSizingInput('backup-power'), mode: 'power-duration', powerMW: 0.005, durationH: 1, chargeDurationH: 1 });
+  const org = { id: 'o', name: 'Studio', branding: defaultBranding, currency: 'INR', plan: 'trial', createdAt: '', createdBy: '' } as unknown as Organization;
+  const offer = (sizing: ReturnType<typeof sizeSystem>) => defaultOfferContent({
+    org, sizing, customerName: 'A customer', projectName: 'A project',
+    number: 'Q-1', deliveryWeeks: 20, warrantyYears: 5,
+  });
+
+  it('never states a real quantity as nothing', () => {
+    const written = [
+      offer(small).title,
+      offer(small).configuration,
+      ...plantConfiguration(small).map(r => `${r.unit} ${r.total}`),
+      ...offer(small).qualifications,
+      ...engineeringAppendix({ sizing: small, designHash: 'x' }).sections.flatMap(s => s.rows.map(r => `${r.label} ${r.value}`)),
+    ].join(' | ');
+    expect(written).not.toMatch(/(^|[^.\d])0(\.0+)? ?M(W|Wh)\b/);
+    expect(written).not.toMatch(/0\.0\d+ MWh/);
+  });
+
+  it('writes the contracted rating in the units it was asked for', () => {
+    expect(offer(small).title).toBe('5 kW / 5 kWh');
+    expect(plantConfiguration(small).find(r => r.parameter === 'Contracted rating')!.total).toBe('5 kW / 5 kWh');
+  });
+
+  it('leaves a grid-scale plant in megawatts', () => {
+    const big = sizeSystem({ ...defaultSizingInput('energy-arbitrage'), mode: 'power-duration', powerMW: 50, durationH: 4, chargeDurationH: 4 });
+    expect(offer(big).title).toBe('50 MW / 200 MWh');
   });
 });

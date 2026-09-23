@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { brand } from '../../brand/brand';
 import { cellOf, packOf } from '../../catalog/products';
+import * as units from '../../domain/units';
 import { defaultPriceBook, formatMoney, localRate } from '../../catalog/pricing';
 import { evaluateFinance } from '../../sizing/finance';
 import { application } from '../../sizing/applications';
@@ -59,14 +60,19 @@ export function BuildSequence({ sizing, saving, onDone }: { sizing: SizingResult
     const capex = finance.capexUsd * rate;
     const perKWh = capex / Math.max(sizing.installedDcMWh * 1000, 1);
     const mwhPerUnit = sizing.installedDcMWh / Math.max(sizing.units, 1);
+    // The count and its unit have to agree: a number animating up to 16 under a "MWh" heading is
+    // not a rounding slip, it is a plant a thousand times the one being drawn.
+    const ratedScale = units.powerScale(sizing.ratedPowerMW), perUnitScale = units.energyScale(mwhPerUnit);
     return [
       {
         label: 'Duty cycle', title: 'Reading the duty cycle',
         detail: `A ${application(sizing.input.applicationId).name.toLowerCase()} plant discharging for ${hours(sizing.effectiveDurationH)} and charging back in ${hours(sizing.input.chargeDurationH)}. Those three numbers set everything that follows.`,
-        value: sizing.ratedPowerMW, render: n => round(n, sizing.ratedPowerMW < 10 ? 2 : 1), unit: 'MW at the point of connection',
+        value: sizing.ratedPowerMW * ratedScale.factor,
+        render: n => round(n, units.scaleDigits(sizing.ratedPowerMW * ratedScale.factor)),
+        unit: `${ratedScale.unit} at the point of connection`,
         rows: [
-          ['Usable energy', `${round(sizing.requiredUsableMWh, sizing.requiredUsableMWh < 10 ? 2 : 1)} MWh`],
-          ['Charge power', `${round(sizing.chargePowerMW, 2)} MW`],
+          ['Usable energy', units.energyText(sizing.requiredUsableMWh)],
+          ['Charge power', units.powerText(sizing.chargePowerMW)],
           ['Cycles per day', `${sizing.input.cyclesPerDay}`],
           ['Round trip, AC', `${round(sizing.rteAc * 100, 1)} %`],
         ],
@@ -85,20 +91,22 @@ export function BuildSequence({ sizing, saving, onDone }: { sizing: SizingResult
       {
         label: 'Enclosure', title: 'Assembling the enclosure',
         detail: `${sizing.enclosure.model}, ${sizing.enclosure.racks} racks of ${sizing.enclosure.packsPerRack}, ${sizing.enclosure.cooling}-cooled. Busbars, coolant loop and the envelope close around the racks.`,
-        value: mwhPerUnit, render: n => round(n, 2), unit: 'MWh installed per enclosure',
+        value: mwhPerUnit * perUnitScale.factor,
+        render: n => round(n, units.scaleDigits(mwhPerUnit * perUnitScale.factor)),
+        unit: `${perUnitScale.unit} installed per enclosure`,
         rows: [
           ['Enclosure', sizing.enclosure.model],
           ['DC window', `${round(sizing.dcVoltageWindow[0])}–${round(sizing.dcVoltageWindow[1])} V`],
           ['Cooling', `${sizing.enclosure.cooling} · ${sizing.enclosure.ipRating}`],
-          ['Auxiliaries', `${round(sizing.auxMWhPerDay / Math.max(sizing.units, 1), 2)} MWh/day each`],
+          ['Auxiliaries', `${units.energyText(sizing.auxMWhPerDay / Math.max(sizing.units, 1))}/day each`],
         ],
       },
       {
         label: 'Plant', title: 'Laying out the plant',
-        detail: `${sizing.units} enclosures with ${sizing.pcsCount} × ${round(sizing.pcs.ratedKW / 1000, 2)} MW conversion${sizing.transformer ? ` and ${sizing.transformerCount} × ${round(sizing.transformer.ratedKVA / 1000, 2)} MVA of transformation` : ''}. Augmentation is scheduled across the term, not bolted on at the end.`,
-        value: sizing.units, render: n => round(n), unit: `enclosures · ${round(sizing.installedDcMWh, 1)} MWh installed`,
+        detail: `${sizing.units} enclosures with ${sizing.pcsCount} × ${units.powerText(sizing.pcs.ratedKW / 1000)} conversion${sizing.transformer ? ` and ${sizing.transformerCount} × ${round(sizing.transformer.ratedKVA / 1000, 2)} MVA of transformation` : ''}. Augmentation is scheduled across the term, not bolted on at the end.`,
+        value: sizing.units, render: n => round(n), unit: `enclosures · ${units.energyText(sizing.installedDcMWh)} installed`,
         rows: [
-          ['Power conversion', `${sizing.pcsCount} × ${round(sizing.pcs.ratedKW / 1000, 2)} MW`],
+          ['Power conversion', `${sizing.pcsCount} × ${units.powerText(sizing.pcs.ratedKW / 1000)}`],
           ['Footprint', `${round(sizing.footprintM2)} m²`],
           ['Mass', `${round(sizing.massTonnes)} t`],
           ['Augmentations', sizing.augmentations.length ? `${sizing.augmentations.length} over ${sizing.input.projectYears} years` : `None · ${round(sizing.endOfLifeRetention * 100)} % at year ${sizing.input.projectYears}`],
@@ -112,8 +120,8 @@ export function BuildSequence({ sizing, saving, onDone }: { sizing: SizingResult
         rows: [
           ['Per kWh installed', formatMoney(perKWh, currency)],
           ['Levelised storage cost', `${formatMoney(finance.lcosPerMWhUsd * rate, currency)} / MWh`],
-          ['Day-one usable', `${round(sizing.day1UsableMWh, 2)} MWh`],
-          ['Lifetime throughput', `${round(sizing.lifetimeThroughputMWh)} MWh`],
+          ['Day-one usable', units.energyText(sizing.day1UsableMWh)],
+          ['Lifetime throughput', units.energyText(sizing.lifetimeThroughputMWh)],
         ],
       },
     ];

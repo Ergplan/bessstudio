@@ -1,4 +1,5 @@
 import { brand } from '../../brand/brand';
+import * as units from '../../domain/units';
 import { formatMoney } from '../../catalog/pricing';
 import { date } from './ui';
 import type { Organization, Quote } from '../../platform/types';
@@ -50,7 +51,7 @@ export function Proposal({ quote, org }: { quote: Quote; org: Organization }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, fontSize: 12.5 }}>
             {[
               ['Rated power', `${snapshot.ratedPowerMW?.toFixed(2)} MW`],
-              ['Installed DC energy', `${snapshot.installedDcMWh?.toFixed(2)} MWh`],
+              ['Installed DC energy', units.energyText(snapshot.installedDcMWh ?? 0)],
               ['Enclosures', `${snapshot.units} × ${snapshot.enclosure}`],
               ['Power conversion', String(snapshot.pcs)],
               ['Round trip at AC', `${((snapshot.rteAc ?? 0) * 100).toFixed(1)}%`],

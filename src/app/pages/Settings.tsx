@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Card, Tabs, TextInput, NumberInput, SelectInput, Slider, Badge, KV, Field } from '../components/ui';
+import * as units from '../../domain/units';
 import { useSession } from '../../platform/auth';
 import { useWorkspace } from '../../platform/workspace';
 import { repository, usingFirestore } from '../../platform/repo';
@@ -140,7 +141,7 @@ export function Settings() {
                 const inr = (n: number) => formatMoney(n, 'INR', true);
                 return (
                   <div style={{ marginTop: 14 }}>
-                    <h4 style={{ fontSize: 11.5, marginBottom: 6 }}>One {reference.model}, {(b.kWh / 1000).toFixed(3)} MWh</h4>
+                    <h4 style={{ fontSize: 11.5, marginBottom: 6 }}>One {reference.model}, {units.energyText(b.kWh / 1000)}</h4>
                     <KV label="FOB">{formatMoney(b.fobUsd, 'USD', true)}</KV>
                     <KV label="CIF">{formatMoney(b.cifUsd, 'USD', true)} · {inr(b.cifInr)}</KV>
                     <KV label="Customs duty">{inr(b.customsDutyInr)}</KV>

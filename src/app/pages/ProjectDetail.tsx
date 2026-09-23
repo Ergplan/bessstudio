@@ -204,16 +204,22 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
               hint={ambientHint(sizing, project.sizing.degradation.mode)} />
             <Slider label="Altitude" value={project.sizing.altitudeM} min={0} max={5000} step={10} unit="m" onChange={altitudeM => set({ altitudeM })} />
             {/* Choosing a product pins it. Until somebody does, the equipment follows the duty —
-                which is what stops a five-kilowatt supply being quoted as a shipping container. */}
-            <SelectInput label="System" value={project.sizing.enclosureId} options={enclosures.map(e => ({ value: e.id, label: `${e.model} · ${units.energyText(enclosureSummary(e).energyKWh / 1000)} / ${e.ratedKW} kW ${e.family}` }))} onChange={enclosureId => set({ enclosureId, equipment: 'pinned' })} />
-            <SelectInput label="Power conversion" value={project.sizing.pcsId} options={pcsUnits.map(p => ({ value: p.id, label: `${p.model} · ${p.ratedKW} kW ${p.topology}` }))} onChange={pcsId => set({ pcsId, equipment: 'pinned' })} />
-            <SelectInput label="Step-up transformer" value={project.sizing.transformerId ?? ''} options={[{ value: '', label: 'None — connect at LV' }, ...transformers.map(t => ({ value: t.id, label: `${t.model} · ${t.ratedKVA} kVA ${t.lvKV}/${t.hvKV} kV` }))]} onChange={id => set({ transformerId: id || null, equipment: 'pinned' })} />
-            {(project.sizing.equipment ?? 'auto') === 'pinned' && (
-              <div className="row" style={{ marginTop: 8 }}>
-                <button className="btn sm" onClick={() => set({ equipment: 'auto' })}>Fit the equipment to the duty</button>
-                <span className="muted">Equipment is pinned to what was chosen above.</span>
-              </div>
-            )}
+                which is what stops a five-kilowatt supply being quoted as a shipping container.
+                The selectors read from the sizing rather than from the form, because until the
+                design is pinned the form still holds whatever it was opened with: a five-kilowatt
+                backup supply showed a container, a 2 507.5 kW converter and a 3 150 kVA
+                transformer in three boxes, beside a headline correctly reporting one wall rack. */}
+            <SelectInput label="System" value={sizing.enclosure.id} options={enclosures.map(e => ({ value: e.id, label: `${e.model} · ${units.energyText(enclosureSummary(e).energyKWh / 1000)} / ${e.ratedKW} kW ${e.family}` }))} onChange={enclosureId => set({ enclosureId, equipment: 'pinned' })} />
+            <SelectInput label="Power conversion" value={sizing.pcs.id} options={pcsUnits.map(p => ({ value: p.id, label: `${p.model} · ${p.ratedKW} kW ${p.topology}` }))} onChange={pcsId => set({ pcsId, equipment: 'pinned' })} />
+            <SelectInput label="Step-up transformer" value={sizing.transformer?.id ?? ''} options={[{ value: '', label: 'None — connect at LV' }, ...transformers.map(t => ({ value: t.id, label: `${t.model} · ${t.ratedKVA} kVA ${t.lvKV}/${t.hvKV} kV` }))]} onChange={id => set({ transformerId: id || null, equipment: 'pinned' })} />
+            <div className="row" style={{ marginTop: 8 }}>
+              {(project.sizing.equipment ?? 'auto') === 'pinned'
+                ? <>
+                    <button className="btn sm" onClick={() => set({ equipment: 'auto' })}>Fit the equipment to the duty</button>
+                    <span className="muted">Equipment is pinned to what was chosen above.</span>
+                  </>
+                : <span className="muted">Fitted to the duty. Choosing any of the three above pins all of them.</span>}
+            </div>
             <div className="grid cols-2" style={{ gap: 0, columnGap: 12 }}>
               <NumberInput label="Grid voltage" value={project.sizing.gridKV} unit="kV" min={0.4} max={400} step={0.1} onChange={gridKV => set({ gridKV })} />
               <NumberInput label="Power factor" value={project.sizing.powerFactor} unit="pf" min={0.8} max={1} step={0.01} onChange={powerFactor => set({ powerFactor })} />
@@ -276,8 +282,8 @@ export function ProjectDetail({ id: projectId }: { id: string }) {
               </Card>
 
               <Card title="Year one energy balance" subtitle="At the current configuration">
-                <KV label="Stored DC energy">{sizing.years[1]?.storedDcMWh.toFixed(3)} MWh</KV>
-                <KV label="Usable at AC">{sizing.years[1]?.usableMWh.toFixed(3)} MWh</KV>
+                <KV label="Stored DC energy">{units.energyText(sizing.years[1]?.storedDcMWh ?? 0)}</KV>
+                <KV label="Usable at AC">{units.energyText(sizing.years[1]?.usableMWh ?? 0)}</KV>
                 <KV label="Delivered to customer">{Math.round(sizing.years[1]?.deliveredMWh ?? 0).toLocaleString()} MWh/yr</KV>
                 <KV label="Charging energy">{Math.round(sizing.years[1]?.chargeMWh ?? 0).toLocaleString()} MWh/yr</KV>
                 <KV label="Required at generation end">{Math.round(sizing.years[1]?.gridChargeMWh ?? 0).toLocaleString()} MWh/yr</KV>
