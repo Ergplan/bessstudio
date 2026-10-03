@@ -27,12 +27,28 @@ browser against Firebase with nothing to operate on a server.
 
 ## Running it
 
+On a machine that has never seen this repository, one command:
+
+```bash
+./scripts/start.sh
+```
+
+It checks the Node version, installs dependencies if the lockfile has moved, and starts the studio
+on <http://localhost:3400> with the pages worth opening printed out. `./scripts/start.sh --check`
+runs the type check and the suites instead of starting anything.
+
+What it does, if you would rather do it yourself:
+
 ```bash
 npm install
 npm run dev          # http://127.0.0.1:3400
 npm run build        # static export to out/
 npm run preview      # serve the export exactly as Firebase Hosting will
+npm test             # the unit suite
+npm run test:browser # builds, then drives the export in a real browser
 ```
+
+**Node 20 or newer.** Next.js 16 will not start on 18, and the failure does not say so clearly.
 
 The studio opens straight into a **local workspace** stored in the browser, seeded with a reference
 pipeline of five customers, projects and quotations. There is no sign-in, no account and no network
